@@ -52,12 +52,14 @@ brain mechanisms. That tells us something architecturally important:
 > as part of the retrieval pipeline.
 
 This is genuinely different from every system on LongMemEval and
-LoCoMo. Mem0, Zep, Letta, HippoRAG, A-MEM, MemoryBank all use LLMs
+LoCoMo. Mem0, Zep, Letta, A-MEM, MemoryBank all use LLMs
 as **memory operators**: extracting facts, summarising sessions,
 linking entities, judging contradictions. None of them treat the
 LLM as purely an output translator.
 
-Slowave is the first published system to treat the LLM as purely an output translator rather than a memory operator.
+HippoRAG, while not using LLMs as memory operators, still relies on structured knowledge graphs and explicit entity linking (computed via LLMs or parsing), whereas Slowave uses pure geometry over embeddings with no explicit structure extraction.
+
+Slowave is the first published system to treat the LLM as purely an output translator rather than a memory operator, and the first to achieve competitive retrieval performance using only geometry over embeddings.
 
 ## Position vs the field
 
@@ -77,6 +79,21 @@ Slowave occupies a different point in the design space:
 | Architectural claim | engineered RAG | **brain-inspired** |
 
 The honest pitch: *"70% of SOTA accuracy at $0 per query, fully local, ablation-clean. The 24pp gap is structurally about meta-cognition tasks that require LLM extraction by construction — not about retrieval."*
+
+## Comparison to RAG systems
+
+For retrieval-augmented generation tasks (document/passage retrieval), Slowave competes against structured retrieval approaches like HippoRAG:
+
+| Axis | HippoRAG | Slowave |
+|---|---|---|
+| **2WikiMultiHopQA Recall@5** | 87% | **82.5%** |
+| **Architecture** | Knowledge graph + PageRank | Semantic geometry only |
+| **Entity linking** | Explicit (LLM or parsing) | Implicit (embedding space) |
+| **Per-query LLM calls** | 0–1 (inference only) | **zero** |
+| **Latency** | ~100–500ms | **~10ms** |
+| **Local-first** | no | **yes** |
+
+The 5.2% gap on 2WikiMultiHopQA despite HippoRAG using structured knowledge graphs suggests geometry-based retrieval is a viable alternative to explicit entity linking for QA tasks. See [`docs/benchmarks/hipporag-qa-comparison.md`](benchmarks/hipporag-qa-comparison.md) for full analysis.
 
 ## What we already have (and what works)
 

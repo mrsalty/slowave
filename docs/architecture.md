@@ -22,7 +22,7 @@ raw_events  →  episodes (on session_end, <1ms, no LLM)
 
 ## 1. Design Philosophy
 
-Slowave is built on the observation that existing open-source agent memory systems (Mem0, Letta, Zep, A-MEM) update memory **on write only**: ingest a fact, deduplicate, store. Slowave additionally models the key operations of biological memory:
+Slowave is built on the observation that existing memory systems (agent memory: Mem0, Letta, Zep, A-MEM; QA/RAG: HippoRAG, Lancer) treat memory consolidation and retrieval as **separate language model operations**: ingest a fact, extract via LLM, deduplicate, store. Slowave instead models the key operations of biological memory that operate entirely in geometric space:
 
 | Biological principle | Slowave implementation |
 |---|---|

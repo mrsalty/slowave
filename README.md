@@ -6,14 +6,22 @@ Memory consolidation, abstraction, and recall happen entirely in continuous vect
 
 ## Results
 
+**Agent Memory (Long-term context)**:
 | Benchmark | Cosine RAG | **Slowave** | Δ | Mem0 SOTA |
 |---|---|---|---|---|
 | LongMemEval (500q) | 60.0% | **70.0%** | +10pp | 94.4% |
 | LoCoMo (1986q) | 68.0% | **75.5%** | +7.5pp | 92.5% |
 
-Brain-only path: **$0/query · ~10ms recall · no API · data stays on device.**
+**Retrieval-Augmented Generation (QA)**:
+| Benchmark | **Slowave** | HippoRAG | Δ |
+|---|---|---|---|
+| 2WikiMultiHopQA Recall@5 | **82.5%** | 87% | −5.2% |
 
-The ~24pp gap to Mem0 is structurally about meta-cognition categories that require LLM extraction by construction, not about retrieval. See [docs/design.md](docs/design.md).
+→ [docs/benchmarks.md](docs/benchmarks.md) for reproducing all results.
+
+**Brain-only path:** $0/query · ~10ms recall · no API · data stays on device.
+- The ~24pp gap to Mem0 on agent memory is about meta-cognition categories that require LLM extraction by construction, not retrieval. See [docs/design.md](docs/design.md).
+- The 5.2% gap to HippoRAG on QA is despite HippoRAG using knowledge graphs + structured retrieval, while Slowave uses pure geometry. See [docs/benchmarks/hipporag-qa-comparison.md](docs/benchmarks/hipporag-qa-comparison.md).
 
 ## Install
 

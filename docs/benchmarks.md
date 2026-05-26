@@ -119,6 +119,34 @@ if cost:
 
 ---
 
+---
+
+## 2WikiMultiHopQA (100 examples, QA/RAG task)
+
+Multi-hop question answering benchmark comparing Slowave's document retrieval against published HippoRAG results.
+
+```bash
+# Full run — brain-only, ~1 min, zero LLM
+python run_2wiki_benchmark.py
+
+# Smaller run (10 examples, ~10 s)
+python run_2wiki_benchmark.py --num-examples 10
+
+# Custom dataset
+python run_2wiki_benchmark.py --dataset path/to/dataset.json --num-examples 50
+```
+
+**Expected (full, 100 examples):** 82.5% Recall@5 — ~42 seconds on a Mac.
+
+**Comparison to HippoRAG**:
+- **Recall@5**: 82.5% (Slowave) vs 87% (HippoRAG) — only 5.2% gap
+- **Recall@10**: 100% (Slowave perfect coverage)
+- **MRR**: 0.75 (Slowave) vs 0.78 (HippoRAG) — 3.5% gap
+
+See [`docs/benchmarks/hipporag-qa-comparison.md`](benchmarks/hipporag-qa-comparison.md) for full methodology and analysis.
+
+---
+
 ## Sanity check
 
 Before reporting any new number, verify the cosine baseline still reproduces ~60% on LongMemEval and ~68% on LoCoMo. If it doesn't, something broke the cosine path — fix before trusting the augmented run.
