@@ -29,12 +29,12 @@ Slowave is built on the observation that existing open-source agent memory syste
 | Episodic encoding at experience time | Raw events → micro/macro episodes on session close |
 | Slow-wave sleep consolidation | Replay engine runs offline (background worker) |
 | Semantic abstraction over episodes | Two-scale prototype clustering: fine (CA3, 0.85) + coarse (CA1, 0.55) |
-| Schema formation (neocortex) | **Latent schema** (Stage 6): centroid + SVD facet axes + temporal anchor — **zero LLM** |
+| Schema formation (neocortex) | **Latent schema**: centroid + SVD facet axes + temporal anchor — **zero LLM** |
 | Predictive coding / surprise signal | Transition model predicts next episode embedding; surprise boosts salience |
 | Ebbinghaus forgetting curve | Exponential salience decay between sessions |
 | Memory reinforcement on use | Recall bumps salience of retrieved episodes/schemas |
 | Contradiction / belief revision | Geometric contradiction: centroid proximity + facet divergence + temporal ordering — **zero LLM** |
-| Pattern completion | Spreading activation over prototype graph (Stage 1) |
+| Pattern completion | Spreading activation over prototype graph |
 | Provenance chain | Every schema traces back through episodes to raw events |
 
 ### Zero LLM in the Core Path
@@ -65,18 +65,16 @@ flowchart TD
     E --> G[episodic_memories\nepisode_text\nsalience]
     F --> G
     G --> H[ReplayEngine\nsalience sampling]
-    H --> I[Prototype clustering\nonline k-means]
-    H --> K[TransitionModel\ne_t to e_t+1]
+    H --> I[Prototype clustering\nfine 0.85 + coarse 0.55]
+    H --> K[TransitionModel\ne_t → e_t+1]
     I --> J[Prototype graph\nsimilarity + coactivation\n+ transitions]
-    I --> L[Consolidator]
-    L --> M[SchemaExtractor\nLLM prompt]
-    M --> N[ContradictionJudge\nLLM prompt]
-    N --> O[SchemaStore\ndurable typed claims]
+    I --> L[LatentSchemaBuilder\ngeometry only]
+    L --> O[SchemaStore\ndurable typed claims]
     P[recall query] --> Q[TextEncoder]
     Q --> R[RetrievalPipeline]
     R --> S[FAISS episodic\nsalience rerank]
     R --> T[FAISS prototype\ngraph expansion]
-    R --> U[Schema embedding\nFTS5 lexical]
+    R --> U[Schema search\nEmbedding + FTS5]
     S --> V[RecallResult\nschemas + episodes\nraw events]
     T --> V
     U --> V
@@ -138,11 +136,9 @@ flowchart LR
 | `RawLog` | Append-only event log; source of truth for all provenance |
 | `EpisodeTextStore` | Text representation of each episodic memory + source event IDs |
 | `SchemaStore` | Durable typed claims with flexible facets, canonical embedding, salience, status, evidence |
-| `LatentSchemaBuilder` | **Default** — centroid + SVD principal axes + temporal anchor + confidence, no LLM |
-| `GeometricContradictionJudge` | **Default** — centroid proximity + facet divergence + temporal ordering, no LLM |
-| `SchemaExtractor` | Legacy (Stage 0-5, `--schema-mode llm`) — LLM call → `ExtractedSchema` objects |
-| `ContradictionJudge` | Legacy (Stage 0-5) — LLM call → reinforces / refines / contradicts verdict |
-| `Consolidator` | Orchestrates schema building (latent or LLM path) → SchemaStore |
+| `LatentSchemaBuilder` | Centroid + SVD principal axes + temporal anchor + confidence |
+| `GeometricContradictionJudge` | Geometric verdict: centroid proximity + facet divergence + temporal ordering |
+| `Consolidator` | Orchestrates schema building (latent path) → SchemaStore |
 
 ---
 
@@ -213,7 +209,7 @@ flowchart TD
     Q["Query embedding q"]
     Q --> CS["Cosine Seed<br/>(direct ANN)"]
     Q --> PS["Predictive Seed<br/>(TransitionModel)"]
-    Q --> SA["Spreading Activation<br/>(Stage 1)"]
+    Q --> SA["Spreading Activation<br/>(graph neighbors)"]
     Q --> MS["Multi-Scale<br/>(fine 0.85, coarse 0.55)"]
     
     CS --> W["Weighted Combination"]
@@ -225,21 +221,21 @@ flowchart TD
     SR --> R["Ranked Result"]
 ```
 
-**Mechanism Details**:
+**Mechanism Details** (see [`docs/stages/stage1_spreading_activation.md`](stages/stage1_spreading_activation.md), [`docs/stages/stage3_transition_at_recall.md`](stages/stage3_transition_at_recall.md)):
 
 1. **Cosine Seed** (primary signal):
    - Compute cosine similarity between query and all episodic memories / prototypes
    - Top-k (typically 50–200) form the initial seed set
    - Weight: 0.65
 
-2. **Predictive Seed** (Stage 3, `transition_model`):
+2. **Predictive Seed** (TransitionModel):
    - If transition model exists and is trained: predict `q' = transition_model(q)`
    - Retrieve top-k neighbors of predicted `q'`
    - Rationale: helps recall sequences and predictable patterns
    - Weight: 0.25
    - Combined score: `0.65 × cosine(q) + 0.25 × cosine(q')`
 
-3. **Spreading Activation** (Stage 1, see §7):
+3. **Spreading Activation** (see §8):
    - From cosine seed prototypes, activate neighbors via prototype graph
    - Traverse similarity, coactivation, and transition edges
    - Activation decays per hop: `0.7^depth`
@@ -355,8 +351,8 @@ salience = clamp(salience, 0.01, 1.0)
 ## 7. TransitionModel: Predictive Coding for Salience & Retrieval
 
 The transition model predicts the next episode embedding from the current one, enabling two key mechanisms:
-1. **Surprise Signal** (Stage 3): Prediction error boosts salience of unexpected episodes
-2. **Predictive Seed** (Stage 3): Predicted embeddings seed additional recall candidates
+1. **Surprise Signal**: Prediction error boosts salience of unexpected episodes
+2. **Predictive Seed**: Predicted embeddings seed additional recall candidates
 
 ### Architecture
 
@@ -437,7 +433,7 @@ salience_adjusted = base_salience + 0.3 * surprise_normalized
 
 **Intuition**: Episodes that violate the learned sequence pattern get higher salience, making them more likely to be replayed and consolidated into schemas.
 
-### Predictive Seed (Stage 3) for Recall
+### Predictive Seed for Recall
 
 During retrieval (see §5.5), if transition model is trained:
 
@@ -457,9 +453,9 @@ This helps recall episodes that follow a predictable sequence (e.g., in a multi-
 
 ---
 
-## 8. Spreading Activation: Stage 1 Pattern Completion
+## 8. Spreading Activation: Pattern Completion Over Prototype Graph
 
-Spreading activation implements memory association across the prototype graph, biasing retrieval toward related concepts. This is Stage 1 (+2–3pp on benchmarks).
+Spreading activation implements memory association across the prototype graph, biasing retrieval toward related concepts (+2–3pp on benchmarks, see [`docs/stages/stage1_spreading_activation.md`](stages/stage1_spreading_activation.md)).
 
 ### Graph Structure
 
@@ -752,7 +748,9 @@ def update_prototype_graph(assignments_fine, transition_model):
 
 ---
 
-### Default Path: Latent Schema Building (Stage 6)
+### Default Path: Latent Schema Building
+
+(See [`docs/stages/stage6_latent_schemas.md`](stages/stage6_latent_schemas.md) for detailed discussion.)
 
 For each prototype, `LatentSchemaBuilder` creates a schema purely from geometry—no LLM:
 
@@ -947,8 +945,7 @@ slowave.db
 │   ├── schemas                  claims + facets + canonical embedding + status
 │   ├── schema_evidence          episode/event/quote links
 │   ├── schema_prototype_map     M:M schema ↔ prototype
-│   ├── schema_relations         schema graph edges
-│   └── consolidation_debug      LLM prompt/response audit trail
+│   └── schema_relations         schema graph edges
 └── FTS5 indices
     ├── schemas_fts
     ├── episodes_fts
@@ -1170,49 +1167,30 @@ Retrieval will be unavailable until encoder is restored and indices are rebuilt.
 
 ---
 
-## 18. Stage Reference System
+## 18. Stages: Mechanisms & Benchmarks
 
-Slowave's development is organized as numbered **stages**. Each stage is a mechanism, a set of LLM prompts, or an architectural change, evaluated independently via ablation studies.
+Slowave's development is organized as numbered **stages**. Each active stage is a mechanism, evaluated independently via ablation studies. See `docs/stages/` for detailed documentation.
 
-### Stage Definitions
+### Active Stages
 
-| Stage | Type | Mechanism | Benchmark Impact | Status |
-|---|---|---|---|---|
-| **0–5** | Path | LLM-extraction schema building + contradiction judge | +0pp (baseline) | Legacy |
-| **1** | Mechanism | Spreading activation over prototype graph | +2–3pp | Active |
-| **3** | Mechanism | Predictive seed for retrieval (Stage 3 TransitionModel) | **+6.7pp** ⭐ | Active |
-| **6** | Architecture | Latent schema building (zero LLM) + geometric contradiction | **+10pp** ⭐⭐ breakthrough | Active (default) |
-| **7** | Mechanism | Temporal bias in salience & retrieval | +0pp (neutral) | Active |
-| **8** | Mechanism | Multi-scale prototypes (fine 0.85, coarse 0.55) | +0pp (neutral) | Active |
-| **9** | Mechanism | Pattern separation via confidence & multi-scale contradict detection | +0pp (neutral) | Active |
+| Stage | File | Mechanism | Benchmark Impact |
+|---|---|---|---|
+| **1** | [`stage1_spreading_activation.md`](stages/stage1_spreading_activation.md) | Spreading activation over prototype graph | +2–3pp |
+| **3** | [`stage3_transition_at_recall.md`](stages/stage3_transition_at_recall.md) | Predictive seed for retrieval (TransitionModel) | **+6.7pp** ⭐ |
+| **6** | [`stage6_latent_schemas.md`](stages/stage6_latent_schemas.md) | Latent schema building (geometry only) | **+10pp** ⭐⭐ |
+| **7** | [`stage7_temporal_context.md`](stages/stage7_temporal_context.md) | Temporal bias in salience & retrieval | +0pp (neutral) |
+| **8** | [`stage8_pattern_separation.md`](stages/stage8_pattern_separation.md) | Multi-scale prototypes (fine 0.85, coarse 0.55) | +0pp (neutral) |
+| **9** | [`stage9_multiscale.md`](stages/stage9_multiscale.md) | Pattern separation & multi-scale contradiction | +0pp (neutral) |
 
-**⭐ = highest empirical impact; recommend keeping enabled.**
-
-### Stage History
-
-Stages are documented individually in `docs/stages/`:
-- `docs/stages/01_spreading_activation.md`
-- `docs/stages/03_transition_model.md`
-- `docs/stages/06_latent_schemas.md`
-- etc.
-
-Each stage document includes:
-- Motivation and biological inspiration
-- Mechanism pseudocode
-- Benchmark results on LongMemEval + LoCoMo
-- Ablation flags for reproducibility
-- Lessons learned
+**⭐ = highest empirical impact.**
 
 ### Running Ablations
 
 To test impact of individual stages:
 
 ```bash
-# Disable spreading activation (Stage 1):
+# Disable spreading activation:
 pytest tests/integration/longmemeval_eval.py --no-spreading-activation
-
-# Use LLM extraction instead of latent schemas (revert to Stages 0–5):
-pytest tests/integration/longmemeval_eval.py --schema-mode llm
 
 # Disable transition model (no predictive seed):
 pytest tests/integration/longmemeval_eval.py --no-transition
@@ -1221,17 +1199,15 @@ pytest tests/integration/longmemeval_eval.py --no-transition
 pytest tests/integration/longmemeval_eval.py --no-multi-scale
 ```
 
-Results are saved to `data/longmemeval/runs/` and `data/locomo/runs/`.
-
-See `docs/benchmarks.md` for full ablation flags and reproducing published results.
+Results saved to `data/longmemeval/runs/` and `data/locomo/runs/`. See [`docs/benchmarks.md`](benchmarks.md) for full flags and reproducing published results.
 
 ### Why Stages 7–9 Are Neutral
 
-Stages 7–9 (temporal bias, multi-scale, pattern separation) are architecturally correct but show zero improvement on LongMemEval and LoCoMo. They are **kept enabled** because:
+Stages 7–9 are architecturally correct but show zero improvement on LongMemEval and LoCoMo. They are **kept enabled** because:
 
-1. They address failure modes not covered by these benchmarks (sequential memory, multi-shot conversations)
-2. Removing them would simplify code but add risk of regression on real-world tasks
-3. The overhead is minimal (~5% on latency, negligible on memory)
+1. They address failure modes not covered by benchmarks (sequential memory, multi-shot conversations)
+2. Removing them risks regression on real-world tasks
+3. Overhead is minimal (~5% latency, negligible memory)
 
 ---
 
@@ -1438,13 +1414,13 @@ for turn in infinite_event_stream:
 
 ## Appendix A: Legacy LLM-Extraction Path (Deprecated)
 
-**Status: DEPRECATED as of Stage 6. Not recommended for new projects.**
+**Status: DEPRECATED. Not recommended for new projects.**
 
-This appendix documents the original LLM-based schema extraction path (Stages 0–5) for historical reference and comparison studies. **Do not use for production systems.**
+This appendix documents the original LLM-based schema extraction path for historical reference and comparison studies. **Do not use for production systems.**
 
 ### Why Deprecated
 
-- **Benchmark results**: +10pp gain from Stage 6 (latent schemas) makes LLM path obsolete
+- **Benchmark results**: Latent schema building provides +10pp gain over LLM extraction (see [`docs/stages/stage6_latent_schemas.md`](stages/stage6_latent_schemas.md))
 - **Cost**: LLM calls are expensive (~$0.01–0.05 per consolidation cycle)
 - **Latency**: Blocking consolidation; agents wait for LLM responses
 - **Determinism**: Geometry is deterministic; LLM is non-deterministic and probabilistic
@@ -1525,12 +1501,12 @@ pytest tests/integration/longmemeval_eval.py --schema-mode latent  # default
 5. **Non-determinism**: Same episodes can produce different schemas on different runs
 6. **Model dependency**: Swapping models (qwen → llama) changes behavior unpredictably
 
-### Stage History: Why Latent Won
+### Why Latent Schemas Won
 
 **LongMemEval Benchmark Comparison**:
 ```
-Stage 0–5 (LLM extraction):    60.0% (baseline, expensive)
-Stage 6 (Latent schemas):      70.0% (+10pp, zero cost)
+LLM extraction (original path):  60.0% (baseline, expensive)
+Latent schemas (current):        70.0% (+10pp, zero cost)
 ```
 
 The latent geometry approach:
