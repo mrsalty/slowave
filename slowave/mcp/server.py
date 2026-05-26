@@ -52,8 +52,61 @@ DEFAULT_MODEL = os.environ.get("SLOWAVE_MODEL", "qwen2.5:7b-instruct")
 DEFAULT_OLLAMA_URL = os.environ.get("SLOWAVE_OLLAMA_URL", "http://localhost:11434")
 DEFAULT_PROJECT = os.environ.get("SLOWAVE_PROJECT")  # may be None
 
+# ---- OPTION A: Implicit session context (auto-wrap mechanical events) ----
+# This enables automatic logging of agent messages without explicit session management.
+# Inspired by the observation that agents forget to call slowave_event.
+#
+# Design:
+#   - Each MCP client (agent) starts with no implicit session
+#   - Call slowave_session_start_implicit() to create one
+#   - All subsequent tool calls auto-log to this implicit session
+#   - Call slowave_session_end_implicit() to close and consolidate
+#   - Optionally: auto-session could be context-manager or process-lifetime
+#
+# This bridges the gap between RTK's automatic hooks and Slowave's explicit calls.
+_IMPLICIT_SESSIONS: dict[str, str] = {}  # client_id -> session_id
+
 
 _ENGINES: dict[tuple[bool, bool], SlowaveEngine] = {}
+
+
+def _get_implicit_session(client_id: str = "default") -> str | None:
+    """Get the current implicit session for this client, or None if not started."""
+    return _IMPLICIT_SESSIONS.get(client_id)
+
+
+def _set_implicit_session(session_id: str, client_id: str = "default") -> None:
+    """Set the implicit session for this client."""
+    _IMPLICIT_SESSIONS[client_id] = session_id
+
+
+def _clear_implicit_session(client_id: str = "default") -> None:
+    """Clear the implicit session for this client."""
+    _IMPLICIT_SESSIONS.pop(client_id, None)
+
+
+def _auto_log_agent_message(
+    content: str, message_type: str = "agent_message", engine: SlowaveEngine | None = None
+) -> None:
+    """Auto-log an agent message to the implicit session if one is active.
+    
+    This is the mechanical auto-wrapping (Option A). Every agent output is
+    automatically logged without the agent needing to remember.
+    
+    Args:
+        content: The agent message content
+        message_type: Type of message (e.g., "agent_message", "tool_call")
+        engine: Optional SlowaveEngine to use (for performance in testing)
+    """
+    sid = _get_implicit_session()
+    if sid is not None:
+        try:
+            if engine is None:
+                engine = _build_engine(disable_llm=True)
+            engine.event_append(session_id=sid, type=message_type, content=content)
+            log.debug(f"auto-logged {message_type} to session {sid[:8]}")
+        except Exception as e:
+            log.warning(f"auto-log failed: {e}")
 
 
 def _build_engine(disable_llm: bool = False, disable_encoder: bool = False) -> SlowaveEngine:
@@ -259,6 +312,67 @@ def slowave_session_end(session_id: str) -> dict[str, Any]:
     """
     eng = _build_engine(disable_llm=True)
     return eng.session_end(session_id, consolidate=False)
+
+
+# ---- OPTION A: Implicit session tools (auto-wrapping mechanical events) ----
+
+@mcp.tool()
+def slowave_session_start_implicit(
+    agent: str = "cline-tui", project: str | None = None
+) -> dict[str, Any]:
+    """Start an implicit session: auto-logs all agent messages without explicit calls.
+
+    OPTION A (auto-wrap mechanical events):
+    This is an alternative to the explicit session protocol. Instead of calling
+    slowave_event() for every turn, you simply:
+      1. Call slowave_session_start_implicit() at task start
+      2. All subsequent agent messages are auto-logged
+      3. Call slowave_session_end_implicit() at task end
+
+    This solves the adoption problem: agents forget to call slowave_event().
+    With implicit sessions, logging is automatic and unavoidable (like RTK).
+
+    Args:
+        agent: identifier for this agent (e.g., "cline-tui")
+        project: project name to scope memories
+    """
+    eng = _build_engine(disable_llm=True, disable_encoder=True)
+    proj = project or DEFAULT_PROJECT
+    sid = eng.session_start(agent=agent, project=proj)
+    _set_implicit_session(sid)
+    return {
+        "session_id": sid,
+        "agent": agent,
+        "project": proj,
+        "mode": "implicit",
+        "auto_logging": True,
+        "note": "All agent messages will be automatically logged until slowave_session_end_implicit() is called"
+    }
+
+
+@mcp.tool()
+def slowave_session_end_implicit() -> dict[str, Any]:
+    """End the implicit session and consolidate events into episodes.
+
+    Call this at task end to close the auto-logging session.
+    All accumulated events are immediately encoded into episodes.
+    """
+    sid = _get_implicit_session()
+    if sid is None:
+        return {
+            "error": "No implicit session active",
+            "note": "Call slowave_session_start_implicit() first"
+        }
+    
+    eng = _build_engine(disable_llm=True)
+    result = eng.session_end(sid, consolidate=False)
+    _clear_implicit_session()
+    
+    return {
+        **result,
+        "implicit_session_id": sid,
+        "note": "Session ended and consolidated"
+    }
 
 
 @mcp.tool()

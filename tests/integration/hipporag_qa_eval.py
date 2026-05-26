@@ -55,6 +55,7 @@ class SlowaveQAEvaluator:
     def __init__(self, db_path: str | None = None):
         self.db_path = db_path or str(Path(tempfile.gettempdir()) / "slowave_qa_eval.db")
         self.engine: SlowaveEngine | None = None
+        self.current_documents: list[str] = []  # Track current document set for matching
 
     def setup(self) -> None:
         """Initialize Slowave engine."""
@@ -75,6 +76,9 @@ class SlowaveQAEvaluator:
         if not self.engine:
             raise RuntimeError("Call setup() first")
 
+        # Store documents for later content-based matching
+        self.current_documents = documents
+
         sid = self.engine.session_start(agent="qa-evaluator", project=project)
 
         # Add each document as an event
@@ -83,6 +87,7 @@ class SlowaveQAEvaluator:
                 session_id=sid,
                 type="document",
                 content=doc,
+                metadata={"doc_index": i},
             )
 
         # End session to form episodes
@@ -101,15 +106,37 @@ class SlowaveQAEvaluator:
 
         result = self.engine.recall(question, top_k=top_k, evidence=False)
 
-        # Extract episode indices from result
-        # Episodes are formed from documents; we need to map back
+        # Match episode content back to document indices
         doc_indices = []
+        seen_docs = set()
+
         for ep in result.episode_texts:
-            # Episode content_text might contain document text
-            # Try to infer document index from episode
-            doc_idx = ep.get("metadata", {}).get("doc_index", -1)
-            if doc_idx >= 0:
-                doc_indices.append(doc_idx)
+            episode_text = ep.get("content_text", "").lower()
+
+            # Find which document this episode matches
+            best_match_idx = -1
+            best_overlap = 0
+
+            for doc_idx, doc in enumerate(self.current_documents):
+                if doc_idx in seen_docs:
+                    continue
+
+                doc_lower = doc.lower()
+                # Count word overlap
+                ep_words = set(episode_text.split())
+                doc_words = set(doc_lower.split())
+                overlap = len(ep_words & doc_words)
+
+                if overlap > best_overlap:
+                    best_overlap = overlap
+                    best_match_idx = doc_idx
+
+            if best_match_idx >= 0 and best_overlap > 0:
+                doc_indices.append(best_match_idx)
+                seen_docs.add(best_match_idx)
+
+                if len(doc_indices) >= top_k:
+                    break
 
         return doc_indices[:top_k]
 
@@ -137,7 +164,7 @@ class SlowaveQAEvaluator:
         mrr_scores = []
         ndcg_scores = []
 
-        for example in examples:
+        for idx, example in enumerate(examples):
             # Ingest documents for this example
             sid = self.ingest_documents(example.documents)
 
@@ -176,6 +203,10 @@ class SlowaveQAEvaluator:
             idcg = sum(1.0 / __import__("math").log2(i + 1) for i in range(1, min(len(relevant_set) + 1, 6)))
             ndcg = dcg / idcg if idcg > 0 else 0.0
             ndcg_scores.append(ndcg)
+
+            # Periodically print progress
+            if (idx + 1) % 10 == 0:
+                print(f"  Evaluated {idx + 1}/{len(examples)}...")
 
         return RetrievalMetrics(
             recall_at_1=sum(recall_at_1_scores) / len(recall_at_1_scores) if recall_at_1_scores else 0,
@@ -355,7 +386,8 @@ class BenchmarkResults:
         if self.results["hipporag_baseline"]:
             print("\nHippoRAG Baseline:")
             for metric, value in self.results["hipporag_baseline"].items():
-                print(f"  {metric:25} : {value:.4f}")
+                if isinstance(value, (int, float)):
+                    print(f"  {metric:25} : {value:.4f}")
 
             print("\nComparison (Slowave vs HippoRAG):")
             for metric, pct in self.results.get("improvements", {}).items():

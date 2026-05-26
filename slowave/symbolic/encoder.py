@@ -38,11 +38,19 @@ class TextEncoder:
             return
         try:
             from sentence_transformers import SentenceTransformer
+            import torch
+            import multiprocessing as mp
         except ImportError as e:
             raise ImportError(
                 "sentence-transformers is required for text encoding. "
                 "Install it with: pip install sentence-transformers"
             ) from e
+        # Fix macOS multiprocessing fork issue
+        try:
+            mp.set_start_method('spawn', force=True)
+        except RuntimeError:
+            pass
+        torch.set_num_threads(1)
         self._model = SentenceTransformer(self.cfg.model_name, device=self.cfg.device)
         self._dim = int(self._model.get_sentence_embedding_dimension())
 
