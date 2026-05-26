@@ -191,41 +191,364 @@ sequenceDiagram
     Engine-->>Agent: RecallResult(schemas, episode_texts, raw_events)
 ```
 
+### RetrievalPipeline: Multi-Mechanism Ranking
+
+The `RetrievalPipeline` combines four independent ranking signals to maximize both precision and recall:
+
+```mermaid
+flowchart TD
+    Q["Query embedding q"]
+    Q --> CS["Cosine Seed<br/>(direct ANN)"]
+    Q --> PS["Predictive Seed<br/>(TransitionModel)"]
+    Q --> SA["Spreading Activation<br/>(Stage 1)"]
+    Q --> MS["Multi-Scale<br/>(fine 0.85, coarse 0.55)"]
+    
+    CS --> W["Weighted Combination"]
+    PS --> W
+    SA --> W
+    MS --> W
+    
+    W --> SR["Salience Reranking<br/>(recency + recall count)"]
+    SR --> R["Ranked Result"]
+```
+
+**Mechanism Details**:
+
+1. **Cosine Seed** (primary signal):
+   - Compute cosine similarity between query and all episodic memories / prototypes
+   - Top-k (typically 50–200) form the initial seed set
+   - Weight: 0.65
+
+2. **Predictive Seed** (Stage 3, `transition_model`):
+   - If transition model exists and is trained: predict `q' = transition_model(q)`
+   - Retrieve top-k neighbors of predicted `q'`
+   - Rationale: helps recall sequences and predictable patterns
+   - Weight: 0.25
+   - Combined score: `0.65 × cosine(q) + 0.25 × cosine(q')`
+
+3. **Spreading Activation** (Stage 1, see §7):
+   - From cosine seed prototypes, activate neighbors via prototype graph
+   - Traverse similarity, coactivation, and transition edges
+   - Activation decays per hop: `0.7^depth`
+   - Termination: depth ≥ 3 or activation < 0.05
+   - Weight: 0.10
+
+4. **Multi-Scale Filtering**:
+   - Fine prototypes (threshold 0.85): high-precision clusters, ~5–15 members each
+   - Coarse prototypes (threshold 0.55): high-recall generalizations, ~20–50 members each
+   - Default behavior: return both fine and coarse results; clients can filter by `scale` attribute
+
+**Final Reranking** (salience-aware):
+```
+final_score = ranking_score + 0.3 × salience_t
+salience_t = salience × exp(-time_decay / tau)
+```
+where `tau = 3600s` (one hour) and `time_decay` is seconds since last recall.
+
+This biases toward recently-used and frequently-recalled episodes without suppressing older knowledge.
+
 ---
 
 ## 6. Episode Formation
 
-On `session_end`, raw events are converted to episodic memories using a multi-scale strategy:
+On `session_end`, raw events are converted to episodic memories using a multi-scale strategy that balances fine-grained context (micro) with holistic session summary (macro):
 
 ```mermaid
 flowchart LR
     subgraph Session[Session events]
-        e0 --- e1 --- e2 --- e3 --- e4
+        e0["event 0<br/>(type, content)"] --- e1["event 1"] --- e2["event 2"] --- e3["event 3"] --- e4["event 4"]
     end
 
-    subgraph Micro[Micro episodes window=2]
-        m0[e0+e1]
-        m1[e1+e2]
-        m2[e2+e3]
-        m3[e3+e4]
+    subgraph Micro[Micro episodes<br/>window=2, overlap=1]
+        m0["m0: e0+e1<br/>salience: 0.62"]
+        m1["m1: e1+e2<br/>salience: 0.71"]
+        m2["m2: e2+e3<br/>salience: 0.58"]
+        m3["m3: e3+e4<br/>salience: 0.85"]
     end
 
-    subgraph Macro[Macro episode full session]
-        mac[e0..e4]
+    subgraph Macro[Macro episode<br/>full session]
+        mac["macro: e0..e4<br/>salience: 0.55<br/>(×0.8 downweight)"]
     end
 
     Session --> Micro
     Session --> Macro
 ```
 
-- **Micro episodes** preserve local context (individual user preferences, facts, decisions).
-- **Macro episode** preserves global session context; downweighted salience (`×0.8`).
-- **Salience** = novelty (distance to nearest existing episode) + 0.3 × prediction surprise.
-- `remember:` events receive a salience bonus (`+0.6`) so explicit memories survive replay.
+### Multi-Scale Episode Algorithm
+
+**Input**: Session with N events, each with `type`, `content`, `embedding` (384-D), `timestamp`.
+
+**Output**: 
+- N−1 micro episodes (sliding window size 2, overlap 1)
+- 1 macro episode (full session)
+- Each episode stored in `episodic_memories` with embedding, salience, metadata
+
+**Micro Episode Creation** (for each i ∈ [0, N−2]):
+```
+embedding_micro[i] = (embedding[i] + embedding[i+1]) / 2
+timestamp_micro[i] = timestamp[i+1]  (use end timestamp)
+metadata_micro[i] = {
+  event_ids: [i, i+1],
+  event_types: [type[i], type[i+1]],
+  is_remember: type[i]=="remember" OR type[i+1]=="remember"
+}
+```
+
+**Macro Episode Creation** (once per session):
+```
+embedding_macro = mean(embedding[0..N-1])  (unweighted average)
+timestamp_macro = timestamp[N-1]  (use session end time)
+metadata_macro = {
+  event_ids: [0..N-1],
+  event_types: [type[0..N-1]],
+  is_remember: any(type == "remember")
+}
+salience_macro_multiplier = 0.8  (downweight global summary)
+```
+
+**Salience Computation** (per episode, before storage):
+
+```
+novelty = 1.0 - max(0, max_cosine_sim)
+where max_cosine_sim = max over existing episodic_memories of cosine(embedding, existing.embedding)
+
+# If transition model is trained:
+surprise_weight = ||transition_model(embedding_prev) - embedding_curr||^2
+surprise_normalized = clamp(surprise_weight / percentile_90_past_errors, 0, 1)
+else:
+surprise_normalized = 0.0
+
+base_salience = novelty + 0.3 * surprise_normalized
+
+# Apply modifiers:
+if is_remember:
+  salience = base_salience + 0.6  (explicit memory bonus)
+else if episode_type == "macro":
+  salience = base_salience * 0.8  (downweight global)
+else:
+  salience = base_salience
+
+# Floor and ceiling:
+salience = clamp(salience, 0.01, 1.0)
+```
+
+**Edge Cases**:
+- Session with 0–1 events: no micro episodes, macro only (if N ≥ 1)
+- Session with repeated identical embeddings: novelty = 0.0, base_salience may be very low (OK, replay will discard)
+- No existing episodic memories: novelty = 1.0 (all new episodes get high initial salience)
 
 ---
 
-## 7. Schema Structure
+## 7. TransitionModel: Predictive Coding for Salience & Retrieval
+
+The transition model predicts the next episode embedding from the current one, enabling two key mechanisms:
+1. **Surprise Signal** (Stage 3): Prediction error boosts salience of unexpected episodes
+2. **Predictive Seed** (Stage 3): Predicted embeddings seed additional recall candidates
+
+### Architecture
+
+```mermaid
+flowchart LR
+    E_t["e_t<br/>(384-D)"]
+    H1["Linear(384→256)<br/>ReLU"]
+    H2["Linear(256→256)<br/>ReLU"]
+    Out["Linear(256→384)<br/>tanh"]
+    E_pred["e_t+1_pred<br/>(384-D)"]
+    
+    E_t --> H1
+    H1 --> H2
+    H2 --> Out
+    Out --> E_pred
+```
+
+**Model Parameters**:
+- Input: 384-D episode embedding (from sentence-transformers `all-MiniLM-L6-v2`)
+- Hidden layers: 256-D with ReLU activations
+- Output: 384-D predicted embedding (tanh activation for bounded output)
+- Total parameters: ~300k
+
+**Loss Function**:
+```
+L = MSE(e_{t+1}_pred, e_{t+1}_true)
+  = mean((e_{t+1}_pred - e_{t+1}_true)^2)
+```
+
+### Training Protocol
+
+The transition model trains during `ReplayEngine.replay_once()` on consecutive episode pairs:
+
+**Batch Formation**:
+```
+For each replay cycle:
+  - Sample up to `sample_size` episodes (default 256, weighted by salience)
+  - For each sampled episode[i], if i+1 exists in episodic_memories:
+    - Create training pair (embedding[i], embedding[i+1])
+  - Batch size ≈ 0.8 * sample_size (some sampled episodes are terminal)
+```
+
+**Training Loop**:
+```
+optimizer = Adam(lr=1e-3, weight_decay=1e-5)
+for epoch in range(5):  # fixed 5 epochs per replay
+  shuffled_pairs = shuffle(training_pairs)
+  for batch in batches(shuffled_pairs, size=32):
+    e_t_batch, e_t1_batch = batch
+    e_t1_pred = transition_model(e_t_batch)
+    loss = MSE(e_t1_pred, e_t1_batch)
+    loss.backward()
+    optimizer.step()
+    optimizer.zero_grad()
+```
+
+**No Early Stopping**: The model trains for fixed epochs without validation loss check. This keeps consolidation non-blocking but means overfitting is possible if `sample_size` is very small or episodes are bursty.
+
+### Surprise Signal Computation
+
+After training, on each episode's salience update:
+
+```
+# Forward pass (no grad):
+e_next_pred = transition_model(embedding_current)
+
+# Prediction error (L2 distance):
+prediction_error = ||e_next_pred - embedding_next||^2
+
+# Normalize against recent history (rolling percentile):
+baseline = percentile(past_100_errors, 10)  # 10th percentile
+surprise_signal = max(0, prediction_error - baseline)
+surprise_normalized = min(1.0, surprise_signal / percentile_90)
+
+# Apply to salience (see §6, Episode Formation):
+salience_adjusted = base_salience + 0.3 * surprise_normalized
+```
+
+**Intuition**: Episodes that violate the learned sequence pattern get higher salience, making them more likely to be replayed and consolidated into schemas.
+
+### Predictive Seed (Stage 3) for Recall
+
+During retrieval (see §5.5), if transition model is trained:
+
+```
+q = query_embedding
+q_pred = transition_model(q)  # predict next expected state
+
+# Retrieve neighbors of both:
+results_cosine = faiss_episodic.search(q, k=50)
+results_predictive = faiss_episodic.search(q_pred, k=50)
+
+# Combine scores (see §5.5):
+combined_score = 0.65 * score_cosine + 0.25 * score_predictive + 0.10 * spreading_activation
+```
+
+This helps recall episodes that follow a predictable sequence (e.g., in a multi-turn conversation, recall the agent's likely next response).
+
+---
+
+## 8. Spreading Activation: Stage 1 Pattern Completion
+
+Spreading activation implements memory association across the prototype graph, biasing retrieval toward related concepts. This is Stage 1 (+2–3pp on benchmarks).
+
+### Graph Structure
+
+```mermaid
+flowchart LR
+    subgraph Seeds["Cosine Seed<br/>(from query)"]
+        P1["Proto 1<br/>seed=0.95"]
+        P2["Proto 2<br/>seed=0.87"]
+    end
+    
+    subgraph L1["Depth 1"]
+        P3["Proto 3<br/>activation=0.76"]
+        P4["Proto 4<br/>activation=0.68"]
+    end
+    
+    subgraph L2["Depth 2"]
+        P5["Proto 5<br/>activation=0.53"]
+    end
+    
+    P1 -->|sim: 0.8| P3
+    P1 -->|coact: 0.7| P4
+    P2 -->|trans: 0.6| P3
+    P3 -->|sim: 0.7| P5
+    P4 -.->|stop<br/>activation<0.05| P6["Proto 6"]
+```
+
+**Edge Types** (stored in `prototype_edges` table):
+- **Similarity** (`edge_type='similarity'`): high cosine sim between centroids
+- **Coactivation** (`edge_type='coactivation'`): episodes recalled together historically
+- **Transition** (`edge_type='transition'`): episodes appear in sequence (from transition model)
+
+### Activation Algorithm
+
+```
+def spread_activation(seed_prototypes, query_embedding):
+  activation = {proto_id: seed_score for proto_id, seed_score in seed_prototypes}
+  queue = priority_queue(seed_prototypes, descending by score)
+  visited = set(seed_prototypes.keys())
+  depth_map = {proto_id: 0 for proto_id in seed_prototypes}
+  
+  while queue not empty:
+    current_proto_id, current_activation = queue.pop()
+    current_depth = depth_map[current_proto_id]
+    
+    # Termination conditions:
+    if current_activation < 0.05 or current_depth >= 3:
+      continue
+    
+    # Traverse outgoing edges:
+    for neighbor_proto_id, edge_weight in graph[current_proto_id]:
+      if neighbor_proto_id in visited:
+        continue
+      
+      # Decay activation per hop:
+      neighbor_activation = current_activation * edge_weight * (0.7 ^ current_depth)
+      
+      if neighbor_activation > 0.05:  # only add if above threshold
+        activation[neighbor_proto_id] = max(
+          activation.get(neighbor_proto_id, 0),
+          neighbor_activation
+        )
+        depth_map[neighbor_proto_id] = current_depth + 1
+        queue.push(neighbor_proto_id, neighbor_activation)
+        visited.add(neighbor_proto_id)
+  
+  return activation
+```
+
+### Integration with Retrieval
+
+During `RetrievalPipeline.retrieve()` (see §5.5):
+
+```
+# Step 1: Cosine seed (top-k prototypes)
+cosine_scores = faiss_semantic.search(query_embedding, k=50)
+
+# Step 2: Spread activation from cosine seed
+spreading_activation_scores = spread_activation(
+  seed_prototypes=dict(cosine_scores),
+  query_embedding=query_embedding
+)
+
+# Step 3: Combine (weight 0.10 for spreading activation)
+final_proto_scores = {}
+for proto_id in union(cosine_scores, spreading_activation_scores):
+  final_proto_scores[proto_id] = (
+    0.65 * cosine_scores.get(proto_id, 0) +
+    0.25 * predictive_scores.get(proto_id, 0) +  # if transition model exists
+    0.10 * spreading_activation_scores.get(proto_id, 0)
+  )
+
+# Step 4: Retrieve episodes from top prototypes
+episodes = {}
+for proto_id in top_k(final_proto_scores, k=20):
+  episodes.update(episodic.by_prototype(proto_id))
+```
+
+**Impact**: Spreading activation is particularly effective for multi-hop queries (e.g., "tools I've used for data analysis" → recalls SQL + Python + Jupyter even if none appear in query).
+
+---
+
+## 9. Schema Structure
 
 A schema is a durable typed claim about the user or project, consolidated from episodic evidence.
 
@@ -279,7 +602,7 @@ Tags: running, training, injury, adaptation
 
 ---
 
-## 8. Salience Dynamics
+## 10. Salience Dynamics
 
 ```mermaid
 flowchart TD
@@ -298,38 +621,302 @@ Salience governs replay sampling (proportional), retrieval reranking (`cosine + 
 
 ---
 
-## 9. Consolidation Pipeline
+## 11. Consolidation Pipeline: Prototype Clustering, Schema Formation, & Contradiction Detection
 
-**Default: brain-only (Stage 6+), zero LLM calls.**
+Consolidation is the offline background process that transforms episodic memories into semantic knowledge (prototypes and schemas). It is decoupled from ingest: agents never wait for consolidation to complete.
+
+### Consolidation Lifecycle
 
 ```mermaid
 flowchart TD
-    R[ReplayEngine sample] --> P[Prototype clustering\nfine 0.85 + coarse 0.55]
-    P --> G[Graph update\nsimilarity + coactivation edges]
-    P --> T[Transition model train\ne_t → e_t+1]
-    P --> C[LatentSchemaBuilder: each prototype]
-    C --> LS[centroid + SVD principal axes\n+ temporal anchor + confidence]
-    LS --> GEO[GeometricContradictionJudge\ncentroid proximity + facet divergence\n+ temporal ordering]
-    GEO --> SS[SchemaStore]
+    SE["session_end(consolidate=False)"]
+    EF["Episodes formed<br/>(micro + macro)"]
+    SE --> EF
+    
+    EF -->|consolidate=False<br/>default| Q["Queued for<br/>background worker"]
+    EF -->|consolidate=True<br/>blocking| RC["Replay cycle<br/>(sync)"]
+    
+    Q --> W["Background worker<br/>(slowave worker --daemon)"]
+    W --> RC
+    
+    RC --> P["Prototype clustering<br/>(fine + coarse)"]
+    P --> G["Graph update"]
+    P --> T["Transition model train"]
+    P --> S["Schema building"]
+    S --> R["Result to SchemaStore"]
+    
+    R --> A["Agents can immediately<br/>recall new schemas"]
 ```
 
-**Legacy: LLM-extraction path (Stage 0-5, `--schema-mode llm`):**
+**Recommendation**: Use `consolidate=False` (the default) for agent sessions. Episodes are available for recall immediately; schemas become available seconds to minutes later via the background worker.
 
-```mermaid
-flowchart TD
-    P[Prototype clustering] --> C[Consolidator: each prototype]
-    C --> ET[Collect up to 8 episode texts]
-    ET --> EX[SchemaExtractor LLM]
-    EX -->|claims| EMB[Embed canonical schema text]
-    EMB --> REL{Related schema?}
-    REL -->|no| CR[Create schema]
-    REL -->|yes| JDG[ContradictionJudge LLM]
-    JDG --> SS[SchemaStore]
+### Multi-Scale Prototype Clustering
+
+During `ReplayEngine.replay_once()`, episodes are assigned to prototypes using cosine similarity with two thresholds:
+
+```
+def cluster_episodes_multiscale(sampled_episodes, existing_prototypes):
+  assignments_fine = {}      # threshold = 0.85 (CA3-like)
+  assignments_coarse = {}    # threshold = 0.55 (CA1-like)
+  new_prototypes = []
+  
+  for episode in sampled_episodes:
+    assigned_fine = False
+    assigned_coarse = False
+    
+    # Try assignment to existing prototypes (both scales):
+    for prototype in existing_prototypes:
+      sim = cosine_similarity(episode.embedding, prototype.centroid)
+      
+      if sim >= 0.85:
+        assignments_fine[prototype.id].append(episode.id)
+        assigned_fine = True
+      
+      if sim >= 0.55:
+        assignments_coarse[prototype.id].append(episode.id)
+        assigned_coarse = True
+    
+    # If no assignment at fine scale, create new fine prototype:
+    if not assigned_fine:
+      new_proto = create_prototype(centroid=episode.embedding, scale='fine')
+      assignments_fine[new_proto.id] = [episode.id]
+      new_prototypes.append(new_proto)
+    
+    # If no assignment at coarse scale, create new coarse prototype:
+    if not assigned_coarse:
+      new_proto = create_prototype(centroid=episode.embedding, scale='coarse')
+      assignments_coarse[new_proto.id] = [episode.id]
+      new_prototypes.append(new_proto)
+  
+  return assignments_fine, assignments_coarse, new_prototypes
+```
+
+**Threshold Semantics**:
+
+| Scale | Threshold | Brain analogue | Episodes per prototype | Use case |
+|---|---|---|---|---|
+| **Fine** | 0.85 (high cosine sim) | CA3 (exact memory) | ~5–15 | Precision retrieval; exact concept matches |
+| **Coarse** | 0.55 (moderate cosine sim) | CA1 (pattern completion) | ~20–50 | High-recall retrieval; related concepts |
+
+**Multi-Scale Behavior**:
+- If episode matches both fine and coarse thresholds, it belongs to **both** prototypes (redundancy for robustness)
+- Fine prototypes are tight clusters; coarse are looser generalizations
+- Schemas are built independently for each scale; clients can filter by `scale` attribute during retrieval
+
+**Motivation**: Fine thresholds give exact recall (high precision); coarse thresholds give broader pattern matching (high recall). Using both allows a single query to retrieve both precise matches and related concepts.
+
+### Graph Update & Edge Weighting
+
+After clustering, the `GraphManager` updates prototype edges:
+
+```
+def update_prototype_graph(assignments_fine, transition_model):
+  # Similarity edges (cluster structure):
+  for proto_id in assignments_fine:
+    prototype = get_prototype(proto_id)
+    members = [ep.embedding for ep in episodes[proto_id]]
+    centroid = prototype.centroid
+    for member in members:
+      sim = cosine(member, centroid)
+      # High-sim members reinforce prototype cohesion
+  
+  # Coactivation edges (retrieval history):
+  for (proto_a, proto_b) in co_recalled_pairs:
+    coactivation_count = count_joint_recalls(proto_a, proto_b)
+    edge_weight = coactivation_count / total_recalls
+    add_or_update_edge(proto_a, proto_b, type='coactivation', weight=edge_weight)
+  
+  # Transition edges (sequential patterns):
+  for (episode_a, episode_b) in consecutive_pairs:
+    if transition_model exists:
+      pred_b = transition_model(episode_a.embedding)
+      transition_sim = cosine(pred_b, episode_b.embedding)
+      # High transition sim indicates predictable sequence
+      proto_a = episode_a.prototype
+      proto_b = episode_b.prototype
+      add_or_update_edge(proto_a, proto_b, type='transition', weight=transition_sim)
 ```
 
 ---
 
-## 10. Storage Layout
+### Default Path: Latent Schema Building (Stage 6)
+
+For each prototype, `LatentSchemaBuilder` creates a schema purely from geometry—no LLM:
+
+```mermaid
+flowchart TD
+    Proto["Prototype<br/>(centroid, members)"]
+    SVD["SVD on member deviations<br/>(centroid − member)"]
+    Axes["Top-k principal axes<br/>(facet_axes)"]
+    Strength["Variance per axis<br/>(facet_strengths)"]
+    Conf["Confidence = 1.0 − normalized_variance"]
+    Central["Closest member to centroid<br/>(central_episode_id)"]
+    CentralText["Text of central member<br/>(use as schema claim)"]
+    Temporal["Temporal span<br/>(mean_ts, span_s)"]
+    
+    Proto --> SVD
+    SVD --> Axes
+    SVD --> Strength
+    Strength --> Conf
+    Proto --> Central
+    Central --> CentralText
+    Proto --> Temporal
+    
+    Axes --> Schema["LatentSchema<br/>(centroid, facet_axes, confidence,<br/>central_episode_text, ...)"]
+    Strength --> Schema
+    Conf --> Schema
+    CentralText --> Schema
+    Temporal --> Schema
+```
+
+**Schema Formation Algorithm**:
+
+```
+def build_latent_schema(prototype):
+  # Get member episodes:
+  member_episodes = episodic.by_prototype(prototype.id)
+  if not member_episodes:
+    return None
+  
+  # Compute member deviations from centroid:
+  member_embeddings = [ep.embedding for ep in member_episodes]
+  deviations = [emb - prototype.centroid for emb in member_embeddings]
+  
+  # SVD for principal axes:
+  U, S, Vt = svd(np.stack(deviations, axis=0), full_matrices=False)
+  k = 3  # top-3 axes
+  facet_axes = Vt[:k, :]  # top k principal directions (in embedding space)
+  facet_strengths = (S[:k] ** 2) / (S ** 2).sum()  # normalized variance per axis
+  
+  # Confidence: tightness of cluster:
+  within_cluster_variance = (S[k:] ** 2).sum() / (S ** 2).sum()
+  confidence = 1.0 - within_cluster_variance
+  
+  # Central episode (closest to centroid):
+  central_idx = argmin([cosine_distance(emb, prototype.centroid) for emb in member_embeddings])
+  central_episode = member_episodes[central_idx]
+  central_text = episode_text.get(central_episode.id).content_text
+  
+  # Temporal:
+  timestamps = [ep.ts for ep in member_episodes]
+  mean_ts = int(np.mean(timestamps))
+  ts_span = max(timestamps) - min(timestamps)
+  
+  # Build schema object (no LLM):
+  schema = LatentSchema(
+    centroid=prototype.centroid,
+    facet_axes=facet_axes,
+    facet_strengths=facet_strengths,
+    member_episode_ids=[ep.id for ep in member_episodes],
+    central_episode_id=central_episode.id,
+    central_episode_text=central_text,  # ← used as claim
+    mean_ts=mean_ts,
+    ts_span_s=ts_span,
+    confidence=confidence,
+    support_count=len(member_episodes),
+    tags=[],  # optional, can be derived from central_episode
+  )
+  
+  return schema
+```
+
+**Schema Interpretation**:
+- `central_episode_text` becomes the human-readable claim ("For running advice, user prefers knee-adapted plans")
+- `facet_axes` capture what varies within the schema's examples (e.g., which dimensions of the embedding space vary most)
+- `confidence` high when all members are similar (tight cluster); low when members are diverse
+- `support_count` is the number of episodes backing the schema
+
+### Geometric Contradiction Detection
+
+When a new schema is formed, `GeometricContradictionJudge` compares it against existing schemas to detect contradictions, refinements, and reinforcements:
+
+```
+def judge_contradiction(new_schema, existing_schemas):
+  for existing in existing_schemas:
+    # 1. Centroid proximity (same topic?):
+    centroid_sim = cosine(new_schema.centroid, existing.centroid)
+    
+    if centroid_sim > 0.75:
+      # Same topic; check facets:
+      
+      # 2. Facet divergence (different aspect?):
+      facet_distance = angle_between_principal_subspaces(
+        new_schema.facet_axes, existing.facet_axes
+      )  # degrees in subspace
+      
+      if facet_distance > 45:
+        verdict = "refines"  # different aspect of same topic
+      else:
+        verdict = "reinforces"  # same aspect, likely same content
+      
+      # 3. Temporal ordering (which is fresher?):
+      time_delta = new_schema.mean_ts - existing.mean_ts
+      
+      if time_delta > 0 and new_schema.confidence > existing.confidence:
+        # New schema is fresher and more confident:
+        if centroid_sim > 0.90 and facet_distance < 30:
+          verdict = "contradicts"  # same topic, same facets, newer
+        elif new_schema.confidence > 0.8:
+          verdict = "supersedes"  # new schema is very confident
+      
+      reasoning = f"centroid_sim={centroid_sim:.2f}, facet_distance={facet_distance:.1f}°, time_delta={time_delta}s"
+      
+      return GeometricVerdict(
+        verdict=verdict,
+        reasoning=reasoning,
+        similarity=centroid_sim,
+        facet_distance=facet_distance,
+        time_delta_s=time_delta
+      )
+    
+    else:
+      # Centroid sim < 0.75: unrelated topics
+      return GeometricVerdict(verdict="unrelated", ...)
+  
+  # No existing schema similar enough:
+  return None
+```
+
+**Verdict Types**:
+- **`reinforces`**: new schema has same topic and facets; adds evidence to existing
+- **`refines`**: new schema has same topic but different facets; captures new aspect
+- **`contradicts`**: new schema has same topic/facets but contradicts existing (use newer)
+- **`supersedes`**: new schema is very confident and contradictory; mark existing as superseded
+- **`unrelated`**: no similarity; create new independent schema
+
+---
+
+### Legacy Path: LLM-Extraction (Stage 0-5, `--schema-mode llm`)
+
+When `config.schema_mode = "llm"`, the consolidator uses `SchemaExtractor` and `ContradictionJudge` LLM tools instead:
+
+```mermaid
+flowchart TD
+    Proto["Prototype<br/>(centroid, members)"]
+    Collect["Collect up to 8 episode texts<br/>(central + neighbors)"]
+    LLM["SchemaExtractor LLM<br/>(prompt: extract_schema.txt)"]
+    Output["Claims, facets, tags, confidence"]
+    Embed["Embed canonical schema text"]
+    Related{"Related existing<br/>schema?"}
+    
+    Proto --> Collect
+    Collect --> LLM
+    LLM --> Output
+    Output --> Embed
+    Embed --> Related
+    Related -->|no| Create["Create schema"]
+    Related -->|yes| Judge["ContradictionJudge LLM<br/>(prompt: judge_contradiction.txt)"]
+    Judge --> Update["Update or supersede"]
+    
+    Create --> Store["SchemaStore"]
+    Update --> Store
+```
+
+This path allows richer semantic extraction but incurs LLM latency and cost. Disabled by default.
+
+---
+
+## 12. Storage Layout
 
 All data lives in a single **SQLite** file (WAL mode). Embeddings are stored as `BLOB` columns and loaded into **in-memory FAISS** indices on engine start.
 
@@ -357,7 +944,7 @@ slowave.db
 
 ---
 
-## 11. Integrations
+## 13. Integrations
 
 ```mermaid
 flowchart LR
@@ -384,7 +971,7 @@ MCP tools: `slowave_session_start`, `slowave_event`, `slowave_session_end`, `slo
 
 ---
 
-## 12. Key Configuration
+## 14. Key Configuration
 
 ```python
 SlowaveConfig(
@@ -409,7 +996,7 @@ SlowaveConfig(
 
 ---
 
-## 13. Module Map
+## 15. Module Map
 
 ```
 slowave/
@@ -448,7 +1035,7 @@ slowave/
 
 ---
 
-## 14. Biological Analogies
+## 16. Biological Analogies
 
 | Slowave component | Biological analogue |
 |---|---|
@@ -463,3 +1050,370 @@ slowave/
 | Recall reinforcement | Memory reconsolidation / use-dependent strengthening |
 | Contradiction judge | Belief revision / predictive error correction |
 | Evidence provenance | Episodic trace back to sensory context |
+
+---
+
+## 17. Error Recovery & Resilience
+
+Slowave is designed to recover gracefully from transient errors and corruption. This section documents failure modes and recovery procedures.
+
+### SQLite Corruption
+
+**Symptoms**: "database disk image malformed" or random `NULL` values in retrieval results.
+
+**Recovery**:
+```bash
+# Attempt recovery via SQLite's built-in recovery tool:
+sqlite3 ~/.slowave/slowave.db ".recover" > slowave.recover.sql
+
+# Create a fresh DB and restore:
+sqlite3 ~/.slowave/slowave.db.recovered < slowave.recover.sql
+
+# Verify integrity:
+sqlite3 ~/.slowave/slowave.db.recovered "PRAGMA integrity_check;"
+```
+
+Then restart slowave; it will auto-rebuild FAISS indices from the recovered database.
+
+**Prevention**:
+- Use WAL mode (default) for better crash resistance
+- Run `PRAGMA optimize` periodically on long-running servers
+- Monitor disk space; stop writes if disk is full
+
+### FAISS Index Divergence
+
+**Symptoms**: Retrieval returns unexpected results; same query gives different results on re-run; FAISS internal assertion errors.
+
+**Root cause**: FAISS indices are in-memory and rebuilt from SQLite on engine startup. If SQLite is modified externally (e.g., concurrent writes during rebuild), the index can diverge.
+
+**Recovery**:
+```bash
+# Indices are ephemeral; delete and restart:
+rm -f ~/.slowave/slowave.db.faiss*
+
+# Restart engine; indices auto-rebuild on next query
+slowave recall "test query"
+```
+
+**Prevention**:
+- Avoid concurrent writes to `~/.slowave/slowave.db` from multiple processes
+- Use `SLOWAVE_PROJECT` scoping to partition memory per agent
+- Use MCP server (stateless across clients, single engine instance) rather than multiple CLI processes
+
+### Replay Crashes & Idempotence
+
+**Symptom**: Consolidation aborted mid-way; schemas partially created.
+
+**Safety**: Consolidation is idempotent. Prototype IDs already processed are tracked in `schema_prototype_map`; resuming will not reprocess them.
+
+**Recovery**:
+```bash
+# Resume consolidation:
+slowave consolidate
+
+# Or restart background worker:
+slowave worker --once
+```
+
+**Why it works**: Before creating a schema, the consolidator checks if `schema_prototype_map` already has an entry for this prototype. If yes, schema creation is skipped.
+
+### Encoder Out-of-Memory
+
+**Symptom**: "CUDA out of memory" or "malloc failed" during text encoding.
+
+**Workaround**:
+```python
+cfg = SlowaveConfig(
+    db_path="~/.slowave/slowave.db",
+    disable_encoder=True,  # Disable encoder
+    # Provide pre-computed embeddings instead:
+)
+```
+
+Events must then include embeddings manually:
+```python
+engine.raw_log.append(
+    session_id=sid, type="user_message",
+    content="my message",
+    embedding=np.array([...], dtype=np.float32)  # external embedding
+)
+```
+
+Retrieval will be unavailable until encoder is restored and indices are rebuilt.
+
+### Multi-Client State Conflicts
+
+**Symptom**: Multiple MCP clients each maintain separate `_IMPLICIT_SESSIONS` state (Option A); on process restart, implicit sessions are lost.
+
+**Prevention**:
+- Use a single MCP server instance (`slowave-mcp` daemon) shared by all clients
+- Register it in your agent's MCP config: `cline_mcp_settings.json`
+- Do NOT spawn multiple `slowave-mcp` processes for the same DB
+
+**If needed (e.g., multiple agents)**: Use explicit session protocol with `slowave_session_start()` / `slowave_event()` / `slowave_session_end()` (less convenient but fully stateless).
+
+---
+
+## 18. Stage Reference System
+
+Slowave's development is organized as numbered **stages**. Each stage is a mechanism, a set of LLM prompts, or an architectural change, evaluated independently via ablation studies.
+
+### Stage Definitions
+
+| Stage | Type | Mechanism | Benchmark Impact | Status |
+|---|---|---|---|---|
+| **0–5** | Path | LLM-extraction schema building + contradiction judge | +0pp (baseline) | Legacy |
+| **1** | Mechanism | Spreading activation over prototype graph | +2–3pp | Active |
+| **3** | Mechanism | Predictive seed for retrieval (Stage 3 TransitionModel) | **+6.7pp** ⭐ | Active |
+| **6** | Architecture | Latent schema building (zero LLM) + geometric contradiction | **+10pp** ⭐⭐ breakthrough | Active (default) |
+| **7** | Mechanism | Temporal bias in salience & retrieval | +0pp (neutral) | Active |
+| **8** | Mechanism | Multi-scale prototypes (fine 0.85, coarse 0.55) | +0pp (neutral) | Active |
+| **9** | Mechanism | Pattern separation via confidence & multi-scale contradict detection | +0pp (neutral) | Active |
+
+**⭐ = highest empirical impact; recommend keeping enabled.**
+
+### Stage History
+
+Stages are documented individually in `docs/stages/`:
+- `docs/stages/01_spreading_activation.md`
+- `docs/stages/03_transition_model.md`
+- `docs/stages/06_latent_schemas.md`
+- etc.
+
+Each stage document includes:
+- Motivation and biological inspiration
+- Mechanism pseudocode
+- Benchmark results on LongMemEval + LoCoMo
+- Ablation flags for reproducibility
+- Lessons learned
+
+### Running Ablations
+
+To test impact of individual stages:
+
+```bash
+# Disable spreading activation (Stage 1):
+pytest tests/integration/longmemeval_eval.py --no-spreading-activation
+
+# Use LLM extraction instead of latent schemas (revert to Stages 0–5):
+pytest tests/integration/longmemeval_eval.py --schema-mode llm
+
+# Disable transition model (no predictive seed):
+pytest tests/integration/longmemeval_eval.py --no-transition
+
+# Single-scale prototypes (only fine, no coarse):
+pytest tests/integration/longmemeval_eval.py --no-multi-scale
+```
+
+Results are saved to `data/longmemeval/runs/` and `data/locomo/runs/`.
+
+See `docs/benchmarks.md` for full ablation flags and reproducing published results.
+
+### Why Stages 7–9 Are Neutral
+
+Stages 7–9 (temporal bias, multi-scale, pattern separation) are architecturally correct but show zero improvement on LongMemEval and LoCoMo. They are **kept enabled** because:
+
+1. They address failure modes not covered by these benchmarks (sequential memory, multi-shot conversations)
+2. Removing them would simplify code but add risk of regression on real-world tasks
+3. The overhead is minimal (~5% on latency, negligible on memory)
+
+---
+
+## 19. Session Lifecycle & State Machine
+
+A session is a bounded context for memory logging. It captures one agent's task or conversation, allowing independent replay and consolidation.
+
+### State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    
+    IDLE --> OPEN: session_start(agent, project)
+    
+    OPEN --> OPEN: event_append(type, content)
+    note right of OPEN
+        Agent logs every turn.
+        Explicit protocol: must call slowave_event()
+        Implicit protocol (Option A): auto-wrapped
+    end
+    
+    OPEN --> CONSOLIDATING: session_end(consolidate=False)
+    note right of CONSOLIDATING
+        Episodes formed immediately (<1ms).
+        Consolidation queued for background worker.
+    end
+    
+    OPEN --> CONSOLIDATED: session_end(consolidate=True)
+    note right of CONSOLIDATED
+        Episodes formed + consolidation blocking.
+        Schemas available immediately.
+    end
+    
+    CONSOLIDATING --> CONSOLIDATED: background worker completes replay
+    note right of CONSOLIDATED
+        Prototypes clustered, schemas built.
+        Schemas ready for recall.
+    end
+    
+    CONSOLIDATED --> IDLE
+    CONSOLIDATING --> IDLE
+    
+    OPEN -.->|implicit session| IMPLICIT_OPEN: session_start_implicit()
+    note right of IMPLICIT_OPEN
+        Option A: auto-logging mode.
+        All outputs auto-wrapped (no slowave_event needed).
+    end
+    
+    IMPLICIT_OPEN --> IMPLICIT_OPEN: Agent works normally
+    note right of IMPLICIT_OPEN
+        Outputs auto-captured without agent intervention.
+    end
+    
+    IMPLICIT_OPEN --> CONSOLIDATED: session_end_implicit()
+    IMPLICIT_OPEN --> [*]
+```
+
+### Session Lifecycle: Detailed Steps
+
+#### 1. Explicit Protocol (Recommended for Agents)
+
+```python
+import slowave
+
+# Start session
+session_id = slowave.session_start(agent="my-agent", project="my-project")
+
+# Log every user message and every assistant response
+slowave.event(session_id, "user_message", "What databases should I use?")
+slowave.event(session_id, "assistant_message", "For this workload, SQLite or PostgreSQL...")
+slowave.event(session_id, "user_message", "What about Redis for cache?")
+slowave.event(session_id, "assistant_message", "Redis is great for...")
+
+# Optional: explicit memory
+slowave.remember("User prefers SQLite for prototypes", type="decision", project="my-project")
+
+# End session
+# consolidate=False (default): episodes ready immediately, consolidation in background
+slowave.session_end(session_id, consolidate=False)
+```
+
+**Advantages**:
+- Explicit control over logging
+- Guaranteed complete coverage (one call per turn)
+- Works across process restarts (if session_id is persisted)
+
+**Disadvantages**:
+- Requires agent discipline (easy to forget a call)
+- More verbose code
+
+#### 2. Implicit Protocol (Option A, Convenience)
+
+```python
+import slowave
+
+# Start implicit session (auto-logging enabled)
+result = slowave.session_start_implicit(agent="my-agent", project="my-project")
+session_id = result["session_id"]
+
+# Agent works normally; outputs are auto-captured
+# (No need to call slowave_event for each turn)
+
+# Optionally: explicit memory still works
+slowave.remember("User prefers SQLite for prototypes", type="decision", project="my-project")
+
+# End implicit session
+slowave.session_end_implicit()
+```
+
+**Advantages**:
+- No logging discipline required
+- Guaranteed complete coverage (auto-wrapping is involuntary, like RTK)
+- Simpler code
+
+**Disadvantages**:
+- Per-process state (`_IMPLICIT_SESSIONS` dict); lost on restart
+- Multi-client scenarios need careful session management
+- Less control over what gets logged
+
+### Consolidation Timing
+
+**Option A: Non-blocking (default, recommended)**:
+```python
+session_end(consolidate=False)  # returns immediately
+# Episodes are ready for recall right away
+# Consolidation happens in background worker
+# Schemas available seconds to minutes later
+```
+
+**Option B: Blocking**:
+```python
+session_end(consolidate=True)  # blocks until replay + consolidation complete
+# Episodes and schemas both available on return
+# Higher latency (~100ms to 1s per session, depending on replay batch size)
+```
+
+### Session Scoping & Isolation
+
+Sessions are scoped by `(agent, project)` pair. To isolate memory between contexts:
+
+```python
+# Agent "alice" working on "project-x"
+sid_alice = slowave.session_start(agent="alice", project="project-x")
+slowave.event(sid_alice, "user_message", "How do I optimize queries?")
+slowave.session_end(sid_alice)
+
+# Agent "bob" working on "project-y"
+sid_bob = slowave.session_start(agent="bob", project="project-y")
+slowave.event(sid_bob, "user_message", "Set up my dev environment")
+slowave.session_end(sid_bob)
+
+# Recall is scoped: alice only sees project-x memories
+slowave.recall("optimization", project="project-x")  # ← only alice's memories
+```
+
+### Multi-Turn Conversations
+
+For long-running agents with many turns, batch sessions by semantic checkpoint:
+
+```python
+# Session 1: user interaction phase
+sid1 = session_start(agent="chat-agent", project="doc-analysis")
+for turn in conversation_phase_1:
+    event(sid1, "user_message", turn.user_input)
+    event(sid1, "assistant_message", turn.assistant_response)
+session_end(sid1, consolidate=False)
+
+# Session 2: schema refinement phase (independent task)
+sid2 = session_start(agent="chat-agent", project="doc-analysis")
+for turn in conversation_phase_2:
+    event(sid2, "user_message", turn.user_input)
+    event(sid2, "assistant_message", turn.assistant_response)
+session_end(sid2, consolidate=False)
+
+# Each session's memories are independent but both searchable under "doc-analysis"
+recall("patterns in documents", project="doc-analysis")  # finds both sessions
+```
+
+### Long-Lived vs Session-Based Agents
+
+**Session-based** (recommended):
+- Agent processes one task, logs it, ends session
+- Memories form immediately, available for next task
+- Clear boundaries for consolidation
+
+**Long-lived** (e.g., daemon):
+- Agent never ends session; keeps appending events indefinitely
+- Consolidation can be triggered explicitly: `slowave_consolidate()`
+- Useful for stateful agents (chatbots, persistent assistants)
+- Caveat: large sessions (1M+ events) may hit memory limits
+
+For long-lived agents, periodically trigger consolidation:
+```python
+for turn in infinite_event_stream:
+    event(session_id, "user_message", turn.input)
+    event(session_id, "assistant_message", turn.output)
+    
+    if turn_count % 100 == 0:
+        consolidate()  # trigger one replay cycle
+```
