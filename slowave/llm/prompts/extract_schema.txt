@@ -1,0 +1,103 @@
+You are consolidating episodic memories into flexible semantic schemas for an AI agent's long-term memory.
+
+The episodes below come from one user's conversations. Extract zero or more ATOMIC, source-grounded schemas. A schema is not limited to a fixed type. It is a natural-language claim plus flexible facets and search tags.
+
+Prioritize schemas about:
+- the user's personal facts, preferences, habits, plans, decisions, constraints, tasks, projects, artifacts, relationships, and lessons;
+- contextual personalization: how future answers should be tailored for this user in a specific domain;
+- current/updated values when a fact changed;
+- durable task/project state that the assistant should remember later.
+
+Do NOT extract:
+- generic assistant advice, tips, explanations, recipes, travel recommendations, or world knowledge;
+- suggestions unless the user explicitly accepts them as a plan/decision;
+- assistant-action claims like "The assistant should..." when a user-state/personalization schema can be written instead.
+
+Return STRICT JSON with this exact shape:
+{
+  "claims": [
+    {
+      "claim": "<one short, complete English sentence>",
+      "facets": {
+        "schema_class": "<free but concise class, e.g. fact|preference|interaction_preference|habit|decision|constraint|task|artifact|relationship|lesson>",
+        "scope": "<domain/context where this applies, or empty string>",
+        "polarity": "<positive|negative|neutral|mixed>",
+        "stability": "<one_off|recurring|current|historical|unknown>",
+        "positive": ["<things to prefer/include>"],
+        "negative": ["<things to avoid/exclude>"],
+        "entities": ["<salient entities>"],
+        "attributes": {"<optional structured slots>": "<values>"}
+      },
+      "tags": ["<compact_search_tag>", "<another_tag>"],
+      "confidence": <float in [0, 1]>,
+      "evidence_indices": [<1-based episode numbers that directly support the claim>],
+      "evidence_quote": "<short quote or near-quote from the episodes that grounds the claim, or empty string>"
+    }
+  ]
+}
+
+Rules:
+- Each claim must be atomic: one durable memory per claim.
+- Only use information present in the episodes. Do not infer hidden facts.
+- If old and new values both appear, extract only the latest/current value unless the old value is explicitly needed as history.
+- For recommendation/advice/resource requests, extract personalization schemas when the user's context indicates how future answers should be tailored.
+- Keep personalization schemas scoped. Do not overgeneralize.
+- Avoid benchmark-shaped wording like "The user would prefer responses that...". Write natural memory sentences instead.
+- If nothing durable/user-specific is present, return {"claims": []}.
+- Output JSON only. No markdown, no commentary.
+
+Temporal grounding:
+When an episode contains a date, time reference, duration, or temporal marker, preserve it in the claim and in facets.attributes.
+- Write temporally grounded claims: "On 8 May 2023, Caroline attended an LGBTQ support group." not "Caroline attends LGBTQ support groups."
+- When the exact date is known, include it. When approximate, use the natural phrasing from the episode ("early July 2023", "last Saturday", "two weeks ago").
+- Store the date or time reference in facets.attributes under "date", "period", or "when" as appropriate.
+- Temporal schemas enable date-based reasoning: when did X happen, how long ago, what was the sequence of events.
+- Do not flatten temporal facts into generic habits. "The user ran a charity race on 25 May 2023" is better than "The user runs charity races."
+- If the episode implies an ordering (X happened before Y), capture that in the claim or in facets.attributes.
+
+Do NOT extract schemas from assistant turns alone:
+- If the supporting evidence is exclusively from the assistant (explanations, tips, general advice, world knowledge), skip it.
+- Only extract schemas grounded in user-stated facts, preferences, plans, decisions, or experiences.
+- Generic knowledge stated by the assistant ("SQLite is lightweight", "Python is popular") is not user-specific memory.
+
+Schema quality:
+A schema is not merely a summary. It should preserve the future usefulness of the episode for prediction, personalization, continuity, decision-making, or avoiding repeated unwanted advice.
+
+Useful schemas can be descriptive, preferential, procedural/action-guiding, temporal, relational, constraint-based, or task/project-oriented. Choose flexible facets that fit the memory; do not force a rigid taxonomy.
+
+If an episode cluster contains multiple unrelated durable memories, extract multiple atomic schemas rather than merging them. If several details belong to one coherent memory, keep them together in one scoped schema.
+
+Before finalizing each schema, check:
+- Is it durable beyond this single assistant response?
+- Is it user-specific rather than generic world knowledge?
+- Is its applicable context clear enough for future recall?
+- Would a future assistant know how to use it?
+- Is it grounded in the provided episodes, with a useful evidence quote?
+
+Affordance / personalization schemas are important when present.
+When an episode reveals how future assistant responses should be tailored, prefer a scoped personalization schema over a generic interest. This commonly applies to recommendations, advice, learning, planning, troubleshooting, creative work, tool/product choices, activities, recipes, travel, media, health, home, work, or hobbies.
+
+For these schemas:
+- Write the claim so it can directly guide a future answer in the same context.
+- Include the future context/scope in the sentence, e.g. "For <context>, ...".
+- Preserve positive preferences: what to prioritize, include, reuse, build on, or tailor toward.
+- Preserve negative preferences when implied by the episode: what to avoid, de-emphasize, or not generalize to.
+- Preserve specific entities, tools, prior experiences, constraints, times, materials, platforms, or examples that should shape future responses.
+- Do not collapse an action-guiding preference into a weak generic interest.
+
+Weak claims to avoid when a stronger, grounded schema is supported:
+- "The user is interested in the topic."
+- "The user asked for advice."
+- "The assistant gave suggestions."
+- "The user likes something."
+
+Examples of good claims:
+- "For future running training advice, the user prefers plans adapted to their knee injury history rather than generic high-mileage programmes."
+- "The user recently switched from Java to Python, so future code help should assume Python idioms and avoid Java comparisons."
+- "For work scheduling suggestions, the user's constraint is two school pickups per week at 15:30, so suggestions should preserve those slots."
+- "The user attends yoga three times per week to help manage anxiety."
+- "For code reviews, the user prefers blunt architectural feedback over style-only nitpicks."
+- "The project will use SQLite for the MVP."
+
+Episodes:
+{{EPISODES}}

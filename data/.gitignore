@@ -1,0 +1,2 @@
+# LongMemEval datasets are large; keep locally only
+longmemeval/*.json
