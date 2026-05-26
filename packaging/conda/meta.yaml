@@ -1,0 +1,59 @@
+# conda-forge recipe for Slowave.
+#
+# To submit to conda-forge:
+#   1. Fork https://github.com/conda-forge/staged-recipes
+#   2. Copy this file to recipes/slowave/meta.yaml
+#   3. Open a pull request
+#
+# Update sha256 after each PyPI release:
+#   curl -s https://pypi.org/pypi/slowave/json | \
+#     python3 -c "import json,sys; r=json.load(sys.stdin); \
+#       [print(f['digests']['sha256']) for f in r['releases']['VERSION'] \
+#        if f['packagetype']=='sdist']"
+
+{% set version = "0.1.0" %}
+
+package:
+  name: slowave
+  version: {{ version }}
+
+source:
+  url: https://files.pythonhosted.org/packages/source/s/slowave/slowave-{{ version }}.tar.gz
+  sha256: FILL_AFTER_PYPI_PUBLISH
+
+build:
+  number: 0
+  noarch: python
+  script: {{ PYTHON }} -m pip install . --no-deps --no-build-isolation -q
+  entry_points:
+    - slowave = slowave.cli.main:main
+    - slowave-mcp = slowave.mcp.server:main
+
+requirements:
+  host:
+    - python >=3.10
+    - setuptools >=69
+    - pip
+  run:
+    - python >=3.10
+    - numpy
+    - pytorch >=2.0                # conda-forge name for torch
+    - faiss-cpu
+    - click >=8.1
+    - sentence-transformers
+    - mcp
+
+test:
+  imports:
+    - slowave
+  commands:
+    - slowave --help
+    - slowave-mcp --help
+
+about:
+  home: https://github.com/mrsalty/slowave
+  summary: Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval
+  license: MIT
+  license_file: LICENSE
+  doc_url: https://github.com/mrsalty/slowave
+  dev_url: https://github.com/mrsalty/slowave

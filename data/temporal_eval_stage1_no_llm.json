@@ -1,0 +1,171 @@
+{
+  "meta": {
+    "created_at": "2026-05-25T12:36:12.495971",
+    "model": "qwen2.5-coder:1.5b",
+    "tau_days": 7.0,
+    "ablations": [
+      "no_llm"
+    ]
+  },
+  "results": {
+    "no_llm": [
+      {
+        "scenario_id": "D-1",
+        "description": "Old location (London, day 0) vs new location (Paris, day 30). Query on day 31.",
+        "component": "decay",
+        "expected_keyword": "Paris",
+        "hypothesis": "User: I live in London and have been here for years. User: I live in London and have been here for years. User: I just moved to Paris last week, love it here. User: I just moved to Paris last week, love it here.",
+        "hit": true,
+        "detail": {
+          "sal_london_before_advance": 1.0,
+          "sal_london_after_advance": 0.41,
+          "sal_paris": 0.41
+        }
+      },
+      {
+        "scenario_id": "D-2",
+        "description": "Old drink preference (tea, day 0) vs new (coffee, day 20). Query on day 21.",
+        "component": "decay",
+        "expected_keyword": "coffee",
+        "hypothesis": "User: I always start my day with tea, I really love tea. User: I always start my day with tea, I really love tea. User: I switched to coffee recently, much prefer it now. User: I switched to coffee recently, much prefer it now. User: I just moved to Paris last week, love it here. User: I just moved to Paris last week, love it here. User: I live in London and have been here for years. User: I live ",
+        "hit": true,
+        "detail": {
+          "sal_tea": 0.41,
+          "sal_coffee": 0.41
+        }
+      },
+      {
+        "scenario_id": "D-3",
+        "description": "Three job facts at days 0, 15, 28. Query on day 29 should return newest (BrainCo).",
+        "component": "decay",
+        "expected_keyword": "BrainCo",
+        "hypothesis": "User: I work as a software engineer at Acme Corp. User: I work as a software engineer at Acme Corp. User: I live in London and have been here for years. User: I live in London and have been here for years. User: I always start my day with tea, I really love tea. User: I always start my day with tea, I really love tea. User: I switched to coffee recently, much prefer it now. User: I switched to cof",
+        "hit": false,
+        "detail": {
+          "sal_acme": 0.41,
+          "sal_branico": 0.01
+        }
+      },
+      {
+        "scenario_id": "R-1",
+        "description": "PostgreSQL (recalled 5x) vs Redis (never recalled). PostgreSQL should rank higher.",
+        "component": "reinforcement",
+        "expected_keyword": "PostgreSQL",
+        "hypothesis": "User: I use PostgreSQL for all my backend projects. User: I use PostgreSQL for all my backend projects. User: I use Redis for caching in all my backend projects. User: I use Redis for caching in all my backend projects.",
+        "hit": true,
+        "detail": {
+          "postgres_rank": 0,
+          "redis_rank": 2,
+          "sal_postgres": 0.41,
+          "sal_redis": 0.41
+        }
+      },
+      {
+        "scenario_id": "R-2",
+        "description": "PyTorch (recalled 4x) vs TensorFlow/JAX (not recalled). After 14 days PyTorch should rank first.",
+        "component": "reinforcement",
+        "expected_keyword": "PyTorch",
+        "hypothesis": "User: For machine learning I use PyTorch, it is my primary framework. User: For machine learning I use PyTorch, it is my primary framework. User: I have also experimented with TensorFlow for some projects. User: I have also experimented with TensorFlow for some projects. User: I use PostgreSQL for all my backend projects. User: I use PostgreSQL for all my backend projects.",
+        "hit": true,
+        "detail": {
+          "pytorch_rank": 0,
+          "tf_rank": 2,
+          "sal_pytorch": 0.41,
+          "sal_tf": 0.41
+        }
+      },
+      {
+        "scenario_id": "C-1",
+        "description": "Deployment + Python co-discussed 5x. SQLite + Python 4x. Query 'deployment' should surface Python/SQLite via graph expansion.",
+        "component": "coactivation",
+        "expected_keyword": "Python",
+        "hypothesis": "User: How do I deploy my Python application to production?\nAssistant: You can use Docker to containerize your Python app. User: How do I deploy my Python application to production?\nAssistant: You can use Docker to containerize your Python app. User: How do I deploy my Python application to production?\nAssistant: You can use Docker to containerize your Python app. User: How do I deploy my Python ap",
+        "hit": true,
+        "detail": {
+          "has_python": true,
+          "has_sqlite": false
+        }
+      },
+      {
+        "scenario_id": "C-2",
+        "description": "Sleep+health co-discussed 4x. Sleep+productivity 4x. Query 'productivity focus' should surface sleep via graph.",
+        "component": "coactivation",
+        "expected_keyword": "sleep",
+        "hypothesis": "User: Sleep quality really affects my productivity and focus at work.\nAssistant: Yes, sleep and productivity are tightly linked. User: Sleep quality really affects my productivity and focus at work.\nAssistant: Yes, sleep and productivity are tightly linked. User: I use SQLite with my Python scripts for lightweight storage.\nAssistant: SQLite is great for Python applications that need simple persist",
+        "hit": true,
+        "detail": {}
+      },
+      {
+        "scenario_id": "CH-1",
+        "description": "Chain: knee\u2194plan, plan\u2194marathon. Query 'marathon' should surface the knee constraint via two-hop graph propagation.",
+        "component": "chain",
+        "expected_keyword": "knee",
+        "hypothesis": "User: My running plan is geared toward finishing a marathon this autumn.\nAssistant: A marathon-focused running plan should build mileage gradually. User: My running plan is geared toward finishing a marathon this autumn.\nAssistant: A marathon-focused running plan should build mileage gradually. User: My running plan is geared toward finishing a marathon this autumn.\nAssistant: A marathon-focused r",
+        "hit": false,
+        "detail": {
+          "has_knee": false,
+          "rag_should_miss": true
+        }
+      },
+      {
+        "scenario_id": "CH-2",
+        "description": "Three-hop chain: migraine\u2194caffeine, caffeine\u2194coffee, coffee\u2194Italy. Query 'Italy trip health' should surface migraines.",
+        "component": "chain",
+        "expected_keyword": "migraine",
+        "hypothesis": "User: I'm planning a coffee tour in Italy next month.\nAssistant: Italy has wonderful coffee culture, especially in the north. User: I'm planning a coffee tour in Italy next month.\nAssistant: Italy has wonderful coffee culture, especially in the north. User: My running plan is geared toward finishing a marathon this autumn.\nAssistant: A marathon-focused running plan should build mileage gradually. ",
+        "hit": true,
+        "detail": {
+          "has_migraine": true,
+          "has_caffeine": true,
+          "rag_should_miss": true
+        }
+      },
+      {
+        "scenario_id": "PC-1",
+        "description": "Project name ('Helios') and visual identity ('orange logo') introduced in separate sessions. Cosine on 'orange logo' matches identity episodes only; graph coactivation must bridge to surface Helios.",
+        "component": "completion",
+        "expected_keyword": "Helios",
+        "hypothesis": "User: We finalised the visual identity \u2014 it's an orange logo.\nAssistant: An orange logo is a strong, warm choice. User: We finalised the visual identity \u2014 it's an orange logo.\nAssistant: An orange logo is a strong, warm choice. User: Project Helios kicked off this quarter.\nAssistant: Sounds exciting \u2014 what's the scope of Helios?\nUser: I'm leading the backend for Helios. User: Project Helios kicked",
+        "hit": true,
+        "detail": {
+          "rag_should_miss": true
+        }
+      },
+      {
+        "scenario_id": "PC-2",
+        "description": "Config decision and server entity in separate sessions. Cosine on 'RAM JVM' matches config episodes; graph coactivation must surface 'Stratus'.",
+        "component": "completion",
+        "expected_keyword": "Stratus",
+        "hypothesis": "User: Standard practice: allocate 16GB of RAM for the JVM.\nAssistant: 16GB is a reasonable heap size for that workload. User: Standard practice: allocate 16GB of RAM for the JVM.\nAssistant: 16GB is a reasonable heap size for that workload. User: I provisioned the Stratus server today, it's online.\nAssistant: Glad Stratus is up \u2014 anything blocking? User: I provisioned the Stratus server today, it's",
+        "hit": true,
+        "detail": {
+          "rag_should_miss": true
+        }
+      },
+      {
+        "scenario_id": "PR-1",
+        "description": "Standup and on-call review in SEPARATE sessions, repeated 5x in order. Cosine on 'after standup' matches standup episodes only; transition edges or model must surface the on-call continuation.",
+        "component": "completion",
+        "expected_keyword": "on-call",
+        "hypothesis": "User: Just finished the Monday standup, kicking off the day.\nAssistant: Good \u2014 anything blocking the team? User: Just finished the Monday standup, kicking off the day.\nAssistant: Good \u2014 anything blocking the team? User: We finalised the visual identity \u2014 it's an orange logo.\nAssistant: An orange logo is a strong, warm choice. User: We finalised the visual identity \u2014 it's an orange logo.\nAssistant:",
+        "hit": false,
+        "detail": {
+          "rag_should_miss": true,
+          "needs_transition_model": true
+        }
+      },
+      {
+        "scenario_id": "PR-2",
+        "description": "Predictive completion: after smoke tests, expected next step is posting in the #releases channel.",
+        "component": "completion",
+        "expected_keyword": "#releases",
+        "hypothesis": "User: Deploy succeeded, kicking off the smoke tests.\nAssistant: Watching the smoke test dashboard. User: Deploy succeeded, kicking off the smoke tests.\nAssistant: Watching the smoke test dashboard. User: We finalised the visual identity \u2014 it's an orange logo.\nAssistant: An orange logo is a strong, warm choice. User: We finalised the visual identity \u2014 it's an orange logo.\nAssistant: An orange logo ",
+        "hit": false,
+        "detail": {
+          "rag_should_miss": false,
+          "needs_transition_model": true
+        }
+      }
+    ]
+  }
+}

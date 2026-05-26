@@ -1,0 +1,60 @@
+[build-system]
+requires = ["setuptools>=69", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slowave"
+version = "0.1.0"
+description = "Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+readme = "README.md"
+authors = [{ name = "mrsalty" }]
+keywords = ["memory", "agent", "ai", "mcp", "neuroscience", "rag", "llm"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "License :: OSI Approved :: MIT License",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+  "numpy",
+  "torch",
+  "faiss-cpu",
+  "click>=8.1",
+  "sentence-transformers",
+  "mcp[cli]",
+]
+
+[project.urls]
+Homepage = "https://github.com/mrsalty/slowave"
+Repository = "https://github.com/mrsalty/slowave"
+Issues = "https://github.com/mrsalty/slowave/issues"
+Changelog = "https://github.com/mrsalty/slowave/releases"
+
+[project.optional-dependencies]
+dev = ["pytest", "black", "isort", "build", "twine"]
+
+[project.scripts]
+slowave = "slowave.cli.main:main"
+slowave-mcp = "slowave.mcp.server:main"
+
+[tool.setuptools.packages.find]
+include = ["slowave*"]
+exclude = ["tests*", "migrations*", "scripts*"]
+
+[tool.setuptools.package-data]
+slowave = ["storage/schema.sql", "llm/prompts/*.txt"]
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+line_length = 100
