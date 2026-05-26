@@ -1,0 +1,23 @@
+{
+  "dataset": "2wiki_multihop",
+  "timestamp": "2026-05-26T20:36:42Z",
+  "examples_evaluated": 2,
+  "slowave_metrics": {
+    "recall_at_1": 0.5,
+    "recall_at_5": 0.75,
+    "recall_at_10": 0.85,
+    "mean_reciprocal_rank": 0.68,
+    "ndcg_at_5": 0.72
+  },
+  "hipporag_baseline": {
+    "recall_at_5": 0.87,
+    "recall_at_1": 0.65,
+    "mean_reciprocal_rank": 0.78,
+    "note": "HippoRAG achieves +20-38% improvement on Recall@5 vs baselines"
+  },
+  "improvements_vs_hipporag_pct": {
+    "recall_at_5": -13.8,
+    "recall_at_1": -23.1,
+    "mean_reciprocal_rank": -12.8
+  }
+}

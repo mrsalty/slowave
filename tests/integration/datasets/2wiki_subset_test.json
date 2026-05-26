@@ -1,0 +1,39 @@
+{
+  "version": "1.0",
+  "data": [
+    {
+      "id": "2wikimultihop_0",
+      "question": "What is the capital of France?",
+      "documents": [
+        "France is a country in Western Europe.",
+        "Paris is the capital of France.",
+        "The Eiffel Tower is located in Paris.",
+        "London is the capital of England."
+      ],
+      "answer": "Paris",
+      "supporting_facts": [
+        [
+          1,
+          0
+        ]
+      ]
+    },
+    {
+      "id": "2wikimultihop_1",
+      "question": "Who was the president of the United States in 1980?",
+      "documents": [
+        "Ronald Reagan was an American politician.",
+        "Reagan served as president from 1981 to 1989.",
+        "Jimmy Carter was president before Reagan.",
+        "Carter was president from 1977 to 1981."
+      ],
+      "answer": "Jimmy Carter",
+      "supporting_facts": [
+        [
+          3,
+          0
+        ]
+      ]
+    }
+  ]
+}
