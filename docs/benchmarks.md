@@ -119,8 +119,6 @@ if cost:
 
 ---
 
----
-
 ## 2WikiMultiHopQA (100 examples, QA/RAG task)
 
 Multi-hop question answering benchmark comparing Slowave's document retrieval against published HippoRAG results.
