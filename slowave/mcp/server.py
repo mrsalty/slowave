@@ -198,14 +198,28 @@ def slowave_remember(
 
 @mcp.tool()
 def slowave_event(session_id: str, type: str, content: str) -> dict[str, Any]:
-    """Append an event to a session.
+    """Append an event to a session. Call this for EVERY meaningful exchange.
 
-    Use during a session to log salient turns: user_message, assistant_message,
-    tool_call, tool_result, decision, error, task_complete, task_failed.
+    You MUST call slowave_session_start first to obtain a session_id, then
+    call this tool repeatedly throughout the session — do not wait until the
+    end. Log every user message, every assistant response, every tool call,
+    every decision, and every error. The session_id must match the one
+    returned by slowave_session_start.
+
+    Call pattern (required):
+        1. session_id = slowave_session_start(...)
+        2. slowave_event(session_id, "user_message", "<user turn>")
+        3. slowave_event(session_id, "assistant_message", "<your response>")
+        4. slowave_event(session_id, "decision", "<any decision made>")
+           ... repeat for every turn ...
+        5. slowave_session_end(session_id)
+
+    Common type values: user_message, assistant_message, tool_call,
+    tool_result, decision, error, task_complete, task_failed.
 
     Args:
-        session_id: id returned from slowave_session_start.
-        type: event type tag (free-form, but use the common ones above).
+        session_id: id returned from slowave_session_start. Required.
+        type: event type tag (use the common ones above).
         content: textual content of the event.
     """
     eng = _build_engine(disable_llm=True)
@@ -217,9 +231,15 @@ def slowave_event(session_id: str, type: str, content: str) -> dict[str, Any]:
 def slowave_session_start(
     agent: str = "cline-tui", project: str | None = None
 ) -> dict[str, Any]:
-    """Start a new memory session. Returns a session_id.
+    """Start a new memory session. Returns a session_id. Call this FIRST.
 
-    Subsequent `slowave_event` calls should pass this session_id.
+    Call this at the very beginning of every task, before any slowave_event
+    calls. Store the returned session_id and pass it to every subsequent
+    slowave_event call. End the session with slowave_session_end when done.
+
+    Args:
+        agent: identifier for this agent (e.g. "cline-tui", "claude-code").
+        project: project name to scope memories (e.g. "my-repo").
     """
     eng = _build_engine(disable_llm=True, disable_encoder=True)
     proj = project or DEFAULT_PROJECT

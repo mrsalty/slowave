@@ -97,3 +97,16 @@ OPENROUTER_API_KEY    Cloud LLM backend (legacy)
 - **Unit** (`tests/unit/test_smoke.py`): import check + synthetic latent end-to-end. No external deps.
 - **Integration** (`tests/integration/`): LongMemEval and LoCoMo. Both support ablation flags (`--no-multi-scale`, `--no-transition`, `--schema-mode llm`). See `docs/benchmarks.md` for reproducing all numbers.
 - **Temporal** (`tests/temporal_eval/`): 6 internal scenarios (chain, decay, reinforcement, coactivation, completion, supersession) for validating individual mechanism correctness.
+
+## Slowave memory usage (this repo)
+
+This repo has Slowave MCP configured. When working here:
+
+1. **Project name is `slowave`** — always pass `project="slowave"` to every `slowave_*` call.
+   In general: derive the project name from `basename(cwd)` at task start; never leave it blank.
+2. **Task start**: `slowave_context(project="slowave")` → `slowave_session_start(project="slowave", agent=<your-id>)`
+3. **Every turn**: `slowave_event(session_id, type, content)` — log all user messages and assistant responses.
+4. **Durable facts**: `slowave_remember(content, project="slowave")` for decisions/lessons that should persist.
+5. **Task end**: `slowave_session_end(session_id)`
+
+Omitting `project=` causes cross-project memory bleed and ambiguous recall.

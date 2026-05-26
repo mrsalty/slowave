@@ -56,8 +56,12 @@ Register `slowave-mcp` in your agent's MCP config:
 Add to the agent's system prompt:
 
 ```
-Use slowave_* MCP tools for memory.
-Start of task: slowave_context. Salient turns: slowave_event. Decisions: slowave_remember. Lookups: slowave_recall. End of task: slowave_session_end.
+You have access to Slowave long-term memory via slowave_* MCP tools.
+At task start: call slowave_context (load prior memory), then slowave_session_start (get session_id).
+During the task: call slowave_event(session_id, ...) for EVERY user message and EVERY assistant response — do not skip turns.
+For durable decisions/facts: call slowave_remember (no session_id needed).
+For lookups: call slowave_recall.
+At task end: call slowave_session_end(session_id).
 ```
 
 → [docs/agents.md](docs/agents.md) for session lifecycle, all tools, and event types.
