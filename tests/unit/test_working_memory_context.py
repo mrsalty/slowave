@@ -110,7 +110,11 @@ def test_context_brief_treats_project_as_one_environmental_cue() -> None:
     try:
         slowave = eng.schemas.create(
             content_text="Slowave should use a working-memory gate before prompt injection.",
-            facets={"schema_class": "decision", "memory_layer": "workspace", "stability": "current"},
+            facets={
+                "schema_class": "decision",
+                "memory_layer": "workspace",
+                "stability": "current",
+            },
             tags=["memory", "context"],
             project="slowave",
             embedding=None,
@@ -127,7 +131,9 @@ def test_context_brief_treats_project_as_one_environmental_cue() -> None:
             dedupe=False,
         )
 
-        brief = eng.context_brief(query="continue the memory context work", project="slowave", limit=1)
+        brief = eng.context_brief(
+            query="continue the memory context work", project="slowave", limit=1
+        )
 
         assert [item.schema.id for item in brief.items] == [slowave]
         assert "project=slowave" in brief.items[0].reason

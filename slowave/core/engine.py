@@ -4,6 +4,7 @@ Wires SlowWave's latent CLS substrate (episodic+semantic+graph+transition+replay
 to Slowave's symbolic layer (raw events + episode text + typed schemas + LLM
 extraction). Public API for CLI and MCP integrations.
 """
+
 from __future__ import annotations
 
 import logging
@@ -50,9 +51,10 @@ def _default_memory_layer(schema_type: str) -> str:
 @dataclass(frozen=True)
 class RecallResult:
     """Recall result: schemas + episodes + raw events with provenance."""
+
     schemas: list[Schema]
     episode_texts: list[dict[str, Any]]  # episode_id, content_text, salience
-    raw_events: list[dict[str, Any]]     # id, content, ts, type
+    raw_events: list[dict[str, Any]]  # id, content, ts, type
     expanded_neighbors: dict[int, list[tuple[int, float]]]
 
 
@@ -79,12 +81,18 @@ class SlowaveEngine:
         tcfg = self.cfg.transition or TransitionModelConfig(dim=self.cfg.dim)
         self.transition_model = TransitionModel(tcfg)
         self.replay_engine = ReplayEngine(
-            db=self.db, episodic=self.episodic, semantic=self.semantic,
-            graph=self.graph, salience=self.salience,
-            transition_model=self.transition_model, cfg=self.cfg.replay,
+            db=self.db,
+            episodic=self.episodic,
+            semantic=self.semantic,
+            graph=self.graph,
+            salience=self.salience,
+            transition_model=self.transition_model,
+            cfg=self.cfg.replay,
         )
         self.retrieval = RetrievalPipeline(
-            episodic=self.episodic, semantic=self.semantic, graph=self.graph,
+            episodic=self.episodic,
+            semantic=self.semantic,
+            graph=self.graph,
             cfg=self.cfg.retrieval,
             # Stage 3: pass the trained transition model so retrieval can
             # use predicted next-state embeddings as a second cosine seed.
@@ -121,9 +129,14 @@ class SlowaveEngine:
                 GeometricContradictionJudge,
                 LatentSchemaBuilder,
             )
+
             self.consolidator = Consolidator(
-                db=self.db, semantic=self.semantic, episode_text=self.episode_text,
-                schemas=self.schemas, extractor=None, judge=None,
+                db=self.db,
+                semantic=self.semantic,
+                episode_text=self.episode_text,
+                schemas=self.schemas,
+                extractor=None,
+                judge=None,
                 encoder=self.encoder,
                 latent_builder=LatentSchemaBuilder(),
                 geometric_judge=GeometricContradictionJudge(),
@@ -139,8 +152,13 @@ class SlowaveEngine:
             extractor = SchemaExtractor(llm, min_confidence=self.cfg.schema_min_confidence)
             judge = ContradictionJudge(llm)
             self.consolidator = Consolidator(
-                db=self.db, semantic=self.semantic, episode_text=self.episode_text,
-                schemas=self.schemas, extractor=extractor, judge=judge, encoder=self.encoder,
+                db=self.db,
+                semantic=self.semantic,
+                episode_text=self.episode_text,
+                schemas=self.schemas,
+                extractor=extractor,
+                judge=judge,
+                encoder=self.encoder,
             )
 
         # rebuild FAISS indices from DB
@@ -204,8 +222,11 @@ class SlowaveEngine:
             except Exception as e:
                 log.warning("encoder failed: %s", e)
         return self.raw_log.append(
-            session_id=session_id, type=type, content=content,
-            metadata=metadata, embedding=emb,
+            session_id=session_id,
+            type=type,
+            content=content,
+            metadata=metadata,
+            embedding=emb,
         )
 
     def remember(
@@ -224,7 +245,9 @@ class SlowaveEngine:
         if session_id is None:
             session_id = self.session_start(agent=agent, project=project)
         event_id = self.event_append(
-            session_id=session_id, type=f"remember:{type}", content=content,
+            session_id=session_id,
+            type=f"remember:{type}",
+            content=content,
             metadata={"explicit": True, "declared_type": type},
         )
         # Explicit memory bypasses LLM/replay: the user already provided the
@@ -317,16 +340,18 @@ class SlowaveEngine:
         scored_pairs.sort(key=lambda t: t[0], reverse=True)
 
         episode_dicts = []
-        for _score, m in scored_pairs[: top_k]:
+        for _score, m in scored_pairs[:top_k]:
             ep = ep_by_id.get(m.id)
-            episode_dicts.append({
-                "id": m.id,
-                "content_text": ep.content_text if ep else "",
-                "salience": float(m.salience),
-                "ts": int(m.ts),
-                "schema_prior_boost": round(float(prior_boost.get(int(m.id), 0.0)), 4),
-                "schema_silence_factor": round(float(silence_factor.get(int(m.id), 1.0)), 4),
-            })
+            episode_dicts.append(
+                {
+                    "id": m.id,
+                    "content_text": ep.content_text if ep else "",
+                    "salience": float(m.salience),
+                    "ts": int(m.ts),
+                    "schema_prior_boost": round(float(prior_boost.get(int(m.id), 0.0)), 4),
+                    "schema_silence_factor": round(float(silence_factor.get(int(m.id), 1.0)), 4),
+                }
+            )
 
         # Optional drill to raw events for evidence.
         raw_events_out: list[dict[str, Any]] = []
@@ -351,9 +376,14 @@ class SlowaveEngine:
                     e = self.raw_log.get(rid)
                 except KeyError:
                     continue
-                raw_events_out.append({
-                    "id": e.id, "ts": e.ts, "type": e.type, "content": e.content,
-                })
+                raw_events_out.append(
+                    {
+                        "id": e.id,
+                        "ts": e.ts,
+                        "type": e.type,
+                        "content": e.content,
+                    }
+                )
 
         return RecallResult(
             schemas=schemas,
@@ -401,13 +431,15 @@ class SlowaveEngine:
         if project:
             add_many(self.schemas.list(limit=max(100, limit * 8), project=project, status="active"))
 
-        cue_text = " ".join([
-            query or "",
-            application or "",
-            project or "",
-            " ".join(topics or []),
-            " ".join(entities or []),
-        ]).strip()
+        cue_text = " ".join(
+            [
+                query or "",
+                application or "",
+                project or "",
+                " ".join(topics or []),
+                " ".join(entities or []),
+            ]
+        ).strip()
         if cue_text:
             for sid in self.schemas.search_fts(cue_text, limit=max(50, limit * 8)):
                 try:
@@ -530,7 +562,6 @@ class SlowaveEngine:
                     silence_factor[eid] = min(silence_factor.get(eid, 1.0), factor)
         return prior_boost, silence_factor
 
-
     def _form_episodes_from_session(self, session_id: str) -> list[int]:
         """Convert a session's raw events into multi-scale episodes.
 
@@ -582,7 +613,9 @@ class SlowaveEngine:
             made.append(ep_id)
 
         # Macro episode: whole session trace.
-        macro_emb = self._mean_embedding([e.embedding for e in embeddable if e.embedding is not None])
+        macro_emb = self._mean_embedding(
+            [e.embedding for e in embeddable if e.embedding is not None]
+        )
         if macro_emb is not None:
             macro_text = "\n".join(self._event_text(e) for e in events if e.content.strip())
             salience, surprise = self._episode_salience(macro_emb)
@@ -637,7 +670,11 @@ class SlowaveEngine:
         if nearest_id is not None:
             try:
                 prev = self.episodic.get(nearest_id)
-                pred = self.transition_model.predict(prev.embedding.reshape(1, -1)).reshape(-1).astype(np.float32)
+                pred = (
+                    self.transition_model.predict(prev.embedding.reshape(1, -1))
+                    .reshape(-1)
+                    .astype(np.float32)
+                )
                 pred_norm = float(np.linalg.norm(pred))
                 if pred_norm > 1e-12:
                     pred = pred / pred_norm
@@ -706,12 +743,9 @@ class _CountingLLM:
             "n_calls": int(self.n_calls),
             "prompt_tokens": int(self.total_prompt_tokens),
             "completion_tokens": int(self.total_completion_tokens),
-            "total_tokens": int(
-                self.total_prompt_tokens + self.total_completion_tokens
-            ),
+            "total_tokens": int(self.total_prompt_tokens + self.total_completion_tokens),
         }
 
     # Pass through any attribute we don't override (e.g. ``last_usage``).
     def __getattr__(self, name):
         return getattr(self._backend, name)
-

@@ -8,6 +8,7 @@ Design goals:
 - The CLI is fast on the hot paths (event_append, recall): no LLM call here.
 - LLM is only invoked on `session end` (consolidation) or `consolidate`.
 """
+
 from __future__ import annotations
 
 import json
@@ -32,7 +33,6 @@ from slowave.core.engine import SlowaveEngine
 from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig
 
-
 DEFAULT_DB = "__DEFAULT_DB__"
 DEFAULT_MODEL = os.environ.get("SLOWAVE_MODEL", "qwen2.5:7b-instruct")
 DEFAULT_OLLAMA_URL = os.environ.get("SLOWAVE_OLLAMA_URL", "http://localhost:11434")
@@ -50,7 +50,9 @@ def _resolve_db_path(db: str) -> str:
     return os.path.expanduser(db)
 
 
-def _build_engine(db: str, *, disable_llm: bool = True, schema_mode: str = "latent") -> SlowaveEngine:
+def _build_engine(
+    db: str, *, disable_llm: bool = True, schema_mode: str = "latent"
+) -> SlowaveEngine:
     db = _resolve_db_path(db)
     _ensure_db_dir(db)
     cfg = SlowaveConfig(
@@ -68,7 +70,11 @@ def _print(obj: Any, as_json: bool) -> None:
     if as_json:
         click.echo(json.dumps(obj, ensure_ascii=False, indent=2, default=str))
     else:
-        click.echo(obj if isinstance(obj, str) else json.dumps(obj, ensure_ascii=False, indent=2, default=str))
+        click.echo(
+            obj
+            if isinstance(obj, str)
+            else json.dumps(obj, ensure_ascii=False, indent=2, default=str)
+        )
 
 
 @click.group()
@@ -107,9 +113,12 @@ def session_start(ctx: click.Context, agent: str, project: str | None) -> None:
 
 @session.command("end")
 @click.argument("session_id")
-@click.option("--consolidate", is_flag=True,
-              help="Also run replay+LLM consolidation synchronously (slow). "
-                   "Default: encode only; run 'slowave consolidate' separately.")
+@click.option(
+    "--consolidate",
+    is_flag=True,
+    help="Also run replay+LLM consolidation synchronously (slow). "
+    "Default: encode only; run 'slowave consolidate' separately.",
+)
 @click.pass_context
 def session_end(ctx: click.Context, session_id: str, consolidate: bool) -> None:
     """End a session and encode events into episodic memories.
@@ -262,11 +271,9 @@ def context_cmd(
                     }
                     for item in brief.items
                 ],
-                "activation_trace": [
-                    asdict(t) for t in brief.activation_trace
-                ]
-                if mode == "debug"
-                else [],
+                "activation_trace": (
+                    [asdict(t) for t in brief.activation_trace] if mode == "debug" else []
+                ),
             },
             True,
         )
@@ -281,8 +288,7 @@ def context_cmd(
                 f"  act={item.activation:.3f} status={s.status} sal={s.salience:.3f}"
                 f" supports={len(s.supporting_episode_ids)}"
                 f" tags={','.join(s.tags)}"
-                f" reason={item.reason}"
-                + ("  needs_review" if s.needs_review else "")
+                f" reason={item.reason}" + ("  needs_review" if s.needs_review else "")
             )
         if mode == "debug":
             click.echo(f"\nSuppressed: {brief.suppressed}")
@@ -311,10 +317,17 @@ def show(ctx: click.Context, ref: str) -> None:
         eid = int(ref[4:])
         try:
             e = eng.raw_log.get(eid)
-            _print({
-                "id": e.id, "session_id": e.session_id, "ts": e.ts,
-                "type": e.type, "content": e.content, "metadata": e.metadata,
-            }, ctx.obj["json"])
+            _print(
+                {
+                    "id": e.id,
+                    "session_id": e.session_id,
+                    "ts": e.ts,
+                    "type": e.type,
+                    "content": e.content,
+                    "metadata": e.metadata,
+                },
+                ctx.obj["json"],
+            )
         except KeyError:
             _print({"error": "not found"}, ctx.obj["json"])
     else:
@@ -340,8 +353,7 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
             click.echo(
                 f"  [sch_{s.id}] {s.content_text}"
                 f"  status={s.status} sal={s.salience:.3f} supports={len(s.supporting_episode_ids)}"
-                f" tags={','.join(s.tags)}"
-                + ("  needs_review" if s.needs_review else "")
+                f" tags={','.join(s.tags)}" + ("  needs_review" if s.needs_review else "")
             )
     eng.close()
 
@@ -377,13 +389,15 @@ def _slowave_processes() -> list[dict[str, Any]]:
             and "slowave.cli.main" not in command
         ):
             continue
-        rows.append({
-            "pid": int(pid),
-            "ppid": int(ppid),
-            "stat": stat,
-            "rss_kb": int(rss),
-            "command": command,
-        })
+        rows.append(
+            {
+                "pid": int(pid),
+                "ppid": int(ppid),
+                "stat": stat,
+                "rss_kb": int(rss),
+                "command": command,
+            }
+        )
     return rows
 
 
@@ -499,10 +513,17 @@ def consolidate_cmd(ctx: click.Context) -> None:
 
 
 @cli.command("worker")
-@click.option("--interval", default=300, show_default=True,
-              help="Seconds between consolidation passes (simulates sleep cycles).")
-@click.option("--once", is_flag=True,
-              help="Run a single consolidation pass then exit (useful for cron/tests).")
+@click.option(
+    "--interval",
+    default=300,
+    show_default=True,
+    help="Seconds between consolidation passes (simulates sleep cycles).",
+)
+@click.option(
+    "--once",
+    is_flag=True,
+    help="Run a single consolidation pass then exit (useful for cron/tests).",
+)
 @click.pass_context
 def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
     """Background consolidation worker — the sleep simulator.

@@ -23,6 +23,7 @@ Run directly:
 Or install and let MCP clients launch it. See `cline_mcp_settings.json` in
 the README for registration.
 """
+
 from __future__ import annotations
 
 import os
@@ -166,9 +167,7 @@ def slowave_context(
 
 
 @mcp.tool()
-def slowave_recall(
-    query: str, top_k: int = 5, evidence: bool = False
-) -> dict[str, Any]:
+def slowave_recall(query: str, top_k: int = 5, evidence: bool = False) -> dict[str, Any]:
     """Recall memories relevant to a query.
 
     Returns matching schemas (typed claims), episodes (textual records), and
@@ -267,9 +266,7 @@ def slowave_event(session_id: str, type: str, content: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def slowave_session_start(
-    agent: str = "cline-tui", project: str | None = None
-) -> dict[str, Any]:
+def slowave_session_start(agent: str = "cline-tui", project: str | None = None) -> dict[str, Any]:
     """Start a new memory session. Returns a session_id. Call this FIRST.
 
     Call this at the very beginning of every task, before any slowave_event

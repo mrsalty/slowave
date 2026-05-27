@@ -5,6 +5,7 @@ environmental cue.  The gate models the brain-like step between broad long-term
 memory activation and the tiny set of memories admitted into active working
 context for an agent/chatbot prompt.
 """
+
 from __future__ import annotations
 
 import re
@@ -12,7 +13,6 @@ from dataclasses import dataclass, field
 from typing import Any, Iterable
 
 from slowave.symbolic.schema_store import Schema
-
 
 _STOPWORDS = {
     "a",
