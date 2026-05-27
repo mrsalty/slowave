@@ -200,6 +200,43 @@ sequenceDiagram
     Engine-->>Agent: RecallResult(schemas, episode_texts, raw_events)
 ```
 
+### Working-Memory Context Gate
+
+`slowave_context` is not broad recall. It models the brain-like bottleneck
+between long-term memory and active working context: many schemas may become
+weakly activated by the current cue, but only a small, relevant, source-grounded
+subset is admitted into the downstream agent/chatbot prompt.
+
+```mermaid
+flowchart TD
+    Cue["Current cue<br/>query + topics + entities + app + optional project"]
+    LTM["Long-term schemas<br/>SchemaStore"]
+    Cand["Candidate activation<br/>salience + FTS + embeddings + environment"]
+    Gate["WorkingMemoryGate<br/>activation + inhibition"]
+    WM["Working-memory state<br/>small budgeted bullets"]
+    Agent["Agent / chatbot prompt"]
+
+    Cue --> Cand
+    LTM --> Cand
+    Cand --> Gate
+    Gate --> WM
+    WM --> Agent
+```
+
+Brain mapping:
+
+| Slowave mechanism | Brain-like analogue |
+|---|---|
+| cue/topic/entity overlap | context-dependent priming |
+| schema salience/stability/source quality | neuromodulated importance + source monitoring |
+| suppression of transcript/assistant summaries | inhibitory control / irrelevant-memory suppression |
+| `project`/`application` | environmental/task-set cues, not hard namespaces |
+| max items/chars | working-memory capacity limit |
+
+Default context therefore prefers compact stable schemas such as preferences,
+constraints, facts, decisions and lessons, while keeping raw episodes and noisy
+assistant-generated summaries available through explicit recall/debug paths.
+
 ### RetrievalPipeline: Multi-Mechanism Ranking
 
 The `RetrievalPipeline` combines four independent ranking signals to maximize both precision and recall:

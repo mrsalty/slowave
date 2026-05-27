@@ -48,7 +48,7 @@ slowave dashboard                              # local web UI at http://127.0.0.
 | `slowave session end <sid>` | Close a session and form episodes, fast/no LLM by default |
 | `slowave remember <text> --type <type> --project <project>` | Store an explicit high-salience memory |
 | `slowave recall <query> --top-k 5 --evidence` | Retrieve relevant schemas, episodes, and optional raw evidence |
-| `slowave context --project <project> --limit 10` | Print a memory brief for agent context |
+| `slowave context --query <task> --topic <topic> --project <project>` | Print a gated working-memory brief for agent/chatbot context |
 | `slowave schema --needs-review --limit 50` | List schemas, optionally the review queue |
 | `slowave show sch_123` | Inspect a schema, episode, or raw event by ref |
 | `slowave stats` | Print episode/prototype/schema/edge counts |
@@ -99,7 +99,7 @@ Add to the agent's system prompt:
 
 ```
 You have access to Slowave long-term memory via slowave_* MCP tools.
-At task start: call slowave_context (load prior memory), then slowave_session_start (get session_id).
+At task start: call slowave_context with the current task/chat query (load a small working-memory brief), then slowave_session_start (get session_id).
 During the task: call slowave_event(session_id, ...) for EVERY user message and EVERY assistant response — do not skip turns.
 For durable decisions/facts: call slowave_remember (no session_id needed).
 For lookups: call slowave_recall.
@@ -107,6 +107,12 @@ At task end: call slowave_session_end(session_id).
 ```
 
 → [docs/agents.md](docs/agents.md) for session lifecycle, all tools, and event types.
+
+`slowave_context` is cue-aware and conservative: it treats `project` as one
+optional environmental cue, but generic chatbots can pass `query`, `topics`, and
+`entities` to retrieve high-level topic memories without coding-session concepts.
+Verbose transcript-like summaries remain available through `slowave_recall` but
+are suppressed from default prompt injection.
 
 ## Documentation
 
