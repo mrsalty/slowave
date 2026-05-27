@@ -345,6 +345,34 @@ def status_cmd(ctx: click.Context) -> None:
         )
 
 
+@cli.command("dashboard")
+@click.option("--host", default="127.0.0.1", show_default=True, help="HTTP bind host.")
+@click.option("--port", default=8765, show_default=True, help="HTTP bind port.")
+@click.option("--refresh-ms", default=2000, show_default=True, help="Overview refresh interval.")
+@click.option("--allow-actions", is_flag=True, help="Reserved for future mutating actions.")
+@click.option("--no-open", is_flag=True, help="Do not open the browser automatically.")
+@click.pass_context
+def dashboard_cmd(
+    ctx: click.Context,
+    host: str,
+    port: int,
+    refresh_ms: int,
+    allow_actions: bool,
+    no_open: bool,
+) -> None:
+    """Run the local read-only Slowave web dashboard."""
+    from slowave.dashboard.app import run_dashboard
+
+    run_dashboard(
+        db_path=ctx.obj["db"],
+        host=host,
+        port=port,
+        refresh_ms=refresh_ms,
+        allow_actions=allow_actions,
+        open_browser=not no_open,
+    )
+
+
 @cli.command("dedup-schemas")
 @click.option("--apply", "apply_changes", is_flag=True, help="Apply cleanup. Default is dry-run.")
 @click.pass_context

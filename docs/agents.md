@@ -66,6 +66,28 @@ slowave worker --interval 300 &   # every 5 min, detached
 slowave worker --once             # single pass (after a long session)
 ```
 
+## Monitor with the local dashboard
+
+Run the dashboard while using an agent to inspect live memory health, MCP
+processes, sessions, schemas, DB integrity, recall results, and the schema graph:
+
+```bash
+slowave --db /Users/you/.slowave/slowave.db dashboard
+# open http://127.0.0.1:8765
+```
+
+If the default port is busy:
+
+```bash
+slowave --db /Users/you/.slowave/slowave.db dashboard --port 8766 --no-open
+```
+
+The **Processes** tab is useful when multiple Cline/IDE sessions spawn separate
+`slowave-mcp` processes. The **Schema Graph** tab visualizes explicit schema
+relations and can be filtered by status, project, and minimum salience.
+
+See [dashboard.md](dashboard.md) for the full dashboard guide.
+
 ## MCP tools
 
 | Tool | Description |

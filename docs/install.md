@@ -37,7 +37,11 @@ scripts/slowave-check.sh   # verify install
 ```bash
 slowave --help
 slowave stats
+slowave dashboard --help
 ```
+
+`slowave dashboard` starts a local read-only web UI at `http://127.0.0.1:8765`
+for DB/process/schema/recall inspection. Stop it with `Ctrl-C`.
 
 ## LLM backend (optional)
 
