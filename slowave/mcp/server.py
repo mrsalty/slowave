@@ -53,23 +53,26 @@ DEFAULT_OLLAMA_URL = os.environ.get("SLOWAVE_OLLAMA_URL", "http://localhost:1143
 DEFAULT_PROJECT = os.environ.get("SLOWAVE_PROJECT")  # may be None
 
 
-_ENGINES: dict[tuple[bool, bool], SlowaveEngine] = {}
+_ENGINES: dict[tuple[bool, bool, str], SlowaveEngine] = {}
 
 
-def _build_engine(disable_llm: bool = False, disable_encoder: bool = False) -> SlowaveEngine:
-    """Return a cached engine for this (disable_llm, disable_encoder) combination.
+def _build_engine(
+    disable_llm: bool = True,
+    disable_encoder: bool = False,
+    schema_mode: str = "latent",
+) -> SlowaveEngine:
+    """Return a cached engine for this configuration.
 
     Engines are expensive to construct (sentence-transformers model load,
     FAISS index rebuild from SQLite). Caching across MCP calls is essential
     for tolerable latency, since FastMCP keeps the server process alive
     across many tool invocations.
 
-    The cache is keyed by the (disable_llm, disable_encoder) flags because
-    we sometimes want a cheap LLM-free engine (e.g. for stats) and
-    sometimes a full one. All engines share the same SQLite DB so writes
-    are visible across them.
+    The cache is keyed by the engine mode because we sometimes want a cheap
+    encoder-free engine (e.g. for stats) and sometimes a full latent engine.
+    All engines share the same SQLite DB so writes are visible across them.
     """
-    key = (disable_llm, disable_encoder)
+    key = (disable_llm, disable_encoder, schema_mode)
     eng = _ENGINES.get(key)
     if eng is not None:
         return eng
@@ -83,6 +86,7 @@ def _build_engine(disable_llm: bool = False, disable_encoder: bool = False) -> S
         llm=LLMBackendConfig(model=DEFAULT_MODEL, base_url=DEFAULT_OLLAMA_URL),
         disable_llm=disable_llm,
         disable_encoder=disable_encoder,
+        schema_mode=schema_mode,
     )
     eng = SlowaveEngine(cfg)
     _ENGINES[key] = eng
@@ -263,12 +267,12 @@ def slowave_session_end(session_id: str) -> dict[str, Any]:
 
 @mcp.tool()
 def slowave_consolidate() -> dict[str, Any]:
-    """Manually trigger a replay + LLM consolidation pass.
+    """Manually trigger a replay + latent consolidation pass.
 
     Useful between long sessions to surface schemas without waiting for
     session end.
     """
-    eng = _build_engine(disable_llm=False)
+    eng = _build_engine(disable_llm=True, schema_mode="latent")
     stats = eng.replay_engine.replay_once()
     if eng.consolidator is not None:
         protos = eng._prototypes_for_episodes([])

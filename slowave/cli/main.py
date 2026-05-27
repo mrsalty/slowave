@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import os
+import subprocess
 import sys
 from dataclasses import asdict
 from typing import Any
@@ -42,7 +43,7 @@ def _ensure_db_dir(path: str) -> None:
         os.makedirs(d, exist_ok=True)
 
 
-def _build_engine(db: str, *, disable_llm: bool = False) -> SlowaveEngine:
+def _build_engine(db: str, *, disable_llm: bool = True, schema_mode: str = "latent") -> SlowaveEngine:
     _ensure_db_dir(db)
     cfg = SlowaveConfig(
         db_path=db,
@@ -50,6 +51,7 @@ def _build_engine(db: str, *, disable_llm: bool = False) -> SlowaveEngine:
         encoder=EncoderConfig(),
         llm=LLMBackendConfig(model=DEFAULT_MODEL, base_url=DEFAULT_OLLAMA_URL),
         disable_llm=disable_llm,
+        schema_mode=schema_mode,
     )
     return SlowaveEngine(cfg)
 
@@ -276,11 +278,104 @@ def stats_cmd(ctx: click.Context) -> None:
     eng.close()
 
 
+def _slowave_processes() -> list[dict[str, Any]]:
+    """Best-effort local process snapshot for operational hygiene."""
+    try:
+        out = subprocess.check_output(
+            ["ps", "-axo", "pid,ppid,stat,rss,command"],
+            text=True,
+            stderr=subprocess.DEVNULL,
+        )
+    except Exception:
+        return []
+    rows: list[dict[str, Any]] = []
+    for line in out.splitlines()[1:]:
+        parts = line.strip().split(None, 4)
+        if len(parts) < 5:
+            continue
+        pid, ppid, stat, rss, command = parts
+        if (
+            "slowave-mcp" not in command
+            and "slowave worker" not in command
+            and "slowave.cli.main" not in command
+        ):
+            continue
+        rows.append({
+            "pid": int(pid),
+            "ppid": int(ppid),
+            "stat": stat,
+            "rss_kb": int(rss),
+            "command": command,
+        })
+    return rows
+
+
+@cli.command("status")
+@click.pass_context
+def status_cmd(ctx: click.Context) -> None:
+    """Print DB, memory-health, and local process status."""
+    db = ctx.obj["db"]
+    eng = _build_engine(db, disable_llm=True)
+    payload = {
+        "db_path": os.path.abspath(os.path.expanduser(db)),
+        "db_exists": os.path.exists(os.path.expanduser(db)),
+        "stats": eng.stats(),
+        "schema_health": eng.schema_health(),
+        "processes": _slowave_processes(),
+    }
+    eng.close()
+    if ctx.obj["json"]:
+        _print(payload, True)
+        return
+    click.echo(f"DB: {payload['db_path']} ({'exists' if payload['db_exists'] else 'missing'})")
+    click.echo(f"Stats: {payload['stats']}")
+    h = payload["schema_health"]
+    click.echo(
+        "Schema health: "
+        f"active={h['active_schemas']} unique_exact={h['active_unique_exact_by_project']} "
+        f"dup_rows={h['active_exact_duplicate_rows']} "
+        f"dup_ratio={h['active_exact_duplicate_ratio']:.1%} "
+        f"status={h['schemas_by_status']}"
+    )
+    click.echo("Processes:")
+    for p in payload["processes"]:
+        click.echo(
+            f"  pid={p['pid']} ppid={p['ppid']} rss={p['rss_kb']}KB "
+            f"stat={p['stat']} {p['command']}"
+        )
+
+
+@cli.command("dedup-schemas")
+@click.option("--apply", "apply_changes", is_flag=True, help="Apply cleanup. Default is dry-run.")
+@click.pass_context
+def dedup_schemas_cmd(ctx: click.Context, apply_changes: bool) -> None:
+    """Merge exact duplicate active schemas within each project namespace."""
+    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    before = eng.schema_health()
+    result = eng.dedup_schemas_exact(dry_run=not apply_changes)
+    after = eng.schema_health()
+    eng.close()
+    payload = {"before": before, "dedup": result, "after": after}
+    if ctx.obj["json"]:
+        _print(payload, True)
+        return
+    click.echo("Schema deduplication " + ("APPLIED" if apply_changes else "DRY RUN"))
+    click.echo(
+        f"Before: active={before['active_schemas']} unique_exact={before['active_unique_exact_by_project']} "
+        f"dup_rows={before['active_exact_duplicate_rows']} dup_ratio={before['active_exact_duplicate_ratio']:.1%}"
+    )
+    click.echo(f"Dedup: {result}")
+    click.echo(
+        f"After : active={after['active_schemas']} unique_exact={after['active_unique_exact_by_project']} "
+        f"dup_rows={after['active_exact_duplicate_rows']} dup_ratio={after['active_exact_duplicate_ratio']:.1%}"
+    )
+
+
 @cli.command("consolidate")
 @click.pass_context
 def consolidate_cmd(ctx: click.Context) -> None:
-    """Manually trigger a replay + consolidation pass."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=ctx.obj["no_llm"])
+    """Manually trigger a replay + latent consolidation pass."""
+    eng = _build_engine(ctx.obj["db"], disable_llm=True, schema_mode="latent")
     stats = eng.replay_engine.replay_once()
     consolidation: dict[str, Any] = {}
     if eng.consolidator is not None:
@@ -307,7 +402,7 @@ def consolidate_cmd(ctx: click.Context) -> None:
 def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
     """Background consolidation worker — the sleep simulator.
 
-    Runs replay + LLM schema extraction on a schedule, decoupled from session
+    Runs replay + latent schema construction on a schedule, decoupled from session
     ingest. Mimics slow-wave sleep: episodes accumulate during waking sessions,
     then are consolidated offline.
 
@@ -322,11 +417,7 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
     import time as _time
     import signal
 
-    if ctx.obj["no_llm"]:
-        click.echo("worker: --no-llm set; consolidation requires LLM. Exiting.", err=True)
-        return
-
-    eng = _build_engine(ctx.obj["db"], disable_llm=False)
+    eng = _build_engine(ctx.obj["db"], disable_llm=True, schema_mode="latent")
     stop = False
 
     def _handle_signal(sig: int, frame: Any) -> None:
