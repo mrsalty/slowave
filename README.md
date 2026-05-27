@@ -118,6 +118,7 @@ At task end: call slowave_session_end(session_id).
 | [docs/dashboard.md](docs/dashboard.md) | Local web dashboard, schema graph, process/DB health monitoring |
 | [docs/install.md](docs/install.md) | All install paths including brew, conda, from source |
 | [docs/benchmarks.md](docs/benchmarks.md) | Reproduce the numbers, ablation flags |
+| [docs/release.md](docs/release.md) | Release Please workflow and versioning rules |
 | [docs/stages/](docs/stages/) | Research history — each mechanism documented and benchmarked |
 
 ## License
