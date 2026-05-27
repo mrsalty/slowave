@@ -12,7 +12,6 @@ Slowave exposes an MCP server (`slowave-mcp`) that any MCP-aware agent can use a
     "slowave": {
       "command": "/full/path/to/.venv/bin/slowave-mcp",
       "env": {
-        "SLOWAVE_DB": "/Users/you/.slowave/slowave.db",
         "KMP_DUPLICATE_LIB_OK": "TRUE",
         "OMP_NUM_THREADS": "1",
         "TOKENIZERS_PARALLELISM": "false"
@@ -72,14 +71,14 @@ Run the dashboard while using an agent to inspect live memory health, MCP
 processes, sessions, schemas, DB integrity, recall results, and the schema graph:
 
 ```bash
-slowave --db /Users/you/.slowave/slowave.db dashboard
+slowave dashboard
 # open http://127.0.0.1:8765
 ```
 
 If the default port is busy:
 
 ```bash
-slowave --db /Users/you/.slowave/slowave.db dashboard --port 8766 --no-open
+slowave dashboard --port 8766 --no-open
 ```
 
 The **Processes** tab is useful when multiple Cline/IDE sessions spawn separate

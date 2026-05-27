@@ -9,7 +9,7 @@ read-only in the current MVP.
 ## Launch
 
 ```bash
-slowave --db ~/.slowave/slowave.db dashboard
+slowave dashboard
 ```
 
 Then open:
@@ -22,14 +22,17 @@ Common options:
 
 ```bash
 # Use a different port.
-slowave --db ~/.slowave/slowave.db dashboard --port 8766
+slowave dashboard --port 8766
 
 # Do not open the browser automatically.
-slowave --db ~/.slowave/slowave.db dashboard --no-open
+slowave dashboard --no-open
 
 # Refresh the overview every 5 seconds instead of 2 seconds.
-slowave --db ~/.slowave/slowave.db dashboard --refresh-ms 5000
+slowave dashboard --refresh-ms 5000
 ```
+
+The default DB is `~/.slowave/slowave.db`. Use `SLOWAVE_DB` or the global
+`--db /path/to/slowave.db` option only when you need to inspect another DB.
 
 The dashboard binds to `127.0.0.1` by default. Binding to a non-localhost address
 prints a warning because Slowave memory content may contain private project or
