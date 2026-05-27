@@ -36,7 +36,50 @@ slowave session end "$SID"
 slowave worker --once                          # consolidate into memory
 slowave recall "database preference"
 slowave remember "Using SQLite for the MVP" --type decision
+slowave dashboard                              # local web UI at http://127.0.0.1:8765
 ```
+
+## Command list
+
+| Command | Purpose |
+|---|---|
+| `slowave session start --agent <name> --project <project>` | Start a memory session |
+| `slowave event --session <sid> --type <type> --content <text>` | Append a raw event to a session |
+| `slowave session end <sid>` | Close a session and form episodes, fast/no LLM by default |
+| `slowave remember <text> --type <type> --project <project>` | Store an explicit high-salience memory |
+| `slowave recall <query> --top-k 5 --evidence` | Retrieve relevant schemas, episodes, and optional raw evidence |
+| `slowave context --project <project> --limit 10` | Print a memory brief for agent context |
+| `slowave schema --needs-review --limit 50` | List schemas, optionally the review queue |
+| `slowave show sch_123` | Inspect a schema, episode, or raw event by ref |
+| `slowave stats` | Print episode/prototype/schema/edge counts |
+| `slowave status` | Print DB health, schema health, and local Slowave process snapshot |
+| `slowave dedup-schemas --apply` | Merge exact duplicate active schemas; dry-run by default |
+| `slowave consolidate` | Run replay + latent schema consolidation once |
+| `slowave worker --interval 300` | Run periodic background consolidation |
+| `slowave dashboard --port 8765` | Run the local read-only web dashboard |
+
+## Local dashboard
+
+Run a local read-only web UI for live inspection:
+
+```bash
+slowave dashboard
+# open http://127.0.0.1:8765
+```
+
+Slowave uses `~/.slowave/slowave.db` by default. Set `SLOWAVE_DB` or pass
+`--db /path/to/slowave.db` only when you intentionally want a different DB.
+
+Useful options:
+
+```bash
+slowave dashboard --port 8766 --no-open
+slowave dashboard --refresh-ms 5000
+```
+
+The dashboard is dependency-free and binds to `127.0.0.1` by default. It shows overview stats, DB health, Slowave/MCP processes, schemas, recall playground, and a schema graph with status filters plus a minimum-salience slider.
+
+→ [docs/dashboard.md](docs/dashboard.md) for screenshots-by-description, API endpoints, and operational notes.
 
 ## Use with a coding agent
 
@@ -46,8 +89,7 @@ Register `slowave-mcp` in your agent's MCP config:
 {
   "mcpServers": {
     "slowave": {
-      "command": "/path/to/.venv/bin/slowave-mcp",
-      "env": { "SLOWAVE_DB": "~/.slowave/slowave.db" }
+      "command": "/path/to/.venv/bin/slowave-mcp"
     }
   }
 }
@@ -73,6 +115,7 @@ At task end: call slowave_session_end(session_id).
 | [docs/design.md](docs/design.md) | Why LLM was removed from the memory loop — the pivot and its data |
 | [docs/architecture.md](docs/architecture.md) | How it works — mechanisms, data flow, storage layout |
 | [docs/agents.md](docs/agents.md) | MCP integration, session lifecycle, environment variables |
+| [docs/dashboard.md](docs/dashboard.md) | Local web dashboard, schema graph, process/DB health monitoring |
 | [docs/install.md](docs/install.md) | All install paths including brew, conda, from source |
 | [docs/benchmarks.md](docs/benchmarks.md) | Reproduce the numbers, ablation flags |
 | [docs/stages/](docs/stages/) | Research history — each mechanism documented and benchmarked |

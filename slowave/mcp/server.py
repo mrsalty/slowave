@@ -39,15 +39,14 @@ from typing import Any
 from mcp.server.fastmcp import FastMCP
 
 from slowave.core.config import SlowaveConfig
+from slowave.core.paths import default_db_path
 from slowave.core.engine import SlowaveEngine
 from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig
 
 log = logging.getLogger(__name__)
 
-DEFAULT_DB = os.environ.get(
-    "SLOWAVE_DB", os.path.expanduser("~/.slowave/slowave.db")
-)
+DEFAULT_DB = default_db_path()
 DEFAULT_MODEL = os.environ.get("SLOWAVE_MODEL", "qwen2.5:7b-instruct")
 DEFAULT_OLLAMA_URL = os.environ.get("SLOWAVE_OLLAMA_URL", "http://localhost:11434")
 DEFAULT_PROJECT = os.environ.get("SLOWAVE_PROJECT")  # may be None
