@@ -363,6 +363,12 @@ class SlowaveEngine:
             "edges": self.graph.edge_count(),
         }
 
+    def schema_health(self) -> dict[str, Any]:
+        return self.schemas.health()
+
+    def dedup_schemas_exact(self, *, dry_run: bool = True) -> dict[str, Any]:
+        return self.schemas.dedup_exact(dry_run=dry_run)
+
     def close(self) -> None:
         self.db.close()
 

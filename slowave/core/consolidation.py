@@ -295,6 +295,10 @@ class Consolidator:
             evidence=evidence_rows,
         )
 
+        dedup_existing_id = self.schemas.last_create_reinforced_existing_id
+        if dedup_existing_id is not None:
+            return "reinforced", dedup_existing_id
+
         if related is None:
             return "created", new_schema_id
 
@@ -388,6 +392,10 @@ class Consolidator:
             supporting_episode_ids=evidence_episode_ids,
             evidence=evidence_rows,
         )
+
+        dedup_existing_id = self.schemas.last_create_reinforced_existing_id
+        if dedup_existing_id is not None:
+            return "reinforced", dedup_existing_id
 
         if related is None:
             return "created", new_schema_id

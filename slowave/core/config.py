@@ -48,7 +48,7 @@ class SlowaveConfig:
     #   "llm"    — original path, LLM extracts text claims per prototype
     #   "latent" — brain-only path, schemas are pure prototype geometry
     #              (zero LLM calls during ingest or consolidation)
-    schema_mode: str = "llm"
+    schema_mode: str = "latent"
 
     @staticmethod
     def default_schema_path() -> str:

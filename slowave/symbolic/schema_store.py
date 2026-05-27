@@ -7,6 +7,7 @@ and relations to other schemas.
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass
 from typing import Any, Iterable
@@ -19,6 +20,19 @@ from slowave.utils.vec import dumps_json, loads_json, pack_f32, unpack_f32
 
 VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archived")
 VALID_RELATIONS = ("reinforces", "refines", "contradicts", "supersedes", "related_to", "part_of")
+DEDUP_ACTIVE_STATUSES = ("active", "needs_review")
+
+
+def normalize_schema_text(text: str) -> str:
+    """Normalize schema claims for deterministic duplicate detection.
+
+    This is deliberately conservative: it collapses whitespace and case, but
+    does not strip semantic words or perform project-specific filtering. More
+    aggressive semantic merging is handled by embeddings/relations elsewhere;
+    this function exists to stop exact duplicate claims from multiplying during
+    repeated consolidation passes.
+    """
+    return re.sub(r"\s+", " ", str(text).strip().lower())
 
 
 @dataclass(frozen=True)
@@ -94,6 +108,7 @@ class SchemaStore:
     def __init__(self, db: SQLiteDB, *, dim: int):
         self.db = db
         self.dim = int(dim)
+        self.last_create_reinforced_existing_id: int | None = None
 
     def create(
         self,
@@ -111,13 +126,36 @@ class SchemaStore:
         contradicting_episode_ids: list[int] | None = None,
         needs_review: bool = False,
         evidence: list[tuple[int | None, int | None, str | None, float]] | None = None,
+        dedupe: bool = True,
     ) -> int:
+        self.last_create_reinforced_existing_id = None
         status = status if status in VALID_STATUS else "active"
         now = int(time.time())
         supporting = [int(x) for x in (supporting_episode_ids or [])]
         contradicting = [int(x) for x in (contradicting_episode_ids or [])]
         proto_ids = list(dict.fromkeys(int(p) for p in (prototype_ids or [])))
         primary_proto = proto_ids[0] if proto_ids else None
+
+        if dedupe and status in DEDUP_ACTIVE_STATUSES:
+            existing_id = self.find_duplicate(
+                content_text=content_text,
+                project=project,
+                statuses=DEDUP_ACTIVE_STATUSES,
+            )
+            if existing_id is not None:
+                self.reinforce_schema(
+                    existing_id,
+                    prototype_ids=proto_ids,
+                    supporting_episode_ids=supporting,
+                    contradicting_episode_ids=contradicting,
+                    evidence=evidence,
+                    salience_delta=max(0.05, min(float(salience) * 0.25, 0.5)),
+                    confidence=confidence,
+                    facets=facets,
+                    tags=tags,
+                )
+                self.last_create_reinforced_existing_id = existing_id
+                return existing_id
 
         emb_blob = None
         emb_dim = None
@@ -162,6 +200,128 @@ class SchemaStore:
             )
         conn.commit()
         return sid
+
+    def find_duplicate(
+        self,
+        *,
+        content_text: str,
+        project: str | None,
+        statuses: Iterable[str] = DEDUP_ACTIVE_STATUSES,
+        exclude_id: int | None = None,
+    ) -> int | None:
+        """Return the strongest existing schema with identical normalized text.
+
+        Duplicate identity is project-aware, not project-specific: schemas are
+        merged within the same project namespace (including ``NULL``), but no
+        project names are special-cased.
+        """
+        wanted = normalize_schema_text(content_text)
+        if not wanted:
+            return None
+        valid_statuses = [s for s in statuses if s in VALID_STATUS]
+        if not valid_statuses:
+            return None
+        ph = ",".join(["?"] * len(valid_statuses))
+        sql = (
+            "SELECT id, content_text FROM schemas "
+            f"WHERE status IN ({ph}) "
+        )
+        args: list[Any] = list(valid_statuses)
+        if project is None:
+            sql += "AND project IS NULL "
+        else:
+            sql += "AND project = ? "
+            args.append(project)
+        if exclude_id is not None:
+            sql += "AND id != ? "
+            args.append(int(exclude_id))
+        sql += "ORDER BY salience DESC, last_updated_ts DESC, id ASC"
+        conn = self.db.connect()
+        for row in conn.execute(sql, tuple(args)).fetchall():
+            if normalize_schema_text(row["content_text"]) == wanted:
+                return int(row["id"])
+        return None
+
+    def reinforce_schema(
+        self,
+        schema_id: int,
+        *,
+        prototype_ids: list[int] | None = None,
+        supporting_episode_ids: list[int] | None = None,
+        contradicting_episode_ids: list[int] | None = None,
+        evidence: list[tuple[int | None, int | None, str | None, float]] | None = None,
+        salience_delta: float = 0.2,
+        confidence: float | None = None,
+        facets: dict[str, Any] | None = None,
+        tags: list[str] | None = None,
+    ) -> None:
+        """Reinforce an existing schema with new provenance.
+
+        This is the consolidation analogue of biological strengthening: repeat
+        evidence should increase salience/support on the same semantic memory,
+        not create another active copy of the same claim.
+        """
+        conn = self.db.connect()
+        row = conn.execute(
+            "SELECT supporting_episode_ids, contradicting_episode_ids, salience, "
+            "confidence, facets_json, tags_json FROM schemas WHERE id = ?",
+            (int(schema_id),),
+        ).fetchone()
+        if row is None:
+            raise KeyError(f"No schema id={schema_id}")
+
+        def merge_ids(current_json: str, extra: list[int] | None) -> list[int]:
+            payload = loads_json(current_json)
+            current = payload.get("ids", []) if isinstance(payload, dict) else []
+            merged = list(dict.fromkeys([int(x) for x in current] + [int(x) for x in (extra or [])]))
+            return merged
+
+        supporting = merge_ids(row["supporting_episode_ids"], supporting_episode_ids)
+        contradicting = merge_ids(row["contradicting_episode_ids"], contradicting_episode_ids)
+        merged_confidence = max(float(row["confidence"]), float(confidence or 0.0))
+
+        # Keep existing facets/tags stable, only filling missing keys/tags from
+        # the incoming observation. This avoids oscillating canonical memories.
+        merged_facets = loads_json(row["facets_json"])
+        if isinstance(facets, dict):
+            for key, value in facets.items():
+                if key not in merged_facets or merged_facets[key] in (None, "", [], {}):
+                    merged_facets[key] = value
+        existing_tags = [str(t) for t in loads_json(row["tags_json"]).get("tags", [])]
+        merged_tags = list(dict.fromkeys(existing_tags + [str(t) for t in (tags or [])]))
+
+        conn.execute(
+            """
+            UPDATE schemas
+            SET salience = salience + ?,
+                confidence = ?,
+                supporting_episode_ids = ?,
+                contradicting_episode_ids = ?,
+                facets_json = ?,
+                tags_json = ?,
+                last_updated_ts = ?
+            WHERE id = ?
+            """,
+            (
+                float(salience_delta), merged_confidence,
+                dumps_json({"ids": supporting}), dumps_json({"ids": contradicting}),
+                dumps_json(merged_facets), dumps_json({"tags": merged_tags}),
+                int(time.time()), int(schema_id),
+            ),
+        )
+        for pid in list(dict.fromkeys(int(p) for p in (prototype_ids or []))):
+            conn.execute(
+                "INSERT INTO schema_prototype_map (schema_id, prototype_id, weight) VALUES (?, ?, ?) "
+                "ON CONFLICT(schema_id, prototype_id) DO UPDATE SET weight=max(weight, excluded.weight)",
+                (int(schema_id), pid, 1.0),
+            )
+        for episode_id, raw_event_id, quote, weight in evidence or []:
+            conn.execute(
+                "INSERT OR REPLACE INTO schema_evidence "
+                "(schema_id, episode_id, raw_event_id, quote, weight) VALUES (?, ?, ?, ?, ?)",
+                (int(schema_id), episode_id, raw_event_id, quote, float(weight)),
+            )
+        conn.commit()
 
     def update_status(
         self,
@@ -278,13 +438,22 @@ class SchemaStore:
         rows = conn.execute(sql, tuple(args)).fetchall()
         return [self._row_to_schema(r) for r in rows]
 
-    def search_fts(self, query: str, limit: int = 20) -> list[int]:
+    def search_fts(self, query: str, limit: int = 20, *, include_inactive: bool = False) -> list[int]:
         conn = self.db.connect()
         try:
-            rows = conn.execute(
-                "SELECT rowid FROM schemas_fts WHERE schemas_fts MATCH ? ORDER BY rank LIMIT ?",
-                (query, int(limit)),
-            ).fetchall()
+            if include_inactive:
+                rows = conn.execute(
+                    "SELECT rowid FROM schemas_fts WHERE schemas_fts MATCH ? ORDER BY rank LIMIT ?",
+                    (query, int(limit)),
+                ).fetchall()
+            else:
+                rows = conn.execute(
+                    "SELECT rowid FROM schemas_fts "
+                    "WHERE schemas_fts MATCH ? "
+                    "AND rowid IN (SELECT id FROM schemas WHERE status IN ('active', 'needs_review')) "
+                    "ORDER BY rank LIMIT ?",
+                    (query, int(limit)),
+                ).fetchall()
         except Exception:
             return []
         return [int(r["rowid"]) for r in rows]
@@ -406,6 +575,136 @@ class SchemaStore:
             )
             for r in rows
         ]
+
+    def dedup_exact(
+        self,
+        *,
+        status: str = "active",
+        dry_run: bool = True,
+    ) -> dict[str, Any]:
+        """Merge exact normalized duplicate schemas within each project.
+
+        Generic cleanup: groups by ``(project, normalize_schema_text(content))``.
+        The canonical row is the highest-salience, then oldest schema. Duplicate
+        rows are marked ``archived`` and related to the canonical schema; their
+        evidence/prototype links are moved onto the canonical row.
+        """
+        conn = self.db.connect()
+        rows = conn.execute(
+            "SELECT * FROM schemas WHERE status = ? ORDER BY project, content_text, salience DESC, id ASC",
+            (status,),
+        ).fetchall()
+        groups: dict[tuple[str | None, str], list[Any]] = {}
+        for row in rows:
+            norm = normalize_schema_text(row["content_text"])
+            if not norm:
+                continue
+            project = None if row["project"] is None else str(row["project"])
+            groups.setdefault((project, norm), []).append(row)
+
+        duplicate_groups = [items for items in groups.values() if len(items) > 1]
+        duplicate_rows = sum(len(items) - 1 for items in duplicate_groups)
+        result: dict[str, Any] = {
+            "status": status,
+            "groups": len(duplicate_groups),
+            "duplicate_rows": duplicate_rows,
+            "canonical_rows": len(duplicate_groups),
+            "dry_run": dry_run,
+            "merged_rows": 0,
+        }
+        if dry_run or not duplicate_groups:
+            return result
+
+        now = int(time.time())
+        for items in duplicate_groups:
+            canonical = sorted(
+                items,
+                key=lambda r: (-float(r["salience"]), int(r["first_formed_ts"]), int(r["id"])),
+            )[0]
+            canonical_id = int(canonical["id"])
+            dupes = [r for r in items if int(r["id"]) != canonical_id]
+            for dupe in dupes:
+                dupe_id = int(dupe["id"])
+                supporting = loads_json(dupe["supporting_episode_ids"]).get("ids", [])
+                contradicting = loads_json(dupe["contradicting_episode_ids"]).get("ids", [])
+                proto_rows = conn.execute(
+                    "SELECT prototype_id FROM schema_prototype_map WHERE schema_id = ?",
+                    (dupe_id,),
+                ).fetchall()
+                evidence_rows = conn.execute(
+                    "SELECT episode_id, raw_event_id, quote, weight FROM schema_evidence WHERE schema_id = ?",
+                    (dupe_id,),
+                ).fetchall()
+                self.reinforce_schema(
+                    canonical_id,
+                    prototype_ids=[int(r["prototype_id"]) for r in proto_rows],
+                    supporting_episode_ids=[int(x) for x in supporting],
+                    contradicting_episode_ids=[int(x) for x in contradicting],
+                    evidence=[
+                        (r["episode_id"], r["raw_event_id"], r["quote"], float(r["weight"]))
+                        for r in evidence_rows
+                    ],
+                    salience_delta=max(0.01, min(float(dupe["salience"]) * 0.1, 0.2)),
+                    confidence=float(dupe["confidence"]),
+                    facets=loads_json(dupe["facets_json"]),
+                    tags=[str(t) for t in loads_json(dupe["tags_json"]).get("tags", [])],
+                )
+                conn.execute(
+                    "UPDATE schemas SET status = 'archived', salience = 0.05, last_updated_ts = ? WHERE id = ?",
+                    (now, dupe_id),
+                )
+                conn.execute(
+                    "INSERT INTO schema_relations "
+                    "(src_schema_id, dst_schema_id, relation, confidence, reason, created_ts) "
+                    "VALUES (?, ?, 'reinforces', ?, ?, ?) "
+                    "ON CONFLICT(src_schema_id, dst_schema_id, relation) DO UPDATE SET "
+                    "confidence=excluded.confidence, reason=excluded.reason, created_ts=excluded.created_ts",
+                    (
+                        canonical_id, dupe_id, 1.0,
+                        "exact normalized duplicate archived after merging into canonical schema",
+                        now,
+                    ),
+                )
+                result["merged_rows"] += 1
+        conn.commit()
+        return result
+
+    def health(self) -> dict[str, Any]:
+        """Return lightweight schema quality metrics."""
+        conn = self.db.connect()
+        total = int(conn.execute("SELECT COUNT(*) AS n FROM schemas").fetchone()["n"])
+        by_status = {
+            str(r["status"]): int(r["n"])
+            for r in conn.execute(
+                "SELECT status, COUNT(*) AS n FROM schemas GROUP BY status ORDER BY n DESC"
+            ).fetchall()
+        }
+        rows = conn.execute(
+            "SELECT project, content_text FROM schemas WHERE status = 'active'"
+        ).fetchall()
+        active = len(rows)
+        unique_keys = {
+            (None if r["project"] is None else str(r["project"]), normalize_schema_text(r["content_text"]))
+            for r in rows
+        }
+        exact_duplicate_rows = active - len(unique_keys)
+        sal = conn.execute(
+            "SELECT MIN(salience) AS min_sal, AVG(salience) AS avg_sal, MAX(salience) AS max_sal "
+            "FROM schemas WHERE status = 'active'"
+        ).fetchone()
+        return {
+            "schemas_total": total,
+            "schemas_by_status": by_status,
+            "active_schemas": active,
+            "active_unique_exact_by_project": len(unique_keys),
+            "active_exact_duplicate_rows": exact_duplicate_rows,
+            "active_exact_duplicate_ratio": (exact_duplicate_rows / active) if active else 0.0,
+            "active_salience": {
+                "min": None if sal["min_sal"] is None else float(sal["min_sal"]),
+                "avg": None if sal["avg_sal"] is None else float(sal["avg_sal"]),
+                "max": None if sal["max_sal"] is None else float(sal["max_sal"]),
+            },
+        }
 
     def count(self) -> int:
         conn = self.db.connect()
