@@ -4,7 +4,7 @@ Exposes Slowave as an MCP server so any MCP-aware agent (Cline CLI,
 Claude Code, Cursor, ...) can use it as a tool.
 
 Tools exposed:
-  - slowave_context     : memory brief for a project
+  - slowave_context     : gated working-memory brief for prompt injection
   - slowave_recall      : semantic recall over schemas + episodes
   - slowave_remember    : explicit typed memory
   - slowave_event       : append a session event
@@ -23,6 +23,7 @@ Run directly:
 Or install and let MCP clients launch it. See `cline_mcp_settings.json` in
 the README for registration.
 """
+
 from __future__ import annotations
 
 import os
@@ -96,43 +97,77 @@ mcp = FastMCP("slowave")
 
 
 @mcp.tool()
-def slowave_context(project: str | None = None, limit: int = 10) -> dict[str, Any]:
-    """Return a memory brief: top schemas (typed claims) to load at task start.
+def slowave_context(
+    project: str | None = None,
+    limit: int = 8,
+    query: str | None = None,
+    application: str | None = None,
+    topics: list[str] | None = None,
+    entities: list[str] | None = None,
+    mode: str = "default",
+) -> dict[str, Any]:
+    """Return a gated working-memory brief to load at task/chat start.
 
-    Call this once at the beginning of a task to prime the agent with prior
-    durable memory for the current project.
+    Call this once at the beginning of a task to prime the agent with a small,
+    cue-relevant subset of durable memory. ``project`` is optional and only one
+    environmental cue; generic chatbots should pass ``query``/``topics``.
 
     Args:
-        project: project name (defaults to SLOWAVE_PROJECT env var).
+        project: optional coding/workspace cue (defaults to SLOWAVE_PROJECT env var).
         limit: maximum number of schemas to return.
+        query: current user/task text used as the primary memory cue.
+        application: calling app/channel, e.g. cline-tui, chatbot, mobile.
+        topics: optional high-level topic cues.
+        entities: optional salient entity cues.
+        mode: default, broad, or debug. Debug includes activation traces.
     """
-    eng = _build_engine(disable_llm=True, disable_encoder=True)
+    eng = _build_engine(
+        disable_llm=True,
+        disable_encoder=not bool(query or topics or entities),
+    )
     proj = project or DEFAULT_PROJECT
-    schemas = eng.context(project=proj, limit=limit)
+    brief = eng.context_brief(
+        query=query,
+        project=proj,
+        application=application,
+        topics=topics or [],
+        entities=entities or [],
+        limit=limit,
+        mode=mode,
+    )
     return {
         "project": proj,
-        "count": len(schemas),
+        "query": query,
+        "application": application,
+        "topics": topics or [],
+        "entities": entities or [],
+        "mode": mode,
+        "count": len(brief.items),
+        "rendered": brief.rendered,
+        "cue_terms": brief.cue_terms,
+        "suppressed": brief.suppressed,
         "schemas": [
             {
-                "id": f"sch_{s.id}",
-                "content": s.content_text,
-                "facets": s.facets,
-                "tags": s.tags,
-                "status": s.status,
-                "salience": s.salience,
-                "supports": len(s.supporting_episode_ids),
-                "contradicts": len(s.contradicting_episode_ids),
-                "needs_review": s.needs_review,
+                "id": f"sch_{item.schema.id}",
+                "content": item.text,
+                "activation": item.activation,
+                "reason": item.reason,
+                "facets": item.schema.facets,
+                "tags": item.schema.tags,
+                "status": item.schema.status,
+                "salience": item.schema.salience,
+                "supports": len(item.schema.supporting_episode_ids),
+                "contradicts": len(item.schema.contradicting_episode_ids),
+                "needs_review": item.schema.needs_review,
             }
-            for s in schemas
+            for item in brief.items
         ],
+        "activation_trace": [asdict(t) for t in brief.activation_trace] if mode == "debug" else [],
     }
 
 
 @mcp.tool()
-def slowave_recall(
-    query: str, top_k: int = 5, evidence: bool = False
-) -> dict[str, Any]:
+def slowave_recall(query: str, top_k: int = 5, evidence: bool = False) -> dict[str, Any]:
     """Recall memories relevant to a query.
 
     Returns matching schemas (typed claims), episodes (textual records), and
@@ -231,9 +266,7 @@ def slowave_event(session_id: str, type: str, content: str) -> dict[str, Any]:
 
 
 @mcp.tool()
-def slowave_session_start(
-    agent: str = "cline-tui", project: str | None = None
-) -> dict[str, Any]:
+def slowave_session_start(agent: str = "cline-tui", project: str | None = None) -> dict[str, Any]:
     """Start a new memory session. Returns a session_id. Call this FIRST.
 
     Call this at the very beginning of every task, before any slowave_event
