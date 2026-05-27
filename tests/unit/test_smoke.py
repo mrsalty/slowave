@@ -114,8 +114,8 @@ def test_engine_symbolic_no_llm() -> None:
         result = eng.session_end(sid, consolidate=True)
         # Multi-scale strategy: 9 two-turn micro episodes + 1 macro episode.
         assert result["episodes_formed"] == 10
-        # Without an LLM, schemas should stay at 0.
-        assert eng.schemas.count() == 0
+        # Default schema mode is latent: schemas are formed without an LLM.
+        assert eng.schemas.count() > 0
         assert eng.episodic.count() == 10
         eng.close()
     finally:
