@@ -48,7 +48,7 @@ slowave dashboard                              # local web UI at http://127.0.0.
 | `slowave session end <sid>` | Close a session and form episodes, fast/no LLM by default |
 | `slowave remember <text> --type <type> --project <project>` | Store an explicit high-salience memory |
 | `slowave recall <query> --top-k 5 --evidence` | Retrieve relevant schemas, episodes, and optional raw evidence |
-| `slowave context --query <task> --topic <topic> --project <project>` | Print a gated working-memory brief for agent/chatbot context |
+| `slowave context --query <task> --topic <topic>` | Print a gated working-memory brief for agent/chatbot context; `--project` is optional for coding/workspace cues |
 | `slowave schema --needs-review --limit 50` | List schemas, optionally the review queue |
 | `slowave show sch_123` | Inspect a schema, episode, or raw event by ref |
 | `slowave stats` | Print episode/prototype/schema/edge counts |

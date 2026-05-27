@@ -113,7 +113,7 @@ def slowave_context(
     environmental cue; generic chatbots should pass ``query``/``topics``.
 
     Args:
-        project: project name (defaults to SLOWAVE_PROJECT env var).
+        project: optional coding/workspace cue (defaults to SLOWAVE_PROJECT env var).
         limit: maximum number of schemas to return.
         query: current user/task text used as the primary memory cue.
         application: calling app/channel, e.g. cline-tui, chatbot, mobile.
