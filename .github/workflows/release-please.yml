@@ -39,7 +39,8 @@ jobs:
         if: ${{ steps.release.outputs.release_created }}
         run: |
           TAG="${{ steps.release.outputs.tag_name }}"
-          TAG_VERSION="${TAG#v}"
+          TAG_VERSION="${TAG#slowave-}"
+          TAG_VERSION="${TAG_VERSION#v}"
           TOML_VERSION=$(python -c "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); print(d['project']['version'])")
           if [ "$TAG_VERSION" != "$TOML_VERSION" ]; then
             echo "Release tag $TAG does not match pyproject.toml version $TOML_VERSION"

@@ -23,7 +23,8 @@ jobs:
       - name: Check tag matches pyproject.toml version
         id: version
         run: |
-          TAG="${GITHUB_REF_NAME#v}"
+          TAG="${GITHUB_REF_NAME#slowave-}"
+          TAG="${TAG#v}"
           TOML=$(python -c "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); print(d['project']['version'])")
           echo "version=$TOML" >> "$GITHUB_OUTPUT"
           if [ "$TAG" != "$TOML" ]; then
