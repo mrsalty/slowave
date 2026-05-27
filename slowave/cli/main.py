@@ -27,12 +27,13 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 import click
 
 from slowave.core.config import SlowaveConfig
+from slowave.core.paths import default_db_path
 from slowave.core.engine import SlowaveEngine
 from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig
 
 
-DEFAULT_DB = os.environ.get("SLOWAVE_DB", os.path.expanduser("~/.slowave/slowave.db"))
+DEFAULT_DB = "__DEFAULT_DB__"
 DEFAULT_MODEL = os.environ.get("SLOWAVE_MODEL", "qwen2.5:7b-instruct")
 DEFAULT_OLLAMA_URL = os.environ.get("SLOWAVE_OLLAMA_URL", "http://localhost:11434")
 
@@ -43,7 +44,14 @@ def _ensure_db_dir(path: str) -> None:
         os.makedirs(d, exist_ok=True)
 
 
+def _resolve_db_path(db: str) -> str:
+    if db == DEFAULT_DB:
+        return default_db_path()
+    return os.path.expanduser(db)
+
+
 def _build_engine(db: str, *, disable_llm: bool = True, schema_mode: str = "latent") -> SlowaveEngine:
+    db = _resolve_db_path(db)
     _ensure_db_dir(db)
     cfg = SlowaveConfig(
         db_path=db,
@@ -64,14 +72,19 @@ def _print(obj: Any, as_json: bool) -> None:
 
 
 @click.group()
-@click.option("--db", default=DEFAULT_DB, show_default=True, help="SQLite db path.")
+@click.option(
+    "--db",
+    default=DEFAULT_DB,
+    show_default="SLOWAVE_DB or ~/.slowave/slowave.db",
+    help="SQLite db path override.",
+)
 @click.option("--no-llm", is_flag=True, help="Disable LLM (no schema extraction).")
 @click.option("--json", "as_json", is_flag=True, help="JSON output.")
 @click.pass_context
 def cli(ctx: click.Context, db: str, no_llm: bool, as_json: bool) -> None:
     """Slowave: brain-inspired memory for AI agents."""
     ctx.ensure_object(dict)
-    ctx.obj["db"] = db
+    ctx.obj["db"] = _resolve_db_path(db)
     ctx.obj["no_llm"] = no_llm
     ctx.obj["json"] = as_json
 

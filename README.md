@@ -63,9 +63,12 @@ slowave dashboard                              # local web UI at http://127.0.0.
 Run a local read-only web UI for live inspection:
 
 ```bash
-slowave --db ~/.slowave/slowave.db dashboard
+slowave dashboard
 # open http://127.0.0.1:8765
 ```
+
+Slowave uses `~/.slowave/slowave.db` by default. Set `SLOWAVE_DB` or pass
+`--db /path/to/slowave.db` only when you intentionally want a different DB.
 
 Useful options:
 
@@ -86,8 +89,7 @@ Register `slowave-mcp` in your agent's MCP config:
 {
   "mcpServers": {
     "slowave": {
-      "command": "/path/to/.venv/bin/slowave-mcp",
-      "env": { "SLOWAVE_DB": "~/.slowave/slowave.db" }
+      "command": "/path/to/.venv/bin/slowave-mcp"
     }
   }
 }

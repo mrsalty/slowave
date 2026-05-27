@@ -1,13 +1,15 @@
 from __future__ import annotations
 
 import sqlite3
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
+
+from slowave.core.paths import default_db_path
 
 
 @dataclass(frozen=True)
 class SQLiteConfig:
-    path: str = "slowwave.db"
+    path: str = field(default_factory=default_db_path)
 
 
 class SQLiteDB:

@@ -14,12 +14,13 @@ from slowave.latent.salience import SalienceConfig
 from slowave.latent.transition_model import TransitionModelConfig
 from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig
+from slowave.core.paths import default_db_path
 
 
 @dataclass(frozen=True)
 class SlowaveConfig:
     # storage
-    db_path: str = "slowave.db"
+    db_path: str = field(default_factory=default_db_path)
     schema_path: str = ""  # filled in by engine if empty
 
     # latent layer (text embeddings will set dim automatically)
