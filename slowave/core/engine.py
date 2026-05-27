@@ -16,6 +16,7 @@ import numpy as np
 
 from slowave.core.config import SlowaveConfig
 from slowave.core.consolidation import ConsolidationStats, Consolidator
+from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate, WorkingMemoryState
 from slowave.latent.episodic_store import EpisodicStore, EpisodicStoreConfig
 from slowave.latent.graph_manager import GraphManager
 from slowave.latent.replay_engine import ReplayEngine
@@ -34,6 +35,16 @@ from slowave.symbolic.schema_extractor import SchemaExtractor
 from slowave.symbolic.schema_store import Schema, SchemaStore
 
 log = logging.getLogger(__name__)
+
+
+def _default_memory_layer(schema_type: str) -> str:
+    """Best-effort generic layer for explicit user memories."""
+    t = str(schema_type or "").strip().lower()
+    if t in {"preference", "interaction_preference", "constraint", "habit", "relationship"}:
+        return "profile"
+    if t in {"fact", "lesson", "warning"}:
+        return "domain"
+    return "workspace"
 
 
 @dataclass(frozen=True)
@@ -87,6 +98,7 @@ class SlowaveEngine:
         self.raw_log = RawLog(self.db)
         self.episode_text = EpisodeTextStore(self.db)
         self.schemas = SchemaStore(self.db, dim=self.cfg.dim)
+        self.working_memory_gate = WorkingMemoryGate()
 
         # encoder (lazy) — accept a pre-built shared encoder to avoid
         # reloading weights across multiple engines (e.g. in benchmarking).
@@ -223,7 +235,13 @@ class SlowaveEngine:
             emb = self.encoder.encode(content) if self.encoder is not None else None
             self.schemas.create(
                 content_text=content,
-                facets={"schema_class": type, "source": "explicit_remember"},
+                facets={
+                    "schema_class": type,
+                    "source": "explicit_remember",
+                    "source_kind": "explicit_remember",
+                    "memory_layer": _default_memory_layer(type),
+                    "injectable": True,
+                },
                 tags=[type, "explicit"],
                 embedding=emb,
                 project=project,
@@ -347,6 +365,80 @@ class SlowaveEngine:
     def context(self, *, project: str | None = None, limit: int = 10) -> list[Schema]:
         """Return a memory brief: top active schemas, optionally project-scoped."""
         return self.schemas.list(limit=limit, project=project, status="active")
+
+    def context_brief(
+        self,
+        *,
+        query: str | None = None,
+        project: str | None = None,
+        application: str | None = None,
+        topics: list[str] | tuple[str, ...] | None = None,
+        entities: list[str] | tuple[str, ...] | None = None,
+        limit: int = 8,
+        mode: str = "default",
+        max_chars: int = 1800,
+    ) -> WorkingMemoryState:
+        """Return a gated working-memory state for prompt injection.
+
+        Unlike ``context()``, this is cue-aware and intentionally conservative:
+        broad recall may activate many memories, but only a small, relevant,
+        source-grounded subset is admitted into the prompt's working context.
+        ``project`` is just one optional environmental cue; chatbots can rely on
+        ``query``, ``topics``, ``entities`` and ``application`` instead.
+        """
+        candidates_by_id: dict[int, Schema] = {}
+
+        def add_many(schemas: list[Schema]) -> None:
+            for schema in schemas:
+                candidates_by_id[schema.id] = schema
+
+        # Global salience pool: stable user/profile memories can be useful even
+        # without app/project hints, then the gate decides relevance.
+        add_many(self.schemas.list(limit=max(100, limit * 8), status="active"))
+
+        # Optional coding/workspace cue. Kept generic by treating project as a
+        # candidate source and activation bonus, not as a hard namespace rule.
+        if project:
+            add_many(self.schemas.list(limit=max(100, limit * 8), project=project, status="active"))
+
+        cue_text = " ".join([
+            query or "",
+            application or "",
+            project or "",
+            " ".join(topics or []),
+            " ".join(entities or []),
+        ]).strip()
+        if cue_text:
+            for sid in self.schemas.search_fts(cue_text, limit=max(50, limit * 8)):
+                try:
+                    candidates_by_id[sid] = self.schemas.get(sid)
+                except KeyError:
+                    continue
+            if self.encoder is not None:
+                q = self.encoder.encode(cue_text)
+                for sid, _score in self.schemas.search_embedding(
+                    q,
+                    limit=max(50, limit * 8),
+                ):
+                    try:
+                        candidates_by_id[sid] = self.schemas.get(sid)
+                    except KeyError:
+                        continue
+
+        cue = MemoryCue(
+            query=query,
+            project=project,
+            application=application,
+            topics=tuple(topics or ()),
+            entities=tuple(entities or ()),
+            mode=mode,
+        )
+        policy = GatePolicy(
+            max_items=limit,
+            max_chars=max_chars,
+            min_activation=-999.0 if mode == "debug" else 0.20,
+        )
+        return self.working_memory_gate.select(candidates_by_id.values(), cue=cue, policy=policy)
 
     # ---- inspection -------------------------------------------------------
     def get_schema(self, schema_id: int) -> Schema:

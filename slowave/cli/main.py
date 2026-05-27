@@ -203,25 +203,89 @@ def _format_recall_human(payload: dict[str, Any]) -> None:
 
 @cli.command("context")
 @click.option("--project", default=None)
+@click.option("--query", default=None, help="Current task/chat cue for relevance gating.")
+@click.option(
+    "--application",
+    default=None,
+    help="Calling app/channel cue, e.g. chatbot or cline-tui.",
+)
+@click.option("--topic", "topics", multiple=True, help="High-level topic cue; can be repeated.")
+@click.option("--entity", "entities", multiple=True, help="Salient entity cue; can be repeated.")
+@click.option(
+    "--mode",
+    default="default",
+    show_default=True,
+    type=click.Choice(["default", "broad", "debug"]),
+)
 @click.option("--limit", default=10, show_default=True)
 @click.pass_context
-def context_cmd(ctx: click.Context, project: str | None, limit: int) -> None:
-    """Return a memory brief for prepending to an agent's system prompt."""
+def context_cmd(
+    ctx: click.Context,
+    project: str | None,
+    query: str | None,
+    application: str | None,
+    topics: tuple[str, ...],
+    entities: tuple[str, ...],
+    mode: str,
+    limit: int,
+) -> None:
+    """Return a gated working-memory brief for an agent/chatbot prompt."""
     eng = _build_engine(ctx.obj["db"], disable_llm=True)
-    schemas = eng.context(project=project, limit=limit)
+    brief = eng.context_brief(
+        query=query,
+        project=project,
+        application=application,
+        topics=list(topics),
+        entities=list(entities),
+        mode=mode,
+        limit=limit,
+    )
     if ctx.obj["json"]:
-        _print([asdict(s) for s in schemas], True)
+        _print(
+            {
+                "project": project,
+                "query": query,
+                "application": application,
+                "topics": list(topics),
+                "entities": list(entities),
+                "mode": mode,
+                "rendered": brief.rendered,
+                "cue_terms": brief.cue_terms,
+                "suppressed": brief.suppressed,
+                "schemas": [
+                    {
+                        "id": item.schema.id,
+                        "content_text": item.text,
+                        "activation": item.activation,
+                        "reason": item.reason,
+                        "schema": asdict(item.schema),
+                    }
+                    for item in brief.items
+                ],
+                "activation_trace": [
+                    asdict(t) for t in brief.activation_trace
+                ]
+                if mode == "debug"
+                else [],
+            },
+            True,
+        )
     else:
-        click.echo("=== Memory Context ===")
-        if not schemas:
+        click.echo("=== Working Memory Context ===")
+        if not brief.items:
             click.echo("  (no memories yet)")
-        for s in schemas:
+        for item in brief.items:
+            s = item.schema
             click.echo(
-                f"  [sch_{s.id}] {s.content_text}"
-                f"  status={s.status} sal={s.salience:.3f} supports={len(s.supporting_episode_ids)}"
+                f"  [sch_{s.id}] {item.text}"
+                f"  act={item.activation:.3f} status={s.status} sal={s.salience:.3f}"
+                f" supports={len(s.supporting_episode_ids)}"
                 f" tags={','.join(s.tags)}"
+                f" reason={item.reason}"
                 + ("  needs_review" if s.needs_review else "")
             )
+        if mode == "debug":
+            click.echo(f"\nSuppressed: {brief.suppressed}")
         click.echo("\nCite memories as [sch_xxx] or [epi_xxx] when you use them.")
     eng.close()
 
