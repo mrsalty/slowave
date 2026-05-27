@@ -7,11 +7,14 @@ are wired correctly even without external services.
 from __future__ import annotations
 
 import os
+from pathlib import Path
 import tempfile
 
 import numpy as np
 import pytest
+from click.testing import CliRunner
 
+from slowave.cli.main import cli
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.latent.types import Event
@@ -29,6 +32,18 @@ def test_imports() -> None:
     import slowave.symbolic.schema_extractor  # noqa
     import slowave.symbolic.contradiction  # noqa
     import slowave.llm.ollama_backend  # noqa
+
+
+def test_cli_uses_default_db_from_env_without_db_arg(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """CLI commands should not require --db for normal local usage."""
+    db_path = tmp_path / "nested" / "slowave.db"
+    monkeypatch.setenv("SLOWAVE_DB", str(db_path))
+
+    runner = CliRunner()
+    result = runner.invoke(cli, ["--json", "stats"])
+
+    assert result.exit_code == 0, result.output
+    assert db_path.exists()
 
 
 def test_engine_latent_only_synthetic() -> None:
