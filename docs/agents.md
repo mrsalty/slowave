@@ -27,11 +27,13 @@ Slowave exposes an MCP server (`slowave-mcp`) that any MCP-aware agent can use a
 
 ```
 You have access to Slowave long-term memory via slowave_* MCP tools.
-- Project name: derive it from the working directory basename (e.g. the last segment of the repo
-  root path). Use this name as the project= argument on EVERY slowave_* call — without it,
-  memories from different projects bleed together and recall becomes unreliable.
-- Task start: call slowave_context(project=<name>) to load prior memory, then
-  slowave_session_start(project=<name>, agent=<your-agent-id>) to get a session_id.
+- Task start: call slowave_context(query=<current task/chat message>,
+  application=<your-agent-or-app>, topics=<optional high-level topics>) to load a
+  small working-memory brief, then slowave_session_start(agent=<your-agent-id>)
+  to get a session_id.
+- Coding agents may additionally pass project=<workspace-or-repo-name> as an
+  environmental cue on slowave_context/session/logging calls, but project is not
+  required for generic chatbots and is not the primary context key.
 - During the task: call slowave_event(session_id, ...) for EVERY user message and EVERY assistant
   response — do not skip turns or wait until something seems "important".
 - Durable decisions/facts: call slowave_remember(content, project=<name>) — high-salience path,
@@ -43,11 +45,16 @@ You have access to Slowave long-term memory via slowave_* MCP tools.
 ## Session lifecycle
 
 ```
-# 1. Derive project name from working directory — do NOT hardcode or leave blank
-project = basename(cwd)   # e.g. "my-repo"
+# 1. Build a cue from the current task/chat state.
+current_task = "Fix the execute_sql Pydantic AI retry bug"
+application = "claude-code"
+
+# Optional coding/workspace cue. Generic chatbots can omit this and rely on
+# query/topics/entities instead.
+project = basename(cwd)   # e.g. "my-repo", optional
 
 # 2. Load prior memory and start session
-slowave_context(project=project)                              →  memory brief
+slowave_context(query=current_task, application=application)  →  working-memory brief
 slowave_session_start(agent="claude-code", project=project)  →  session_id
 
   slowave_event(session_id, "user_message",      "…")
@@ -96,7 +103,7 @@ See [dashboard.md](dashboard.md) for the full dashboard guide.
 | `slowave_session_end(session_id)` | Close session — fast, no LLM |
 | `slowave_recall(query, top_k?, evidence?)` | Semantic recall |
 | `slowave_remember(content, type?, project?)` | Explicit durable memory |
-| `slowave_context(project?, limit?)` | Memory brief for task start |
+| `slowave_context(query?, application?, topics?, entities?, project?, limit?, mode?)` | Gated working-memory brief for task/chat start |
 | `slowave_consolidate()` | Trigger consolidation manually |
 | `slowave_stats()` | Episode / prototype / schema counts |
 
@@ -109,9 +116,52 @@ See [dashboard.md](dashboard.md) for the full dashboard guide.
 | Variable | Default | Notes |
 |---|---|---|
 | `SLOWAVE_DB` | `~/.slowave/slowave.db` | SQLite file path |
-| `SLOWAVE_PROJECT` | *(none)* | Fallback project scope if the agent does not pass `project=` explicitly |
+| `SLOWAVE_PROJECT` | *(none)* | Optional fallback workspace/project cue for coding-agent integrations |
 | `SLOWAVE_MODEL` | `qwen2.5:7b-instruct` | Only used with `--schema-mode llm` |
 | `SLOWAVE_OLLAMA_URL` | `http://localhost:11434` | Only used with `--schema-mode llm` |
 | `OPENROUTER_API_KEY` | *(none)* | Cloud LLM backend (legacy) |
 
 For the brain-only default, only `SLOWAVE_DB` is relevant.
+
+## Working-memory context gate
+
+`slowave_context` is intentionally stricter than `slowave_recall`. Recall is a
+broad hippocampal/associative lookup; context is the small set of memories that
+enters the downstream agent's active prompt. The gate uses a brain-like
+activation/inhibition step:
+
+1. collect candidate schemas from global salience, FTS/embedding matches for the
+   current query/topic/entity cue, and optional environment cues such as
+   project/workspace;
+2. suppress memories that should not enter default prompt context, such as raw
+   transcript-like `User:`/`Assistant:` summaries, `latent` schemas, schemas
+   marked `injectable=false`, `needs_review`, or assistant/tool-result summaries;
+3. compute activation from cue/topic/entity overlap, salience, stability,
+   memory layer, source quality, and optional project match;
+4. enforce a small working-memory budget before rendering compact bullets.
+
+For generic chatbots, pass the current user message as `query` and optional
+high-level `topics`/`entities`:
+
+```python
+slowave_context(
+    query="Can you help me plan meals for next week?",
+    application="chatbot",
+    topics=["food", "meal planning"],
+)
+```
+
+For coding agents, `project` can be supplied as an extra environmental cue, but
+it is not required and is not a hardcoded namespace rule:
+
+```python
+slowave_context(
+    project="cimmeria",
+    query="Fix the execute_sql Pydantic AI retry bug",
+    application="cline-tui",
+)
+```
+
+Use `mode="debug"` to inspect activation traces and suppression reasons while
+tuning the memory system. Use `slowave_recall` when the user explicitly asks to
+search memory or inspect verbose evidence.
