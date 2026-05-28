@@ -98,5 +98,5 @@ A working setup should show a new session/events/episodes and should recall the 
 ## Canonical references
 
 - [../docs/install.md](../docs/install.md): install, MCP, troubleshooting.
-- [../docs/agents.md](../docs/agents.md): tool lifecycle and semantics.
-- [../docs/agent-enforcement.md](../docs/agent-enforcement.md): prompt/rules templates.
+- [../docs/cli.md](../docs/cli.md): manual inspection and debugging commands.
+- [../docs/dashboard.md](../docs/dashboard.md): local dashboard for memory inspection.

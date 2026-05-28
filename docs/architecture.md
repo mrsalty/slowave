@@ -258,7 +258,7 @@ flowchart TD
     SR --> R["Ranked Result"]
 ```
 
-**Mechanism Details** (see [`docs/stages/stage1_spreading_activation.md`](stages/stage1_spreading_activation.md), [`docs/stages/stage3_transition_at_recall.md`](stages/stage3_transition_at_recall.md)):
+**Mechanism details:**
 
 1. **Cosine Seed** (primary signal):
    - Compute cosine similarity between query and all episodic memories / prototypes
@@ -492,7 +492,7 @@ This helps recall episodes that follow a predictable sequence (e.g., in a multi-
 
 ## 8. Spreading Activation: Pattern Completion Over Prototype Graph
 
-Spreading activation implements memory association across the prototype graph, biasing retrieval toward related concepts (+2–3pp on benchmarks, see [`docs/stages/stage1_spreading_activation.md`](stages/stage1_spreading_activation.md)).
+Spreading activation implements memory association across the prototype graph, biasing retrieval toward related concepts.
 
 ### Graph Structure
 
@@ -786,8 +786,6 @@ def update_prototype_graph(assignments_fine, transition_model):
 ---
 
 ### Default Path: Latent Schema Building
-
-(See [`docs/stages/stage6_latent_schemas.md`](stages/stage6_latent_schemas.md) for detailed discussion.)
 
 For each prototype, `LatentSchemaBuilder` creates a schema purely from geometry—no LLM:
 
@@ -1204,39 +1202,19 @@ Retrieval will be unavailable until encoder is restored and indices are rebuilt.
 
 ---
 
-## 18. Stages: Mechanisms & Benchmarks
+## 18. Mechanisms & Benchmarks
 
-Slowave's development is organized as numbered **stages**. Each active stage is a mechanism, evaluated independently via ablation studies. See `docs/stages/` for detailed documentation.
+Slowave's development was organized as numbered research stages. Public documentation keeps the current mechanisms and headline benchmark impact here; historical stage notes and ablation notebooks are kept out of the public docs.
 
-### Active Stages
+### Current mechanisms
 
-| Stage | File | Mechanism | Benchmark Impact |
-|---|---|---|---|
-| **1** | [`stage1_spreading_activation.md`](stages/stage1_spreading_activation.md) | Spreading activation over prototype graph | +2–3pp |
-| **3** | [`stage3_transition_at_recall.md`](stages/stage3_transition_at_recall.md) | Predictive seed for retrieval (TransitionModel) | **+6.7pp** ⭐ |
-| **6** | [`stage6_latent_schemas.md`](stages/stage6_latent_schemas.md) | Latent schema building (geometry only) | **+10pp** ⭐⭐ |
-| **7** | [`stage7_temporal_context.md`](stages/stage7_temporal_context.md) | Temporal bias in salience & retrieval | +0pp (neutral) |
-| **8** | [`stage8_pattern_separation.md`](stages/stage8_pattern_separation.md) | Multi-scale prototypes (fine 0.85, coarse 0.55) | +0pp (neutral) |
-| **9** | [`stage9_multiscale.md`](stages/stage9_multiscale.md) | Pattern separation & multi-scale contradiction | +0pp (neutral) |
-
-**⭐ = highest empirical impact.**
-
-### Running Ablations
-
-To test impact of individual stages:
-
-```bash
-# Disable spreading activation:
-pytest tests/integration/longmemeval_eval.py --no-spreading-activation
-
-# Disable transition model (no predictive seed):
-pytest tests/integration/longmemeval_eval.py --no-transition
-
-# Single-scale prototypes (only fine, no coarse):
-pytest tests/integration/longmemeval_eval.py --no-multi-scale
-```
-
-Results saved to `data/longmemeval/runs/` and `data/locomo/runs/`. See [`docs/benchmarks.md`](benchmarks.md) for full flags and reproducing published results.
+| Mechanism | Benchmark Impact |
+|---|---:|
+| Spreading activation over prototype graph | +2–3pp |
+| Predictive seed for retrieval via `TransitionModel` | +6.7pp |
+| Latent schema building, geometry only | +10pp |
+| Temporal bias in salience and retrieval | neutral on public benchmarks |
+| Pattern separation and multi-scale prototypes | neutral on public benchmarks |
 
 ### Why Stages 7–9 Are Neutral
 
@@ -1457,7 +1435,7 @@ This appendix documents the original LLM-based schema extraction path for histor
 
 ### Why Deprecated
 
-- **Benchmark results**: Latent schema building provides +10pp gain over LLM extraction (see [`docs/stages/stage6_latent_schemas.md`](stages/stage6_latent_schemas.md))
+- **Benchmark results**: Latent schema building provides +10pp gain over LLM extraction.
 - **Cost**: LLM calls are expensive (~$0.01–0.05 per consolidation cycle)
 - **Latency**: Blocking consolidation; agents wait for LLM responses
 - **Determinism**: Geometry is deterministic; LLM is non-deterministic and probabilistic

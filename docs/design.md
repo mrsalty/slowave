@@ -306,9 +306,4 @@ Stage 6 was implemented after this pivot. Results:
 | LongMemEval (500q) | **70.00%** (+10pp vs cosine baseline) |
 | LoCoMo (1986q) | **75.48%** F1 |
 
-See [stage6_latent_schemas.md](stages/stage6_latent_schemas.md) for the full breakdown.
-* Branch: `feat/spreading-activation` continues; Stage 6 may warrant
-  a new branch (`feat/latent-schemas`) once the first commit lands
-
-
-  alone, no LLM.
+The full stage-by-stage research notes are kept out of the public docs; the current architecture is summarized in [architecture.md](architecture.md).

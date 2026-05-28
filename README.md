@@ -116,15 +116,10 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 |---|---|
 | [integrations/](integrations/) | Fast client-specific setup guides for Claude Desktop, Claude Code, and Cline |
 | [docs/install.md](docs/install.md) | Install, MCP setup, prompt/rules injection, verification |
-| [docs/agents.md](docs/agents.md) | MCP tool behavior and lifecycle for Claude Code, Cline, Claude Desktop |
-| [docs/agent-enforcement.md](docs/agent-enforcement.md) | Copy/paste prompt templates that make clients call Slowave consistently |
 | [docs/architecture.md](docs/architecture.md) | Brain-inspired mechanisms, data flow, storage, recall, consolidation |
 | [docs/design.md](docs/design.md) | Why the LLM path was removed from the memory loop |
 | [docs/dashboard.md](docs/dashboard.md) | Local dashboard guide |
 | [docs/cli.md](docs/cli.md) | CLI quickstart and command reference |
-| [docs/benchmarks.md](docs/benchmarks.md) | Reproduce benchmark numbers and ablations |
-| [docs/release.md](docs/release.md) | Release workflow and versioning |
-| [docs/stages/](docs/stages/) | Research history for each mechanism |
 
 ## Benchmarks
 
@@ -137,7 +132,7 @@ Public retrieval/RAG-style benchmarks are useful regression tests, but they do n
 
 Brain-only path: **$0/query · ~10ms recall · no API · data stays on device.**
 
-The gap to Mem0 is structurally about categories that reward LLM extraction/meta-cognition by construction, not just retrieval. See [docs/design.md](docs/design.md) and [docs/benchmarks.md](docs/benchmarks.md).
+The gap to Mem0 is structurally about categories that reward LLM extraction/meta-cognition by construction, not just retrieval. See [docs/design.md](docs/design.md) for the design rationale.
 
 ## License
 
