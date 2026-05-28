@@ -82,12 +82,7 @@ Add `slowave-mcp` to the client MCP configuration.
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp",
-      "env": {
-        "KMP_DUPLICATE_LIB_OK": "TRUE",
-        "OMP_NUM_THREADS": "1",
-        "TOKENIZERS_PARALLELISM": "false"
-      }
+      "command": "/absolute/path/to/slowave-mcp"
     }
   }
 }
@@ -104,7 +99,6 @@ Known client locations:
 Notes:
 
 - Use an absolute executable path, not `slowave-mcp`, if the client runs with a restricted PATH.
-- `KMP_DUPLICATE_LIB_OK`, `OMP_NUM_THREADS`, and `TOKENIZERS_PARALLELISM` avoid common local PyTorch/FAISS tokenizer/OpenMP issues.
 - If multiple clients share the same default DB, they share the same long-term memory.
 
 ## 4. Inject the Slowave lifecycle prompt
@@ -250,16 +244,6 @@ Create `~/Library/LaunchAgents/com.slowave.worker.plist`:
     <key>KeepAlive</key>
     <true/>
 
-    <key>EnvironmentVariables</key>
-    <dict>
-      <key>KMP_DUPLICATE_LIB_OK</key>
-      <string>TRUE</string>
-      <key>OMP_NUM_THREADS</key>
-      <string>1</string>
-      <key>TOKENIZERS_PARALLELISM</key>
-      <string>false</string>
-    </dict>
-
     <key>StandardOutPath</key>
     <string>/tmp/slowave-worker.log</string>
     <key>StandardErrorPath</key>
@@ -294,9 +278,6 @@ Description=Slowave background consolidation worker
 ExecStart=/usr/local/bin/slowave worker --interval 300
 Restart=always
 RestartSec=10
-Environment=KMP_DUPLICATE_LIB_OK=TRUE
-Environment=OMP_NUM_THREADS=1
-Environment=TOKENIZERS_PARALLELISM=false
 
 [Install]
 WantedBy=default.target
@@ -336,4 +317,3 @@ The dashboard is local and read-only. It shows DB health, Slowave/MCP processes,
 | Sessions exist but memory is empty | Client starts/ends sessions without events | Require immediate `user_message` and event logging during the task |
 | Recall returns stale/noisy memories | Client uses `slowave_recall` as default priming | Use `slowave_context` for prompt injection; reserve recall for broad evidence search |
 | Distilled schemas do not appear | Worker/consolidation not running | Run `slowave worker --once` or keep `slowave worker --interval 300` running |
-| macOS OpenMP/tokenizer warnings | Local numeric/tokenizer libraries | Keep the env vars from the MCP config above |

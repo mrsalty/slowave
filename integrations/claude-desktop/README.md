@@ -62,12 +62,7 @@ Add or merge this block, replacing `/absolute/path/to/slowave-mcp` with your act
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp",
-      "env": {
-        "KMP_DUPLICATE_LIB_OK": "TRUE",
-        "OMP_NUM_THREADS": "1",
-        "TOKENIZERS_PARALLELISM": "false"
-      }
+      "command": "/absolute/path/to/slowave-mcp"
     }
   }
 }

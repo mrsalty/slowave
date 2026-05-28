@@ -56,12 +56,7 @@ Open Cline's MCP settings JSON and add or merge this block, replacing `/absolute
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp",
-      "env": {
-        "KMP_DUPLICATE_LIB_OK": "TRUE",
-        "OMP_NUM_THREADS": "1",
-        "TOKENIZERS_PARALLELISM": "false"
-      }
+      "command": "/absolute/path/to/slowave-mcp"
     }
   }
 }
