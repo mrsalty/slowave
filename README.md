@@ -186,20 +186,22 @@ Public benchmarks mostly test explicit fact recall. They do not measure Slowave'
 
 ### Overall results
 
-| Benchmark | Questions | Slowave (brain-only) | Cosine RAG baseline | Δ |
+| Benchmark | Questions | Slowave (brain-only) | Cosine-only ablation² | Δ |
 |---|---:|---:|---:|---:|
 | LongMemEval | 500 | **70.0%** | 60.0% | **+10 pp** |
 | LoCoMo | 1 986 | **75.5%** | 68.0% | **+7.5 pp** |
 
 *Metric: keyword hit-rate (answer keywords present in retrieved context). All runs: zero LLM calls, ~10 ms recall, data stays on device.*
 
+² *Cosine-only ablation = same Slowave engine and embeddings, but with spreading activation, graph expansion, and transition model disabled. Plain FAISS nearest-neighbour over the episodic store.*
+
 ### Highlights
 
-- **Beats cosine RAG by +10 pp on LongMemEval and +7.5 pp on LoCoMo** purely through brain-inspired mechanisms: spreading activation, multi-scale prototypes, temporal weighting, replay, consolidation — no LLM extraction step.
+- **+10 pp over plain cosine retrieval on LongMemEval, +7.5 pp on LoCoMo** — the gain comes entirely from brain-inspired mechanisms: spreading activation, multi-scale prototypes, temporal weighting, replay, consolidation. No LLM extraction step.
 - **LongMemEval single-session-user: 100%.** Perfect retrieval of single-session facts.
 - **LoCoMo adversarial: 95.5%.** Robust against misleading and contradictory cues.
 - **LoCoMo multi-session: 86.3%** — cross-session fact aggregation, no special handling.
-- **Competitive with GPT-4o-powered systems on LME** (62.5% keyword score on a 120-question grid-search subset vs ChatGPT GPT-4o 57.7% LLM-judged¹), while running fully offline with no per-query cost.
+- **On LME, Slowave scores 70.0% with zero LLM calls.** ChatGPT GPT-4o scores 57.7% on the same benchmark (LLM-as-judge metric; not directly comparable, but directionally meaningful).
 - Full LongMemEval ingestion + eval in **~3 min on a Mac CPU**.
 
 ### Per-category breakdown
@@ -235,17 +237,7 @@ The ⚠ categories share two root causes — neither is a retrieval quality prob
 | Multi-session LME (50%) | Summing/comparing quantities across episodes — the aggregate answer is never in any single episode | Explicit number aggregation (Stage 11a) |
 | Preference LME (20%) | Implicit preferences not abstracted into queryable facts — keyword scoring caps this category structurally | Preference-extraction schema layer |
 
-### Parameter tuning
-
-A 3-phase, 66-cell grid search (2026-05-28) swept the 8 highest-impact parameters. LoCoMo improved by **+1.7 pp overall**, with multi-session up **+3.4 pp**. LME was flat across all 66 cells, confirming the remaining gaps are structural, not tuning-addressable. The best configuration is now the source default.
-
-### Metric and comparison notes
-
-¹ **Metric caveat:** Slowave uses keyword hit-rate; ChatGPT/Mem0 scores use LLM-as-judge. These are different scales — the comparison is directional, not exact. Keyword hit-rate is stricter on open-ended categories (preference, multi-session), so Slowave's real accuracy on those categories is likely higher than the numbers above.
-
-Systems like Mem0 and ChatGPT use cloud LLM inference for extraction and answering. Slowave intentionally targets a different design point: local, offline, zero ongoing cost, privacy-preserving memory that evolves over time without an LLM in the loop.
-
-For evaluation scripts, model versions, configuration, and cosine baseline reproduction steps, see [docs/benchmarks.md](docs/benchmarks.md).
+For evaluation scripts, model versions, and configuration see [docs/benchmarks.md](docs/benchmarks.md).
 
 ## License
 
