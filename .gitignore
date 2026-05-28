@@ -221,6 +221,7 @@ data/temporal_eval*.json
 data/locomo/debug_dbs/
 data/longmemeval/debug_dbs/
 data/longmemeval/logs/
+data/hipporag/
 
 # Raw benchmark datasets (downloaded separately, not source)
 data/longmemeval/longmemeval_s_cleaned.json
