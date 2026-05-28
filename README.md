@@ -1,131 +1,129 @@
 # Slowave
 
-Brain-inspired long-term memory for AI agents. **Zero LLM during ingest or retrieval.**
+**Brain-inspired long-term memory for AI agents and desktop AI chats.** Slowave plugs into Claude Code, Cline, and Claude Desktop through MCP, giving them a shared memory that accumulates, consolidates, adapts, and recalls across sessions.
 
-Memory consolidation, abstraction, and recall happen entirely in continuous vector space — shaped by neuroscience mechanisms (Hebbian learning, slow-wave replay, salience decay, spreading activation). Language is an output channel only.
+Slowave's core thesis is simple: **language is not the memory system; language is one interface to it.** The memory engine works in latent space, the way brains appear to operate over distributed internal representations rather than over transcripts. Text is embedded once, then memory evolves through geometry, time, salience, replay, and activation. The default path uses **no LLM for ingest, consolidation, or recall**: inference is local, fast, CPU-friendly, private, and independent of any model provider.
 
-## Results
+Critical features:
 
-| Benchmark | Cosine RAG | **Slowave** | Δ | Mem0 SOTA |
-|---|---|---|---|---|
-| LongMemEval (500q) | 60.0% | **70.0%** | +10pp | 94.4% |
-| LoCoMo (1986q) | 68.0% | **75.5%** | +7.5pp | 92.5% |
+- **No LLM in the core memory loop** — no API key, no cloud extraction step, no per-query model call.
+- **Local CPU inference** — BAAI/bge-small-en-v1.5 embeddings, SQLite, FAISS, and deterministic geometry.
+- **Brain-inspired consolidation** — raw events become episodes, episodes replay into prototypes, prototypes become latent schemas.
+- **Recall changes memory** — retrieved memories are reinforced; recall is an active operation, not a passive database lookup.
+- **Time-aware memory** — salience, decay, temporal anchors, supersession, and contradiction handling keep memory current.
+- **Generic ingestion** — not code-assistant-specific; it can remember coding work, planning, preferences, decisions, chat context, or any text interaction.
+- **Gated working memory** — `slowave_context` injects only a compact, cue-relevant memory brief instead of dumping history into the prompt.
+- **Provenance and inspection** — schemas trace back to episodes/raw events; the local dashboard exposes memory health and recall behavior.
 
-Brain-only path: **$0/query · ~10ms recall · no API · data stays on device.**
+## What Slowave is for
 
-The ~24pp gap to Mem0 is structurally about meta-cognition categories that require LLM extraction by construction, not about retrieval. See [docs/design.md](docs/design.md).
+Slowave is a local long-term memory substrate for tools that otherwise forget between sessions. It is useful when you want an AI assistant to remember:
 
-## Install
+- project conventions and architectural decisions;
+- personal preferences and communication style;
+- recurring workflows and commands;
+- previous debugging sessions and lessons learned;
+- open questions, warnings, constraints, and artifacts;
+- non-coding chat context from desktop AI conversations.
+
+It is intentionally not just a RAG layer. Existing memory systems usually retrieve stored text or ask an LLM to rewrite memories. Slowave treats memory as a living system: sessions create episodes, replay distills patterns, time changes salience, contradiction updates beliefs, and recall itself reinforces what was useful.
+
+## Install in minutes
+
+Slowave is a local memory service. Installing the package gives you two commands:
+
+- `slowave`: CLI, dashboard, manual recall/debugging.
+- `slowave-mcp`: MCP server used by Claude Desktop, Claude Code, and Cline.
 
 ```bash
-pip install slowave            # or: pipx install slowave
-brew tap mrsalty/slowave && brew install slowave
-conda install -c conda-forge slowave
+brew tap mrsalty/slowave
+brew install slowave
 ```
 
-→ [docs/install.md](docs/install.md) for full options including from source.
-
-## Quick start
+PyPI publishing is not enabled yet, so `pip install slowave` / `pipx install slowave` will not work until the package is published to PyPI. If you are not using Homebrew, install from source:
 
 ```bash
-SID=$(slowave --json session start --agent myagent \
-      | python3 -c 'import sys,json;print(json.load(sys.stdin)["session_id"])')
-
-slowave event --session "$SID" --type user_message --content "I prefer SQLite for MVPs."
-slowave session end "$SID"
-slowave worker --once                          # consolidate into memory
-slowave recall "database preference"
-slowave remember "Using SQLite for the MVP" --type decision
-slowave dashboard                              # local web UI at http://127.0.0.1:8765
+git clone https://github.com/mrsalty/slowave
+cd slowave
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
-## Command list
+Verify:
 
-| Command | Purpose |
+```bash
+which slowave-mcp
+slowave --help
+slowave-mcp --help
+slowave stats
+```
+
+Then choose your client and follow the short guide:
+
+| Client | Setup guide |
 |---|---|
-| `slowave session start --agent <name> --project <project>` | Start a memory session |
-| `slowave event --session <sid> --type <type> --content <text>` | Append a raw event to a session |
-| `slowave session end <sid>` | Close a session and form episodes, fast/no LLM by default |
-| `slowave remember <text> --type <type> --project <project>` | Store an explicit high-salience memory |
-| `slowave recall <query> --top-k 5 --evidence` | Retrieve relevant schemas, episodes, and optional raw evidence |
-| `slowave context --query <task> --topic <topic>` | Print a gated working-memory brief for agent/chatbot context; `--project` is optional for coding/workspace cues |
-| `slowave schema --needs-review --limit 50` | List schemas, optionally the review queue |
-| `slowave show sch_123` | Inspect a schema, episode, or raw event by ref |
-| `slowave stats` | Print episode/prototype/schema/edge counts |
-| `slowave status` | Print DB health, schema health, and local Slowave process snapshot |
-| `slowave dedup-schemas --apply` | Merge exact duplicate active schemas; dry-run by default |
-| `slowave consolidate` | Run replay + latent schema consolidation once |
-| `slowave worker --interval 300` | Run periodic background consolidation |
-| `slowave dashboard --port 8765` | Run the local read-only web dashboard |
+| Claude Desktop | [integrations/claude-desktop/](integrations/claude-desktop/) |
+| Claude Code | [integrations/claude-code/](integrations/claude-code/) |
+| Cline | [integrations/cline/](integrations/cline/) |
+
+**Important:** MCP setup alone is not enough. Every client needs:
+
+1. MCP configuration so the `slowave_*` tools are visible.
+2. Instruction/rules injection so the client actually calls Slowave during the task.
+3. A background worker for ongoing consolidation into distilled schemas.
+
+Episodes are created immediately when a session ends. The worker is what turns accumulated episodes into durable latent schemas for better future `slowave_context` injection.
+
+The integration guides contain the exact MCP JSON, prompt/rules block, worker setup, and verification command for each client. Start at [integrations/](integrations/) if you are unsure.
+
+Default storage: `~/.slowave/slowave.db`. No Ollama, OpenRouter, or other LLM backend is required for the default brain-only path.
 
 ## Local dashboard
 
-Run a local read-only web UI for live inspection:
+Run a local read-only web UI for memory inspection:
 
 ```bash
 slowave dashboard
 # open http://127.0.0.1:8765
 ```
 
-Slowave uses `~/.slowave/slowave.db` by default. Set `SLOWAVE_DB` or pass
-`--db /path/to/slowave.db` only when you intentionally want a different DB.
+The dashboard binds to `127.0.0.1` by default and shows DB health, Slowave/MCP processes, schemas, recall playground, and a schema graph.
 
-Useful options:
+## CLI usage
 
-```bash
-slowave dashboard --port 8766 --no-open
-slowave dashboard --refresh-ms 5000
-```
+The CLI is useful for debugging, manual memory writes, dashboard access, and benchmark/research workflows. It should not be the first path for most users; real agent memory needs MCP plus prompt/rules injection.
 
-The dashboard is dependency-free and binds to `127.0.0.1` by default. It shows overview stats, DB health, Slowave/MCP processes, schemas, recall playground, and a schema graph with status filters plus a minimum-salience slider.
-
-→ [docs/dashboard.md](docs/dashboard.md) for screenshots-by-description, API endpoints, and operational notes.
-
-## Use with a coding agent
-
-Register `slowave-mcp` in your agent's MCP config:
-
-```jsonc
-{
-  "mcpServers": {
-    "slowave": {
-      "command": "/path/to/.venv/bin/slowave-mcp"
-    }
-  }
-}
-```
-
-Add to the agent's system prompt:
-
-```
-You have access to Slowave long-term memory via slowave_* MCP tools.
-At task start: call slowave_context with the current task/chat query (load a small working-memory brief), then slowave_session_start (get session_id).
-During the task: call slowave_event(session_id, ...) for EVERY user message and EVERY assistant response — do not skip turns.
-For durable decisions/facts: call slowave_remember (no session_id needed).
-For lookups: call slowave_recall.
-At task end: call slowave_session_end(session_id).
-```
-
-→ [docs/agents.md](docs/agents.md) for session lifecycle, all tools, and event types.
-
-`slowave_context` is cue-aware and conservative: it treats `project` as one
-optional environmental cue, but generic chatbots can pass `query`, `topics`, and
-`entities` to retrieve high-level topic memories without coding-session concepts.
-Verbose transcript-like summaries remain available through `slowave_recall` but
-are suppressed from default prompt injection.
+See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 
 ## Documentation
 
 | | |
 |---|---|
-| [docs/design.md](docs/design.md) | Why LLM was removed from the memory loop — the pivot and its data |
-| [docs/architecture.md](docs/architecture.md) | How it works — mechanisms, data flow, storage layout |
-| [docs/agents.md](docs/agents.md) | MCP integration, session lifecycle, environment variables |
-| [docs/dashboard.md](docs/dashboard.md) | Local web dashboard, schema graph, process/DB health monitoring |
-| [docs/install.md](docs/install.md) | All install paths including brew, conda, from source |
-| [docs/benchmarks.md](docs/benchmarks.md) | Reproduce the numbers, ablation flags |
-| [docs/release.md](docs/release.md) | Release Please workflow and versioning rules |
-| [docs/stages/](docs/stages/) | Research history — each mechanism documented and benchmarked |
+| [integrations/](integrations/) | Fast client-specific setup guides for Claude Desktop, Claude Code, and Cline |
+| [docs/install.md](docs/install.md) | Install, MCP setup, prompt/rules injection, verification |
+| [docs/agents.md](docs/agents.md) | MCP tool behavior and lifecycle for Claude Code, Cline, Claude Desktop |
+| [docs/agent-enforcement.md](docs/agent-enforcement.md) | Copy/paste prompt templates that make clients call Slowave consistently |
+| [docs/architecture.md](docs/architecture.md) | Brain-inspired mechanisms, data flow, storage, recall, consolidation |
+| [docs/design.md](docs/design.md) | Why the LLM path was removed from the memory loop |
+| [docs/dashboard.md](docs/dashboard.md) | Local dashboard guide |
+| [docs/cli.md](docs/cli.md) | CLI quickstart and command reference |
+| [docs/benchmarks.md](docs/benchmarks.md) | Reproduce benchmark numbers and ablations |
+| [docs/release.md](docs/release.md) | Release workflow and versioning |
+| [docs/stages/](docs/stages/) | Research history for each mechanism |
+
+## Benchmarks
+
+Public retrieval/RAG-style benchmarks are useful regression tests, but they do not measure every Slowave feature. They mostly test fact recovery, not long-term accumulation, distillation, time-aware adaptation, or recall-driven memory reinforcement.
+
+| Benchmark | Cosine RAG | **Slowave** | Δ | Mem0 SOTA |
+|---|---:|---:|---:|---:|
+| LongMemEval (500q) | 60.0% | **70.0%** | +10pp | 94.4% |
+| LoCoMo (1986q) | 68.0% | **75.5%** | +7.5pp | 92.5% |
+
+Brain-only path: **$0/query · ~10ms recall · no API · data stays on device.**
+
+The gap to Mem0 is structurally about categories that reward LLM extraction/meta-cognition by construction, not just retrieval. See [docs/design.md](docs/design.md) and [docs/benchmarks.md](docs/benchmarks.md).
 
 ## License
 
