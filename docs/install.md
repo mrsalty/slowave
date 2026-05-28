@@ -190,18 +190,128 @@ Expected signs of a working integration:
 
 ## 6. Run consolidation in the background
 
-Episodes are created immediately on `slowave_session_end`. Distilled schemas are produced by replay/consolidation. For regular daily use, run a worker periodically:
+`slowave_session_end` creates episodic memories immediately. That is enough for raw/broad recall to find recent sessions.
 
-```bash
-slowave worker --interval 300
-```
+The worker is still important for normal long-term use: it performs offline replay and latent consolidation so accumulated episodes become durable schemas. Those schemas are what `slowave_context` uses for compact prompt injection. Without a worker, new memories can exist as episodes, but schema-level personalization will lag until you run consolidation.
 
-For a one-off pass after a long session:
+### Quick/manual worker
+
+For testing or short sessions, run one pass:
 
 ```bash
 slowave worker --once
 # or
 slowave consolidate
+```
+
+For regular daily use, run the worker in a separate terminal:
+
+```bash
+slowave worker --interval 300
+```
+
+### Recommended: auto-start worker service
+
+For daily use, install the worker as a user service so it restarts after reboot/crash.
+
+First find the executable path:
+
+```bash
+which slowave
+```
+
+#### macOS launchd
+
+Create `~/Library/LaunchAgents/com.slowave.worker.plist`:
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key>
+    <string>com.slowave.worker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+      <string>/opt/homebrew/bin/slowave</string>
+      <string>worker</string>
+      <string>--interval</string>
+      <string>300</string>
+    </array>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>EnvironmentVariables</key>
+    <dict>
+      <key>KMP_DUPLICATE_LIB_OK</key>
+      <string>TRUE</string>
+      <key>OMP_NUM_THREADS</key>
+      <string>1</string>
+      <key>TOKENIZERS_PARALLELISM</key>
+      <string>false</string>
+    </dict>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/slowave-worker.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/slowave-worker.err</string>
+  </dict>
+</plist>
+```
+
+Replace `/opt/homebrew/bin/slowave` with the path printed by `which slowave`, then load it:
+
+```bash
+launchctl load ~/Library/LaunchAgents/com.slowave.worker.plist
+launchctl start com.slowave.worker
+launchctl list | grep slowave
+```
+
+To stop/uninstall:
+
+```bash
+launchctl unload ~/Library/LaunchAgents/com.slowave.worker.plist
+```
+
+#### Linux systemd user service
+
+Create `~/.config/systemd/user/slowave-worker.service`:
+
+```ini
+[Unit]
+Description=Slowave background consolidation worker
+
+[Service]
+ExecStart=/usr/local/bin/slowave worker --interval 300
+Restart=always
+RestartSec=10
+Environment=KMP_DUPLICATE_LIB_OK=TRUE
+Environment=OMP_NUM_THREADS=1
+Environment=TOKENIZERS_PARALLELISM=false
+
+[Install]
+WantedBy=default.target
+```
+
+Replace `/usr/local/bin/slowave` with the path printed by `which slowave`, then enable it:
+
+```bash
+systemctl --user daemon-reload
+systemctl --user enable --now slowave-worker
+systemctl --user status slowave-worker
+```
+
+### Verify worker activity
+
+```bash
+slowave status
+slowave stats
+tail -f /tmp/slowave-worker.log   # macOS launchd example
 ```
 
 ## 7. Inspect with the dashboard

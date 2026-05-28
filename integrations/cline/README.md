@@ -75,7 +75,19 @@ Broken-session anti-patterns:
 - Treating `slowave_recall` as default scoped context.
 ```
 
-## 4. Verify
+## 4. Start the worker
+
+Episodes are created immediately when each session ends. The worker performs offline replay/consolidation so those episodes become durable schemas for future `slowave_context` calls.
+
+For quick testing, run this in a separate terminal:
+
+```bash
+slowave worker --interval 300
+```
+
+For daily use, install an auto-restarting user service. See [../../docs/install.md#run-consolidation-in-the-background](../../docs/install.md#run-consolidation-in-the-background).
+
+## 5. Verify
 
 Ask Cline:
 

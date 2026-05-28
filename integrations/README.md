@@ -8,18 +8,19 @@ Target: **under 30 minutes** for one client.
 
 | Client | Guide | Required setup |
 |---|---|---|
-| Claude Desktop | [claude-desktop/](claude-desktop/) | Install Slowave, configure MCP, upload `slowave.skill`, verify |
-| Claude Code | [claude-code/](claude-code/) | Install Slowave, configure MCP, add `CLAUDE.md` rules, verify |
-| Cline | [cline/](cline/) | Install Slowave, configure MCP, add `.clinerules`, verify |
+| Claude Desktop | [claude-desktop/](claude-desktop/) | Install Slowave, configure MCP, upload `slowave.skill`, start worker, verify |
+| Claude Code | [claude-code/](claude-code/) | Install Slowave, configure MCP, add `CLAUDE.md` rules, start worker, verify |
+| Cline | [cline/](cline/) | Install Slowave, configure MCP, add `.clinerules`, start worker, verify |
 
 ## The non-negotiable rule
 
-Every client needs two things:
+Every client needs three things:
 
 1. **MCP server configuration** so the `slowave_*` tools are visible.
 2. **Instruction/rules injection** so the client actually calls those tools.
+3. **Background worker** so episodes are consolidated into durable schemas over time.
 
-MCP alone is not enough. If the model can see Slowave but is not instructed to start sessions, log events, load context, and end sessions, memory will be sparse or empty.
+MCP alone is not enough. If the model can see Slowave but is not instructed to start sessions, log events, load context, and end sessions, memory will be sparse or empty. If the worker is not running, sessions still form episodes immediately, but distilled schemas and future `slowave_context` quality will lag until you run `slowave worker --once` or start the worker.
 
 ## Shared install check
 
@@ -42,6 +43,16 @@ slowave stats
 ```
 
 Use the absolute path printed by `which slowave-mcp` in your client MCP config.
+
+## Start the worker
+
+For quick local testing, run this in a separate terminal:
+
+```bash
+slowave worker --interval 300
+```
+
+For daily use, install it as a user service so it restarts after reboot/crash. See [../docs/install.md#run-consolidation-in-the-background](../docs/install.md#run-consolidation-in-the-background).
 
 ## Verification task
 

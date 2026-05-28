@@ -62,8 +62,11 @@ Then choose your client and follow the short guide:
 
 1. MCP configuration so the `slowave_*` tools are visible.
 2. Instruction/rules injection so the client actually calls Slowave during the task.
+3. A background worker for ongoing consolidation into distilled schemas.
 
-The integration guides contain the exact MCP JSON, prompt/rules block, and verification command for each client. Start at [integrations/](integrations/) if you are unsure.
+Episodes are created immediately when a session ends. The worker is what turns accumulated episodes into durable latent schemas for better future `slowave_context` injection.
+
+The integration guides contain the exact MCP JSON, prompt/rules block, worker setup, and verification command for each client. Start at [integrations/](integrations/) if you are unsure.
 
 Default storage: `~/.slowave/slowave.db`. No Ollama, OpenRouter, or other LLM backend is required for the default brain-only path.
 
