@@ -180,18 +180,51 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 
 ## Benchmarks
 
-Public retrieval/RAG-style benchmarks are useful regression tests, but they do not measure every Slowave feature. They mostly test explicit fact recovery, not long-term accumulation, consolidation, time-aware adaptation, contradiction-aware updates, or recall-driven reinforcement.
+Public retrieval/RAG-style benchmarks are useful regression tests, but they do not cover every Slowave feature. They primarily test explicit fact recovery, not long-term accumulation, consolidation, time-aware adaptation, contradiction-aware updates, or recall reinforcement.
 
-| Benchmark | Cosine RAG | **Slowave** | Δ | Mem0 SOTA |
-|---|---:|---:|---:|---:|
-| LongMemEval (500q) | 60.0% | **70.0%** | +10pp | 94.4% |
-| LoCoMo (1986q) | 68.0% | **75.5%** | +7.5pp | 92.5% |
+All numbers below use the **brain-only path**: local embeddings, FAISS, spreading activation, multi-scale prototypes — zero LLM calls, no API key, no cloud service.
+
+### Results
+
+| Benchmark | Metric | Cosine RAG | **Slowave (tuned)** | Δ |
+|---|---|---:|---:|---:|
+| LongMemEval (500q, 6 cats) | keyword hit-rate | 60.0% | **70.0%** | +10 pp |
+| LoCoMo (1986q, 5 cats) | keyword hit-rate | 68.0% | **75.5%** | +7.5 pp |
 
 **Default local path:** `$0/query` · `~10ms recall` · `no API required` · `no remote LLM inference required` · `data stays on device`
 
-Mem0-style systems use LLM-based extraction and reasoning, which can perform better on benchmarks designed around explicit fact recovery. Slowave intentionally targets a different design point: local, API-free, low-latency, evolving memory for agents and coding assistants.
+### LoCoMo per-category (tuned defaults)
 
-For reproducibility details, evaluation scripts, model versions, and benchmark configuration, see [docs/benchmarks.md](docs/benchmarks.md).
+| Category | Score | Δ vs cosine baseline |
+|---|---:|---:|
+| Single-session | 75.5% | — |
+| Multi-session | 86.3% | best-performing category |
+| Adversarial | 95.5% | — |
+| Commonsense | 55.2% | — |
+| Temporal | 25.6% | known gap — date arithmetic |
+
+### LongMemEval per-category
+
+| Category | Score |
+|---|---:|
+| Single-session-user | 100.0% |
+| Single-session-assistant | 80.0% |
+| Knowledge-update | 70.0% |
+| Temporal-reasoning | 55.0% |
+| Multi-session | 50.0% |
+| Single-session-preference | 20.0% |
+
+The temporal and preference categories are **structural gaps** not addressable by retrieval tuning: temporal-reasoning requires date arithmetic; single-session-preference requires preference abstraction. Both are on the roadmap.
+
+### Parameter tuning
+
+A 3-phase 66-cell grid search (2026-05-28) swept the 8 highest-impact retrieval and replay parameters. The best configuration improved LoCoMo by **+1.7 pp** to **75.5%**, with multi-session up **+3.4 pp** to **86.3%**. LME remained flat at the same keyword score, confirming the remaining gaps are structural. These defaults are now the source defaults.
+
+### Comparison notes
+
+Mem0-style systems use LLM-based extraction and cloud inference, which can score higher on benchmarks designed around explicit fact recovery. Slowave targets a different design point: local, API-free, low-latency, evolving memory. The keyword hit-rate metric used here is stricter than LLM-as-judge on open-ended categories (preference, multi-session), so real accuracy is likely higher than the numbers above.
+
+For evaluation scripts, model versions, configuration, and cosine baseline reproduction steps, see [docs/benchmarks.md](docs/benchmarks.md).
 
 ## License
 
