@@ -28,16 +28,12 @@ Slowave is a local long-term memory substrate for tools that otherwise forget be
 
 It is intentionally not just a RAG layer. Existing memory systems usually retrieve stored text or ask an LLM to rewrite memories. Slowave treats memory as a living system: sessions create episodes, replay distills patterns, time changes salience, contradiction updates beliefs, and recall itself reinforces what was useful.
 
-## Install and make it actually work
+## Install in minutes
 
-Installing the package is only step one. To run Slowave at regime with an AI client, you must do **both**:
+Slowave is a local memory service. Installing the package gives you two commands:
 
-1. **MCP wiring** — expose the `slowave_*` tools to the client.
-2. **Prompt/rules injection** — tell the client that using Slowave is part of its lifecycle.
-
-MCP alone is not enough. If the agent can see the tools but is not instructed to call them at task start, during the task, and at task end, memory will be sparse or empty.
-
-### 1. Install the package
+- `slowave`: CLI, dashboard, manual recall/debugging.
+- `slowave-mcp`: MCP server used by Claude Desktop, Claude Code, and Cline.
 
 ```bash
 pipx install slowave
@@ -45,92 +41,31 @@ pipx install slowave
 # or: brew tap mrsalty/slowave && brew install slowave
 ```
 
-Verify the commands are available:
+Verify:
 
 ```bash
+which slowave-mcp
 slowave --help
 slowave-mcp --help
 slowave stats
 ```
 
-Slowave stores data in `~/.slowave/slowave.db` by default. No Ollama, OpenRouter, or other LLM backend is required for the default brain-only path.
+Then choose your client and follow the short guide:
 
-### 2. Add the MCP server
-
-Find the installed MCP executable:
-
-```bash
-which slowave-mcp
-```
-
-Use the absolute path in your client's MCP config:
-
-```jsonc
-{
-  "mcpServers": {
-    "slowave": {
-      "command": "/absolute/path/to/slowave-mcp",
-      "env": {
-        "KMP_DUPLICATE_LIB_OK": "TRUE",
-        "OMP_NUM_THREADS": "1",
-        "TOKENIZERS_PARALLELISM": "false"
-      }
-    }
-  }
-}
-```
-
-Known integration points:
-
-| Client | MCP config | Prompt/rules injection |
-|---|---|---|
-| **Claude Code** | `~/.claude/settings.json` | global/user `~/.claude/CLAUDE.md` and/or repo `CLAUDE.md` |
-| **Cline** | Cline MCP settings JSON | global `~/.clinerules` or repo `.clinerules` |
-| **Claude Desktop** | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` | Upload [`integrations/claude-desktop/slowave.skill`](integrations/claude-desktop/slowave.skill) via Settings -> Connectors -> Customize -> Skills -> Create -> Upload |
-
-For Claude Desktop, MCP setup is necessary but not sufficient: also upload the Slowave Skill bundle at [`integrations/claude-desktop/slowave.skill`](integrations/claude-desktop/slowave.skill) from **Settings -> Connectors -> Customize -> Skills -> Create -> Upload**.
-
-For the fastest client-specific setup, start with [integrations/](integrations/). See [docs/install.md](docs/install.md) for exact setup and verification steps.
-
-### 3. Inject the required memory lifecycle
-
-Add this block to the client instruction surface listed above:
-
-```md
-## Slowave memory
-
-Use Slowave MCP tools as long-term memory for every task/session.
-
-Mandatory lifecycle:
-1. First Slowave call: `slowave_session_start(agent="<client-id>", project="<repo-or-domain-or-null>")` and store the returned `session_id`.
-2. Immediately log the user request: `slowave_event(session_id, "user_message", "<self-contained request>")`.
-3. Load working memory: `slowave_context(query="<current task or user message>", application="<client-id>", project="<repo-or-domain-or-null>", topics=[...], entities=[...], limit=8, mode="default")`.
-4. During work, call `slowave_event(session_id, type, content)` for meaningful user/assistant messages, tool calls/results, decisions, discoveries, errors, and completion/failure.
-5. End every task/session with a final `assistant_message` when applicable, `task_complete` or `task_failed`, then `slowave_session_end(session_id)`.
-
-Event content must be 1-3 self-contained sentences with the reason/result, not vague notes like "ran command".
-
-Use `slowave_remember(content, type, project)` for durable facts, preferences, decisions, constraints, procedures, warnings, lessons, tasks, open questions, or artifacts.
-
-Use `slowave_context` for default prompt priming. Use `slowave_recall` only when broad history/evidence is explicitly needed. Do not call `slowave_recall` by default after `slowave_context`.
-
-Broken-session anti-patterns:
-- Starting and ending a session without `slowave_event` calls.
-- Batching all events at the end.
-- Forgetting or changing the returned `session_id`.
-- Treating `slowave_recall` as default scoped context.
-```
-
-
-Recommended ids:
-
-| Client | `agent` / `application` |
+| Client | Setup guide |
 |---|---|
-| Claude Code | `claude-code` |
-| Cline | `cline-tui` |
-| Claude Desktop | `claude-desktop` |
+| Claude Desktop | [integrations/claude-desktop/](integrations/claude-desktop/) |
+| Claude Code | [integrations/claude-code/](integrations/claude-code/) |
+| Cline | [integrations/cline/](integrations/cline/) |
 
-See [docs/agents.md](docs/agents.md) and [docs/agent-enforcement.md](docs/agent-enforcement.md) for client-specific templates.
+**Important:** MCP setup alone is not enough. Every client needs:
+
+1. MCP configuration so the `slowave_*` tools are visible.
+2. Instruction/rules injection so the client actually calls Slowave during the task.
+
+The integration guides contain the exact MCP JSON, prompt/rules block, and verification command for each client. Start at [integrations/](integrations/) if you are unsure.
+
+Default storage: `~/.slowave/slowave.db`. No Ollama, OpenRouter, or other LLM backend is required for the default brain-only path.
 
 ## Local dashboard
 
