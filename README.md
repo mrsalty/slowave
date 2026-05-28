@@ -173,7 +173,6 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 | Guide | Covers |
 |---|---|
 | [integrations/](integrations/) | Fast client-specific setup guides for Claude Desktop, Claude Code, and Cline |
-| [docs/install.md](docs/install.md) | Install, MCP setup, prompt/rules injection, verification |
 | [docs/architecture.md](docs/architecture.md) | Brain-inspired mechanisms, data flow, storage, recall, consolidation |
 | [docs/design.md](docs/design.md) | Why the LLM path was removed from the memory loop |
 | [docs/dashboard.md](docs/dashboard.md) | Local dashboard guide |
