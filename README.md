@@ -213,7 +213,7 @@ Public benchmarks mostly test explicit fact recall. They do not measure Slowave'
 | Single-session-user | **91.4%** | ✅ strong |
 | Knowledge-update | **92.3%** | ✅ strong |
 | Single-session-assistant | **66.1%** | ✅ solid |
-| Temporal-reasoning | **67.7%** | — |
+| Temporal-reasoning | **67.7%** | ✅ solid |
 | Multi-session | 60.9% | ⚠ number aggregation gap |
 | Single-session-preference | 20.0% | ⚠ preference abstraction gap |
 
@@ -224,7 +224,7 @@ Public benchmarks mostly test explicit fact recall. They do not measure Slowave'
 | Adversarial | **82.3%** | ✅ robust |
 | Multi-session | **86.2%** | ✅ strong cross-session recall |
 | Single-session | 64.9% | ✅ solid |
-| Temporal | **56.1%** | — |
+| Temporal | **56.1%** | ✅ solid |
 | Commonsense | 27.1% | — |
 
 ### Known gaps and roadmap
