@@ -10,9 +10,18 @@ Claude Code requires **both**:
 ## 1. Install and verify Slowave
 
 ```bash
-pipx install slowave
-# or: pip install slowave
-# or: brew tap mrsalty/slowave && brew install slowave
+brew tap mrsalty/slowave
+brew install slowave
+```
+
+PyPI publishing is not enabled yet, so `pip install slowave` / `pipx install slowave` will not work until the package is published to PyPI. If you are not using Homebrew, install from source:
+
+```bash
+git clone https://github.com/mrsalty/slowave
+cd slowave
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
 ```bash

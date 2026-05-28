@@ -2,12 +2,13 @@
 
 For the fastest client-specific walkthroughs, start with [integrations/](../integrations/).
 
-Slowave has two different setup layers:
+Slowave has three setup layers:
 
-1. **Install the local binaries**: `slowave` and `slowave-mcp`.
+1. **Install local binaries**: `slowave` and `slowave-mcp`.
 2. **Wire an AI client correctly**: MCP config plus prompt/rules injection.
+3. **Run the worker**: background consolidation for durable schemas and high-quality `slowave_context`.
 
-The second layer is mandatory for real long-term memory. MCP only exposes tools; it does not make a model call them. Slowave works at regime only when the client is explicitly instructed to start sessions, log events, load context, and end sessions.
+MCP only exposes tools; it does not make a model call them. Slowave works at regime only when the client is instructed to start sessions, log events, load context, and end sessions.
 
 ## Requirements
 
@@ -20,28 +21,23 @@ The default memory path is brain-only: sentence-transformer embeddings, SQLite, 
 
 ## 1. Install
 
-### pipx recommended
-
-```bash
-pipx install slowave
-```
-
-Use `pipx` when you want the CLI and MCP server globally available without mixing dependencies into another project.
-
-### pip inside an existing environment
-
-```bash
-python3 -m venv .venv
-source .venv/bin/activate
-pip install slowave
-```
-
-### Homebrew
+### Homebrew recommended on macOS
 
 ```bash
 brew tap mrsalty/slowave
 brew install slowave
 ```
+
+### PyPI status
+
+Slowave is **not published to PyPI yet**. These commands currently fail:
+
+```bash
+pip install slowave
+pipx install slowave
+```
+
+Use Homebrew or install from source until PyPI publishing is enabled.
 
 ### From source
 
@@ -54,19 +50,24 @@ pip install -e .
 scripts/slowave-check.sh
 ```
 
+If you use the source install, use the absolute executable path inside the venv for MCP config:
+
+```bash
+pwd
+# then use: /path/to/slowave/.venv/bin/slowave-mcp
+```
+
 ## 2. Verify local commands
 
 ```bash
+which slowave
+which slowave-mcp
 slowave --help
 slowave-mcp --help
 slowave stats
 ```
 
-Find the MCP executable path. Use this absolute path in client config:
-
-```bash
-which slowave-mcp
-```
+Use the absolute path printed by `which slowave-mcp` in client config.
 
 Slowave stores data in `~/.slowave/slowave.db` by default. Set `SLOWAVE_DB=/absolute/path/to/slowave.db` only when you intentionally want a different memory database.
 

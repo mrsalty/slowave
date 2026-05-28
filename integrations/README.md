@@ -27,9 +27,18 @@ MCP alone is not enough. If the model can see Slowave but is not instructed to s
 Install Slowave once:
 
 ```bash
-pipx install slowave
-# or: pip install slowave
-# or: brew tap mrsalty/slowave && brew install slowave
+brew tap mrsalty/slowave
+brew install slowave
+```
+
+PyPI publishing is not enabled yet, so `pip install slowave` / `pipx install slowave` will not work until the package is published to PyPI. If you are not using Homebrew, install from source:
+
+```bash
+git clone https://github.com/mrsalty/slowave
+cd slowave
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e .
 ```
 
 Verify:
