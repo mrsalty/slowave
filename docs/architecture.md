@@ -45,7 +45,7 @@ Slowave is built on the observation that existing open-source agent memory syste
 - ~10ms recall latency
 - On-device, no external APIs
 - Deterministic geometry-based consolidation
-- Benchmarks: LongMemEval 70%, LoCoMo 75.5%
+- Benchmarks: LongMemEval 70.0% overall (temporal-reasoning 67.7%), LoCoMo temporal 56.1% (+39 pp vs pre-Stage-10)
 
 The legacy LLM-extraction path (Stages 0–5) is **deprecated** and preserved in code for research comparison only. See Appendix A for historical reference.
 

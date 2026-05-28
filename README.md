@@ -210,32 +210,30 @@ Public benchmarks mostly test explicit fact recall. They do not measure Slowave'
 
 | Category | Score | Notes |
 |---|---:|---|
-| Single-session-user | **100.0%** | ✅ perfect |
-| Single-session-assistant | **80.0%** | ✅ strong |
-| Knowledge-update | **70.0%** | ✅ good |
-| Temporal-reasoning | 55.0% | ⚠ date arithmetic gap |
-| Multi-session | 50.0% | ⚠ number aggregation gap |
+| Single-session-user | **91.4%** | ✅ strong |
+| Knowledge-update | **92.3%** | ✅ strong |
+| Single-session-assistant | **66.1%** | ✅ solid |
+| Temporal-reasoning | **67.7%** | ↑ improved (Stage 10) |
+| Multi-session | 60.9% | ⚠ number aggregation gap |
 | Single-session-preference | 20.0% | ⚠ preference abstraction gap |
 
 **LoCoMo** (1986q, 5 categories)
 
 | Category | Score | Notes |
 |---|---:|---|
-| Adversarial | **95.5%** | ✅ best in class |
-| Multi-session | **86.3%** | ✅ strong cross-session recall |
-| Single-session | **75.5%** | ✅ solid |
-| Commonsense | 55.2% | — |
-| Temporal | 25.6% | ⚠ date arithmetic gap (same root cause as LME) |
+| Adversarial | **82.3%** | ✅ robust |
+| Multi-session | **86.2%** | ✅ strong cross-session recall |
+| Single-session | 64.9% | ✅ solid |
+| Temporal | **56.1%** | ↑ +39 pp vs pre-Stage-10 baseline (was 16.8%) |
+| Commonsense | 27.1% | — |
 
 ### Known gaps and roadmap
 
-The ⚠ categories share two root causes — neither is a retrieval quality problem:
-
-| Gap | Root cause | Fix on roadmap |
+| Gap | Root cause | Status |
 |---|---|---|
-| Temporal (LME 55%, LoCoMo 25.6%) | Date arithmetic and relative-time reasoning ("last month") — retrieval works, answer construction fails | Timestamp-aware query expansion |
-| Multi-session LME (50%) | Summing/comparing quantities across episodes — the aggregate answer is never in any single episode | Explicit number aggregation (Stage 11a) |
-| Preference LME (20%) | Implicit preferences not abstracted into queryable facts — keyword scoring caps this category structurally | Preference-extraction schema layer |
+| Temporal date arithmetic (LME) | "How many days between X and Y?" requires arithmetic over two retrieved timestamps — no retrieval fix can solve this | Open — answer-construction layer (Stage 11a) |
+| Multi-session LME (60.9%) | Summing/comparing quantities across episodes — aggregate answer is never in any single episode | Open — explicit number aggregation |
+| Preference LME (20%) | Implicit preferences not abstracted into queryable facts — keyword scoring caps this category structurally | Open — preference-extraction schema layer |
 
 ### Language support
 
