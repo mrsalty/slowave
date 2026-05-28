@@ -1,5 +1,10 @@
 # Using Slowave with coding agents
 
+For strict, agent-specific rules that make Cline, Claude Code, Cursor,
+Windsurf, Codex-style CLIs, and Gemini-style CLIs invoke Slowave consistently,
+see [agent-enforcement.md](agent-enforcement.md). This page covers the general
+MCP setup and tool behavior.
+
 Slowave exposes an MCP server (`slowave-mcp`) that any MCP-aware agent can use as a tool.
 
 ## Register the MCP server
@@ -27,10 +32,11 @@ Slowave exposes an MCP server (`slowave-mcp`) that any MCP-aware agent can use a
 
 ```
 You have access to Slowave long-term memory via slowave_* MCP tools.
-- Task start: call slowave_context(query=<current task/chat message>,
-  application=<your-agent-or-app>, topics=<optional high-level topics>) to load a
-  small working-memory brief, then slowave_session_start(agent=<your-agent-id>)
-  to get a session_id.
+- Task start: call slowave_session_start(agent=<your-agent-id>) to get a
+  session_id, log the user request with slowave_event(session_id,
+  "user_message", ...), then call slowave_context(query=<current task/chat
+  message>, application=<your-agent-or-app>, topics=<optional high-level
+  topics>) to load a small working-memory brief.
 - Coding agents may additionally pass project=<workspace-or-repo-name> as an
   environmental cue on slowave_context/session/logging calls, but project is not
   required for generic chatbots and is not the primary context key.
@@ -38,7 +44,8 @@ You have access to Slowave long-term memory via slowave_* MCP tools.
   response — do not skip turns or wait until something seems "important".
 - Durable decisions/facts: call slowave_remember(content, project=<name>) — high-salience path,
   no session_id required.
-- Lookups: slowave_recall(query, project=<name>). Cite returned ids as [sch_xxx] or [epi_xxx].
+- Lookups: slowave_recall(query). Cite returned ids as [sch_xxx] or [epi_xxx].
+  Do not call recall by default after context; recall is broad search/evidence.
 - Task end: call slowave_session_end(session_id) to encode the session into memory.
 ```
 
@@ -53,9 +60,10 @@ application = "claude-code"
 # query/topics/entities instead.
 project = basename(cwd)   # e.g. "my-repo", optional
 
-# 2. Load prior memory and start session
-slowave_context(query=current_task, application=application)  →  working-memory brief
+# 2. Start session, log the user turn, then load prior working memory
 slowave_session_start(agent="claude-code", project=project)  →  session_id
+slowave_event(session_id, "user_message", current_task)
+slowave_context(query=current_task, application=application, project=project)  →  working-memory brief
 
   slowave_event(session_id, "user_message",      "…")
   slowave_event(session_id, "assistant_message", "…")
@@ -107,9 +115,9 @@ See [dashboard.md](dashboard.md) for the full dashboard guide.
 | `slowave_consolidate()` | Trigger consolidation manually |
 | `slowave_stats()` | Episode / prototype / schema counts |
 
-**Event types:** `user_message` `assistant_message` `tool_call` `tool_result` `decision` `error` `task_complete` `task_failed`
+**Event types:** `user_message` `assistant_message` `tool_call` `tool_result` `decision` `discovery` `error` `task_complete` `task_failed`
 
-**Memory types for `slowave_remember`:** `fact` `preference` `decision` `constraint` `procedure` `lesson` `warning`
+**Memory types for `slowave_remember`:** `fact` `preference` `decision` `constraint` `procedure` `task` `open_question` `warning` `lesson` `artifact`
 
 ## Environment variables
 

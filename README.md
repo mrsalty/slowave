@@ -99,14 +99,15 @@ Add to the agent's system prompt:
 
 ```
 You have access to Slowave long-term memory via slowave_* MCP tools.
-At task start: call slowave_context with the current task/chat query (load a small working-memory brief), then slowave_session_start (get session_id).
-During the task: call slowave_event(session_id, ...) for EVERY user message and EVERY assistant response — do not skip turns.
+At task start: call slowave_session_start (get session_id), log the user request with slowave_event, then call slowave_context with the current task/chat query to load a small working-memory brief.
+During the task: call slowave_event(session_id, ...) for meaningful user messages, assistant responses, tool results, decisions, errors, and completion/failure.
 For durable decisions/facts: call slowave_remember (no session_id needed).
-For lookups: call slowave_recall.
+For broad history/evidence lookups: call slowave_recall. Do not use recall as default prompt priming after context.
 At task end: call slowave_session_end(session_id).
 ```
 
 → [docs/agents.md](docs/agents.md) for session lifecycle, all tools, and event types.
+→ [docs/agent-enforcement.md](docs/agent-enforcement.md) for Cline, Claude Code, Cursor, Windsurf, Codex-style CLI, and Gemini-style CLI rule templates that make agents invoke Slowave consistently.
 
 `slowave_context` is cue-aware and conservative: it treats `project` as one
 optional environmental cue, but generic chatbots can pass `query`, `topics`, and
@@ -121,6 +122,7 @@ are suppressed from default prompt injection.
 | [docs/design.md](docs/design.md) | Why LLM was removed from the memory loop — the pivot and its data |
 | [docs/architecture.md](docs/architecture.md) | How it works — mechanisms, data flow, storage layout |
 | [docs/agents.md](docs/agents.md) | MCP integration, session lifecycle, environment variables |
+| [docs/agent-enforcement.md](docs/agent-enforcement.md) | Rule templates for forcing coding agents to call Slowave consistently |
 | [docs/dashboard.md](docs/dashboard.md) | Local web dashboard, schema graph, process/DB health monitoring |
 | [docs/install.md](docs/install.md) | All install paths including brew, conda, from source |
 | [docs/benchmarks.md](docs/benchmarks.md) | Reproduce the numbers, ablation flags |
