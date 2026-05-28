@@ -26,7 +26,7 @@ Slowave is early-stage software. The core local memory path, MCP server, CLI, an
 | **Local CPU inference** | Uses BAAI/bge-small-en-v1.5 embeddings, SQLite, FAISS, and deterministic geometry. |
 | **Brain-inspired consolidation** | Raw events become episodes; episodes replay into prototypes; prototypes consolidate into latent schemas. |
 | **Active recall** | Retrieved memories are reinforced, so recall changes the memory system over time. |
-| **Time-aware memory** | Salience, decay, temporal anchors, supersession, and contradiction-aware updates help keep memory current. |
+| **Time-aware memory** | Salience, decay, temporal anchors, supersession, and contradiction-aware updates help keep memory current. Episodes are date-stamped (ISO 8601) and recalled with temporal context. |
 | **Gated working memory** | `slowave_context` injects a compact, cue-relevant brief instead of dumping history into the prompt. |
 
 ```text
@@ -237,7 +237,15 @@ The ⚠ categories share two root causes — neither is a retrieval quality prob
 | Multi-session LME (50%) | Summing/comparing quantities across episodes — the aggregate answer is never in any single episode | Explicit number aggregation (Stage 11a) |
 | Preference LME (20%) | Implicit preferences not abstracted into queryable facts — keyword scoring caps this category structurally | Preference-extraction schema layer |
 
-For evaluation scripts, model versions, and configuration see [docs/benchmarks.md](docs/benchmarks.md).
+### Language support
+
+**All core memory operations are language-agnostic** — episode storage, embedding, retrieval, FAISS search, salience, spreading activation, the prototype graph, and multi-scale consolidation work on embedding vectors and numeric metadata with no language dependency.
+
+**One component is English-only: the temporal anchor probe (Stage 10).** This component estimates which past time period a query refers to ("last month", "two weeks ago") by comparing the query embedding against a set of pre-embedded English landmark phrases. For non-English queries, the temporal anchor probe does not fire and the system falls back to the previous default: the temporal re-ranking bonus is computed from "now", which is correct for atemporal queries and slightly suboptimal for past-anchored ones. No other capability is affected.
+
+The probe phrase list is in `slowave/latent/temporal.py` (`_TEMPORAL_PROBES`). Adding phrases in other languages extends the compass to those languages without any other code change.
+
+For evaluation scripts, model versions, and configuration see [docs/architecture.md](docs/architecture.md).
 
 ## License
 

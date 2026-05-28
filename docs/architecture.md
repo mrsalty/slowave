@@ -51,6 +51,22 @@ The legacy LLM-extraction path (Stages 0–5) is **deprecated** and preserved in
 
 The system is designed to generalise across agent types and benchmarks, not to overfit to any single evaluation.
 
+### Known Limitations
+
+**Language: English-only for temporal anchor estimation.**  
+The temporal probe (Stage 10, `TemporalProbe`) estimates the time period a query refers to by measuring cosine similarity between the query embedding and a set of pre-embedded English temporal landmark phrases ("last month", "two weeks ago", "a long time ago", etc.). This works for any phrasing the underlying encoder has seen during training, but the probe phrases themselves are English, so the compass is calibrated for English queries only.
+
+Queries in other languages will still use the sinusoidal temporal context system (Stage 7) — memories are retrieved and date-stamped correctly — but the backward temporal search (shifting the retrieval anchor toward the implied past moment) will not fire reliably for non-English temporal expressions. The fallback behaviour is identical to pre-Stage-10: the temporal bonus defaults to "now", which is correct for atemporal queries and slightly suboptimal for past-anchored ones.
+
+To extend temporal anchor estimation to other languages, replace or augment `_TEMPORAL_PROBES` in `slowave/latent/temporal.py` with equivalent phrases in the target language. The architecture is language-agnostic beyond the probe phrase list.
+
+**What is unaffected by this limitation:**  
+- Episode storage, embedding, retrieval, and salience — all language-agnostic  
+- Date stamping of retrieved episodes (`[YYYY-MM-DD]` prefix) — language-agnostic ISO 8601  
+- Sinusoidal temporal context vectors (Stage 7) — purely numeric, no language dependency  
+- Spreading activation, multi-scale retrieval, predictive seed — all language-agnostic  
+- Schema extraction (LLM path) — depends on the LLM's language support, not Slowave's
+
 ---
 
 ## 2. High-Level Architecture

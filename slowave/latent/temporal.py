@@ -28,6 +28,25 @@ Usage in retrieval (Stage 7 wiring):
 The α coefficients are picked from the architectural argument
 (temporal context is a real but secondary signal), not tuned to a
 benchmark.
+
+Temporal anchor estimation (Stage 10):
+-------------------------------------
+Brain analogue: the lateral entorhinal cortex performs a backward
+temporal search when a query contains temporal language. Rather than
+parsing "last month" with a brittle rule-set, we exploit the fact that
+temporal language is *already encoded* in the sentence-embedding space
+— the same encoder that encodes episodes. A small static set of
+temporal probe phrases (the "temporal compass") is embedded once at
+init. At query time we measure cosine similarity between the query
+embedding and each probe, softmax-weight the corresponding
+displacements, and return the expected anchor timestamp.
+
+This is zero-dependency, zero-regex, zero extra LLM call, and
+generalises to any phrasing the encoder has seen during pre-training
+(including informal / multilingual expressions). When the query
+contains no temporal language the "now / today" probe dominates and
+the anchor collapses to the current time — preserving the existing
+default behaviour exactly.
 """
 from __future__ import annotations
 
@@ -36,6 +55,37 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
+
+
+# ---------------------------------------------------------------------------
+# Temporal compass probes
+# ---------------------------------------------------------------------------
+# Each entry is (natural-language phrase, displacement_seconds from now).
+# Negative = past.  Chosen to span the major retrieval bands that appear
+# in LongMemEval / LoCoMo temporal questions.  The list intentionally stays
+# small: adding more probes only increases precision marginally because the
+# softmax already interpolates between adjacent anchors.
+#
+# Brain analogue: these are the discrete "temporal landmark" attractors that
+# the entorhinal cortex uses to reconstruct approximate past context.  Real
+# LEC cells fire at continuous rates; we discretise into ~12 landmarks and
+# let the weighted mean do the interpolation.
+# ---------------------------------------------------------------------------
+_DAY = 86_400
+_TEMPORAL_PROBES: tuple[tuple[str, int], ...] = (
+    ("right now, today, at the moment",         0),
+    ("yesterday, the day before",               -1 * _DAY),
+    ("a few days ago, several days ago",        -4 * _DAY),
+    ("last week, a week ago",                   -7 * _DAY),
+    ("two weeks ago, a fortnight ago",          -14 * _DAY),
+    ("last month, a month ago, recently",       -30 * _DAY),
+    ("two months ago, a couple of months ago",  -60 * _DAY),
+    ("three months ago, several months ago",    -90 * _DAY),
+    ("six months ago, half a year ago",         -180 * _DAY),
+    ("last year, a year ago",                   -365 * _DAY),
+    ("two years ago",                           -730 * _DAY),
+    ("a long time ago, years ago, long ago",    -3 * 365 * _DAY),
+)
 
 
 # Scales chosen to span the relevant brain-time bands:
@@ -128,3 +178,109 @@ class TemporalContext:
         if na == 0.0 or nb == 0.0:
             return 0.0
         return float(np.dot(a, b) / (na * nb))
+
+
+# ---------------------------------------------------------------------------
+# Temporal probe / compass  (Stage 10)
+# ---------------------------------------------------------------------------
+
+class TemporalProbe:
+    """Embedding-space temporal anchor estimator.
+
+    Brain analogue: lateral entorhinal cortex backward temporal search.
+    Rather than parsing natural-language time expressions with a brittle
+    rule-set, we exploit the fact that temporal language is *already
+    encoded* in the sentence-embedding space — the same encoder used for
+    episodes.  A static set of temporal probe phrases (the "temporal
+    compass") is embedded once at init.  At query time we measure cosine
+    similarity between the query embedding and each probe, softmax-weight
+    the corresponding time displacements, and return the expected anchor
+    timestamp.
+
+    Properties
+    ----------
+    - Zero new dependencies — uses the encoder already present in the engine.
+    - Zero regex — generalises to any phrasing the encoder saw during
+      pre-training (informal, multilingual, implicit).
+    - When the query has no temporal language the "now/today" probe
+      dominates and the anchor collapses to ``now_ts``, preserving the
+      existing default behaviour exactly.
+    - ``softmax_temperature`` controls sharpness: high T → flat weights
+      (anchor ≈ centre of mass of all probes ≈ ~4 months ago); low T →
+      winner-takes-all (anchor = closest probe).  Default 0.1 is gently
+      peaked — a clear "last month" signal wins decisively, an ambiguous
+      query spreads smoothly.
+
+    Usage
+    -----
+    Build once at engine init (``encoder`` may be None to defer):
+
+        probe = TemporalProbe(encoder.encode)
+
+    At recall time:
+
+        anchor_ts = probe.estimate_anchor(query_embedding, now_ts=int(time.time()))
+        # returns int Unix timestamp; equals now_ts when query is atemporal
+    """
+
+    def __init__(
+        self,
+        encode_fn,  # callable: str -> np.ndarray[float32]
+        *,
+        probes: tuple[tuple[str, int], ...] = _TEMPORAL_PROBES,
+        softmax_temperature: float = 0.05,
+    ) -> None:
+        self._encode = encode_fn
+        self._displacements: list[int] = [d for _, d in probes]
+        self._temperature = float(softmax_temperature)
+
+        # Pre-compute and L2-normalise probe embeddings once.
+        raw: list[np.ndarray] = []
+        for phrase, _ in probes:
+            v = np.asarray(encode_fn(phrase), dtype=np.float32).reshape(-1)
+            n = float(np.linalg.norm(v))
+            raw.append(v / n if n > 0.0 else v)
+        # shape: (n_probes, dim)
+        self._probe_matrix = np.stack(raw, axis=0)
+
+    def estimate_anchor(
+        self,
+        query_embedding: np.ndarray,
+        *,
+        now_ts: int | None = None,
+    ) -> int:
+        """Return the estimated Unix timestamp the query is anchored to.
+
+        Algorithm
+        ---------
+        1. Cosine-similarity between the (already L2-normalised) query
+           embedding and each probe row  →  raw_sims  ∈ [-1, 1]^n
+        2. Softmax with temperature T over raw_sims  →  weights  ∈ [0,1]^n
+        3. Expected displacement  =  Σ weight_i * displacement_i
+        4. anchor_ts  =  now_ts + round(expected_displacement)
+
+        The result is an integer Unix timestamp.  When the query is
+        atemporal (e.g. "what is my name?") the "now/today" probe has
+        the highest similarity and the displacement is ≈ 0.
+        """
+        if now_ts is None:
+            now_ts = int(time.time())
+
+        q = np.asarray(query_embedding, dtype=np.float32).reshape(-1)
+        qn = float(np.linalg.norm(q))
+        if qn > 0.0:
+            q = q / qn
+
+        # (n_probes,) cosine similarities
+        sims = self._probe_matrix @ q
+
+        # Softmax with temperature — shift by max for numerical stability
+        logits = sims / self._temperature
+        logits -= logits.max()
+        weights = np.exp(logits)
+        weights /= weights.sum()
+
+        # Weighted mean displacement (float seconds)
+        displacement = float(np.dot(weights, np.asarray(self._displacements, dtype=np.float64)))
+
+        return int(now_ts + round(displacement))

@@ -77,6 +77,12 @@ class RetrievalConfig:
     # default behaviour.
     use_temporal: bool = True
     temporal_weight: float = 0.25
+    # Stage 10 — temporal anchor override.  When set (Unix timestamp),
+    # the temporal-context query vector is computed from this timestamp
+    # instead of the current time.  Set by the engine when the query
+    # embedding implies a past-anchored search (e.g. "last month",
+    # "two weeks ago").  None → use now(), preserving legacy behaviour.
+    temporal_anchor_ts: int | None = None
 
     # Stage 9 — multi-scale retrieval. When True the pipeline queries
     # both the fine (CA3-like) and coarse (CA1-like) prototype graphs
@@ -321,7 +327,13 @@ class RetrievalPipeline:
 
         temporal_bonus_by_id: dict[int, float] = {}
         if self.cfg.use_temporal and self.cfg.temporal_weight > 0.0 and episodes:
-            q_temporal = self._temporal.now()
+            # Stage 10: use the caller-supplied anchor timestamp when the
+            # query is past-anchored (e.g. "last month").  Fall back to
+            # now() so existing behaviour is preserved for atemporal queries.
+            if self.cfg.temporal_anchor_ts is not None:
+                q_temporal = self._temporal.encode(self.cfg.temporal_anchor_ts)
+            else:
+                q_temporal = self._temporal.now()
             ep_ts = np.asarray([int(m.ts) for m in episodes], dtype=np.int64)
             ep_temporal = self._temporal.encode_many(ep_ts)
             sims = ep_temporal @ q_temporal

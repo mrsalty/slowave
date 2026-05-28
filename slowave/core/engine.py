@@ -7,6 +7,7 @@ extraction). Public API for CLI and MCP integrations.
 
 from __future__ import annotations
 
+import dataclasses
 import logging
 import time
 import uuid
@@ -21,9 +22,10 @@ from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate, Worki
 from slowave.latent.episodic_store import EpisodicStore, EpisodicStoreConfig
 from slowave.latent.graph_manager import GraphManager
 from slowave.latent.replay_engine import ReplayEngine
-from slowave.latent.retrieval import RetrievalPipeline
+from slowave.latent.retrieval import RetrievalConfig, RetrievalPipeline
 from slowave.latent.salience import SalienceEngine
 from slowave.latent.semantic_store import SemanticStore, SemanticStoreConfig
+from slowave.latent.temporal import TemporalProbe
 from slowave.latent.transition_model import TransitionModel, TransitionModelConfig
 from slowave.latent.types import RetrievedMemorySet
 from slowave.llm import make_backend
@@ -36,6 +38,28 @@ from slowave.symbolic.schema_extractor import SchemaExtractor
 from slowave.symbolic.schema_store import Schema, SchemaStore
 
 log = logging.getLogger(__name__)
+
+
+def _prefix_date(text: str, ts: int) -> str:
+    """Prepend an ISO date tag to an episode's text representation.
+
+    Format: "[YYYY-MM-DD] <text>"
+
+    Brain analogue: episodic memories are always bound to their temporal
+    context — recalling an event recalls *when* it happened as part of
+    the same trace.  Surfacing the date in the text lets the downstream
+    LLM (and keyword scorers) answer "when" and "how long ago" questions
+    without needing a separate lookup.
+
+    Falls back silently on any conversion error so a bad timestamp never
+    breaks recall.
+    """
+    from datetime import datetime, timezone
+    try:
+        date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
+        return f"[{date_str}] {text}" if text else f"[{date_str}]"
+    except Exception:
+        return text
 
 
 def _default_memory_layer(schema_type: str) -> str:
@@ -160,6 +184,17 @@ class SlowaveEngine:
                 judge=judge,
                 encoder=self.encoder,
             )
+
+        # Stage 10 — temporal probe (embedding-space temporal compass).
+        # Built once if an encoder is available; None otherwise (no-op at
+        # recall time).  The probe pre-embeds 12 temporal-landmark phrases
+        # so estimate_anchor() is just 12 dot products at query time.
+        self._temporal_probe: TemporalProbe | None = None
+        if self.encoder is not None:
+            try:
+                self._temporal_probe = TemporalProbe(self.encoder.encode)
+            except Exception as e:
+                log.warning("temporal probe init failed (will use now() fallback): %s", e)
 
         # rebuild FAISS indices from DB
         self.episodic.reset_faiss_from_db()
@@ -292,7 +327,35 @@ class SlowaveEngine:
             raise RuntimeError("recall requires an encoder; cfg.disable_encoder=True")
         self.refresh_indices()
         q = self.encoder.encode(query)
-        retrieved: RetrievedMemorySet = self.retrieval.retrieve(q)
+
+        # Stage 10 — temporal anchor estimation.
+        # Use the temporal compass to infer whether the query is anchored
+        # to a past moment ("last month", "two weeks ago", etc.).  When an
+        # anchor is detected we clone the retrieval config with the estimated
+        # timestamp so the sinusoidal temporal bonus rewards memories from
+        # that period instead of the current moment.  When the query is
+        # atemporal the anchor collapses to now, giving identical behaviour
+        # to the previous pipeline.
+        retrieval_pipeline = self.retrieval
+        if self._temporal_probe is not None:
+            now_ts = int(time.time())
+            anchor_ts = self._temporal_probe.estimate_anchor(q, now_ts=now_ts)
+            if anchor_ts != now_ts:
+                # Build a one-shot config override — only temporal_anchor_ts
+                # differs; all other knobs are inherited from the engine cfg.
+                anchored_cfg = dataclasses.replace(
+                    self.cfg.retrieval,
+                    temporal_anchor_ts=anchor_ts,
+                )
+                retrieval_pipeline = RetrievalPipeline(
+                    episodic=self.episodic,
+                    semantic=self.semantic,
+                    graph=self.graph,
+                    cfg=anchored_cfg,
+                    transition_model=self.transition_model,
+                )
+
+        retrieved: RetrievedMemorySet = retrieval_pipeline.retrieve(q)
 
         # Schema-first semantic recall, plus prototype-associated schemas.
         schema_scores: dict[int, float] = {}
@@ -342,10 +405,18 @@ class SlowaveEngine:
         episode_dicts = []
         for _score, m in scored_pairs[:top_k]:
             ep = ep_by_id.get(m.id)
+            raw_text = ep.content_text if ep else ""
+            # Stage 10 — prepend the episode's calendar date so the
+            # downstream LLM (or keyword scorer) can reason about *when*
+            # an event happened.  Format: "[YYYY-MM-DD] <text>".
+            # m.ts is a Unix timestamp stored at ingest time; when the
+            # session timestamp was patched (e.g. LoCoMo backfill) the
+            # stored ts reflects the real conversation date.
+            dated_text = _prefix_date(raw_text, int(m.ts))
             episode_dicts.append(
                 {
                     "id": m.id,
-                    "content_text": ep.content_text if ep else "",
+                    "content_text": dated_text,
                     "salience": float(m.salience),
                     "ts": int(m.ts),
                     "schema_prior_boost": round(float(prior_boost.get(int(m.id), 0.0)), 4),
