@@ -1,21 +1,28 @@
-# Using Slowave with coding agents
+# Using Slowave with AI clients
 
-For strict, agent-specific rules that make Cline, Claude Code, Cursor,
-Windsurf, Codex-style CLIs, and Gemini-style CLIs invoke Slowave consistently,
-see [agent-enforcement.md](agent-enforcement.md). This page covers the general
-MCP setup and tool behavior.
+Slowave exposes an MCP server (`slowave-mcp`) so MCP-aware clients can use local long-term memory. It is not specific to coding agents: the same memory system can be used from Claude Code, Cline, and Claude Desktop.
 
-Slowave exposes an MCP server (`slowave-mcp`) that any MCP-aware agent can use as a tool.
+The important rule is:
+
+> MCP makes Slowave tools available; prompt/rules injection makes the client use them.
+
+For the fastest setup, use the client-specific guides in [integrations/](../integrations/). For copy/paste client rules, see [agent-enforcement.md](agent-enforcement.md). For installation and MCP config locations, see [install.md](install.md). For Claude Desktop, the tested instruction path is a Skill upload after MCP setup.
+
+## Supported public examples
+
+| Client | `agent` / `application` | MCP config | Instruction surface |
+|---|---|---|---|
+| Claude Code | `claude-code` | `~/.claude/settings.json` | global/user `~/.claude/CLAUDE.md` and/or repo `CLAUDE.md` |
+| Cline | `cline-tui` | Cline MCP settings JSON | global `~/.clinerules` or repo `.clinerules` |
+| Claude Desktop | `claude-desktop` | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json` | Upload [`integrations/claude-desktop/slowave.skill`](../integrations/claude-desktop/slowave.skill) via Settings -> Connectors -> Customize -> Skills -> Create -> Upload |
 
 ## Register the MCP server
 
 ```jsonc
-// Claude Code: ~/.claude/settings.json
-// Cline: cline_mcp_settings.json  |  Cursor: .cursor/mcp.json
 {
   "mcpServers": {
     "slowave": {
-      "command": "/full/path/to/.venv/bin/slowave-mcp",
+      "command": "/absolute/path/to/slowave-mcp",
       "env": {
         "KMP_DUPLICATE_LIB_OK": "TRUE",
         "OMP_NUM_THREADS": "1",
@@ -26,150 +33,125 @@ Slowave exposes an MCP server (`slowave-mcp`) that any MCP-aware agent can use a
 }
 ```
 
-`SLOWAVE_DB` defaults to `~/.slowave/slowave.db` if omitted. The other three env vars suppress macOS OpenMP warnings from PyTorch/FAISS.
+`SLOWAVE_DB` defaults to `~/.slowave/slowave.db` if omitted. Set it only when you intentionally want a different shared memory database.
 
-## System prompt addition
+## Required lifecycle
 
-```
-You have access to Slowave long-term memory via slowave_* MCP tools.
-- Task start: call slowave_session_start(agent=<your-agent-id>) to get a
-  session_id, log the user request with slowave_event(session_id,
-  "user_message", ...), then call slowave_context(query=<current task/chat
-  message>, application=<your-agent-or-app>, topics=<optional high-level
-  topics>) to load a small working-memory brief.
-- Coding agents may additionally pass project=<workspace-or-repo-name> as an
-  environmental cue on slowave_context/session/logging calls, but project is not
-  required for generic chatbots and is not the primary context key.
-- During the task: call slowave_event(session_id, ...) for EVERY user message and EVERY assistant
-  response — do not skip turns or wait until something seems "important".
-- Durable decisions/facts: call slowave_remember(content, project=<name>) — high-salience path,
-  no session_id required.
-- Lookups: slowave_recall(query). Cite returned ids as [sch_xxx] or [epi_xxx].
-  Do not call recall by default after context; recall is broad search/evidence.
-- Task end: call slowave_session_end(session_id) to encode the session into memory.
+At the start of each task or chat session:
+
+```text
+slowave_session_start(agent=<client-id>, project=<repo-or-domain-or-null>) -> session_id
+slowave_event(session_id, "user_message", <self-contained user request>)
+slowave_context(query=<current task/message>, application=<client-id>, project=<optional repo/domain>, topics=[...], entities=[...], limit=8, mode="default")
 ```
 
-## Session lifecycle
+During the task:
 
-```
-# 1. Build a cue from the current task/chat state.
-current_task = "Fix the execute_sql Pydantic AI retry bug"
-application = "claude-code"
-
-# Optional coding/workspace cue. Generic chatbots can omit this and rely on
-# query/topics/entities instead.
-project = basename(cwd)   # e.g. "my-repo", optional
-
-# 2. Start session, log the user turn, then load prior working memory
-slowave_session_start(agent="claude-code", project=project)  →  session_id
-slowave_event(session_id, "user_message", current_task)
-slowave_context(query=current_task, application=application, project=project)  →  working-memory brief
-
-  slowave_event(session_id, "user_message",      "…")
-  slowave_event(session_id, "assistant_message", "…")
-  slowave_event(session_id, "decision",          "We'll use SQLite.")
-  slowave_remember("We use SQLite for this project", type="decision", project=project)
-
-slowave_session_end(session_id)   # fast, no LLM — episodes form immediately
+```text
+slowave_event(session_id, "assistant_message", ...)
+slowave_event(session_id, "tool_call", ...)
+slowave_event(session_id, "tool_result", ...)
+slowave_event(session_id, "decision", ...)
+slowave_event(session_id, "discovery", ...)
+slowave_event(session_id, "error", ...)
 ```
 
-Consolidation (prototype clustering → latent schemas) is decoupled. Run in the background:
+For durable explicit memories:
 
-```bash
-slowave worker --interval 300 &   # every 5 min, detached
-slowave worker --once             # single pass (after a long session)
+```text
+slowave_remember(content=<fact/preference/decision/etc>, type=<type>, project=<optional scope>)
 ```
+
+At the end:
+
+```text
+slowave_event(session_id, "task_complete", ...)
+# or slowave_event(session_id, "task_failed", ...)
+slowave_session_end(session_id)
+```
+
+Do **not** call `slowave_recall` by default after `slowave_context`. `slowave_context` is the scoped working-memory injection path. `slowave_recall` is broad memory/evidence search and can intentionally return verbose or cross-domain history.
+
+## MCP tools
+
+| Tool | Description |
+|---|---|
+| `slowave_session_start(agent?, project?)` | Begin a session; returns `session_id` |
+| `slowave_event(session_id, type, content)` | Log user/assistant/tool/decision/error/completion events |
+| `slowave_session_end(session_id)` | Close the session and form episodes immediately |
+| `slowave_context(query?, application?, topics?, entities?, project?, limit?, mode?)` | Gated working-memory brief for prompt injection |
+| `slowave_recall(query, top_k?, evidence?)` | Broad semantic recall with optional evidence |
+| `slowave_remember(content, type?, project?)` | Explicit high-salience durable memory |
+| `slowave_consolidate()` | Trigger replay/consolidation manually |
+| `slowave_stats()` | Episode/prototype/schema counts |
+
+Common event types:
+
+```text
+user_message
+assistant_message
+tool_call
+tool_result
+decision
+discovery
+error
+task_complete
+task_failed
+```
+
+Memory types for `slowave_remember`:
+
+```text
+fact
+preference
+decision
+constraint
+procedure
+task
+open_question
+warning
+lesson
+artifact
+```
+
+## Working-memory context gate
+
+`slowave_context` is intentionally stricter than `slowave_recall`. Recall is a broad hippocampal/associative lookup; context is the small set of memories that enters the downstream client prompt.
+
+The gate:
+
+1. collects candidate schemas from query/topic/entity cues, optional project/domain cues, lexical matches, embedding matches, and salience;
+2. suppresses memories that should not enter default prompt context, such as transcript-like summaries, non-injectable schemas, review-needed schemas, and assistant/tool-result summaries;
+3. computes activation from cue overlap, salience, stability, memory layer, source quality, and optional project/domain match;
+4. enforces a small working-memory budget before rendering compact bullets.
+
+Example for Claude Desktop or another generic chat surface:
+
+```python
+slowave_context(
+    query="Can you help me plan meals for next week?",
+    application="claude-desktop",
+    topics=["food", "meal planning"],
+)
+```
+
+Example for a coding task:
+
+```python
+slowave_context(
+    project="my-repo",
+    query="Fix the execute_sql Pydantic AI retry bug",
+    application="claude-code",
+)
+```
+
+Use `mode="debug"` to inspect activation traces and suppression reasons while tuning. Use `slowave_recall` when the user explicitly asks to search memory or inspect provenance.
 
 ## Monitor with the local dashboard
-
-Run the dashboard while using an agent to inspect live memory health, MCP
-processes, sessions, schemas, DB integrity, recall results, and the schema graph:
 
 ```bash
 slowave dashboard
 # open http://127.0.0.1:8765
 ```
 
-If the default port is busy:
-
-```bash
-slowave dashboard --port 8766 --no-open
-```
-
-The **Processes** tab is useful when multiple Cline/IDE sessions spawn separate
-`slowave-mcp` processes. The **Schema Graph** tab visualizes explicit schema
-relations and can be filtered by status, project, and minimum salience.
-
-See [dashboard.md](dashboard.md) for the full dashboard guide.
-
-## MCP tools
-
-| Tool | Description |
-|---|---|
-| `slowave_session_start(agent?, project?)` | Begin a session, returns `session_id` |
-| `slowave_event(session_id, type, content)` | Log a turn |
-| `slowave_session_end(session_id)` | Close session — fast, no LLM |
-| `slowave_recall(query, top_k?, evidence?)` | Semantic recall |
-| `slowave_remember(content, type?, project?)` | Explicit durable memory |
-| `slowave_context(query?, application?, topics?, entities?, project?, limit?, mode?)` | Gated working-memory brief for task/chat start |
-| `slowave_consolidate()` | Trigger consolidation manually |
-| `slowave_stats()` | Episode / prototype / schema counts |
-
-**Event types:** `user_message` `assistant_message` `tool_call` `tool_result` `decision` `discovery` `error` `task_complete` `task_failed`
-
-**Memory types for `slowave_remember`:** `fact` `preference` `decision` `constraint` `procedure` `task` `open_question` `warning` `lesson` `artifact`
-
-## Environment variables
-
-| Variable | Default | Notes |
-|---|---|---|
-| `SLOWAVE_DB` | `~/.slowave/slowave.db` | SQLite file path |
-| `SLOWAVE_PROJECT` | *(none)* | Optional fallback workspace/project cue for coding-agent integrations |
-| `SLOWAVE_MODEL` | `qwen2.5:7b-instruct` | Only used with `--schema-mode llm` |
-| `SLOWAVE_OLLAMA_URL` | `http://localhost:11434` | Only used with `--schema-mode llm` |
-| `OPENROUTER_API_KEY` | *(none)* | Cloud LLM backend (legacy) |
-
-For the brain-only default, only `SLOWAVE_DB` is relevant.
-
-## Working-memory context gate
-
-`slowave_context` is intentionally stricter than `slowave_recall`. Recall is a
-broad hippocampal/associative lookup; context is the small set of memories that
-enters the downstream agent's active prompt. The gate uses a brain-like
-activation/inhibition step:
-
-1. collect candidate schemas from global salience, FTS/embedding matches for the
-   current query/topic/entity cue, and optional environment cues such as
-   project/workspace;
-2. suppress memories that should not enter default prompt context, such as raw
-   transcript-like `User:`/`Assistant:` summaries, `latent` schemas, schemas
-   marked `injectable=false`, `needs_review`, or assistant/tool-result summaries;
-3. compute activation from cue/topic/entity overlap, salience, stability,
-   memory layer, source quality, and optional project match;
-4. enforce a small working-memory budget before rendering compact bullets.
-
-For generic chatbots, pass the current user message as `query` and optional
-high-level `topics`/`entities`:
-
-```python
-slowave_context(
-    query="Can you help me plan meals for next week?",
-    application="chatbot",
-    topics=["food", "meal planning"],
-)
-```
-
-For coding agents, `project` can be supplied as an extra environmental cue, but
-it is not required and is not a hardcoded namespace rule:
-
-```python
-slowave_context(
-    project="cimmeria",
-    query="Fix the execute_sql Pydantic AI retry bug",
-    application="cline-tui",
-)
-```
-
-Use `mode="debug"` to inspect activation traces and suppression reasons while
-tuning the memory system. Use `slowave_recall` when the user explicitly asks to
-search memory or inspect verbose evidence.
+The dashboard shows memory stats, DB health, local Slowave/MCP processes, schemas, recall results, and schema graph filters.

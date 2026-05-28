@@ -1,0 +1,107 @@
+# Claude Code + Slowave
+
+Goal: configure Claude Code with Slowave long-term memory in under 30 minutes.
+
+Claude Code requires **both**:
+
+1. MCP server configuration so the `slowave_*` tools are available.
+2. `CLAUDE.md` instructions so Claude Code consistently follows the memory lifecycle.
+
+## 1. Install and verify Slowave
+
+```bash
+pipx install slowave
+# or: pip install slowave
+# or: brew tap mrsalty/slowave && brew install slowave
+```
+
+```bash
+which slowave
+which slowave-mcp
+slowave --help
+slowave-mcp --help
+slowave stats
+```
+
+Copy the absolute path printed by `which slowave-mcp`.
+
+## 2. Configure Claude Code MCP
+
+Edit:
+
+```text
+~/.claude/settings.json
+```
+
+Add or merge this block, replacing `/absolute/path/to/slowave-mcp` with your actual path:
+
+```jsonc
+{
+  "mcpServers": {
+    "slowave": {
+      "command": "/absolute/path/to/slowave-mcp",
+      "env": {
+        "KMP_DUPLICATE_LIB_OK": "TRUE",
+        "OMP_NUM_THREADS": "1",
+        "TOKENIZERS_PARALLELISM": "false"
+      }
+    }
+  }
+}
+```
+
+Restart Claude Code after editing settings.
+
+## 3. Add `CLAUDE.md` rules
+
+Add this to your repo `CLAUDE.md` or global/user Claude Code instructions:
+
+```md
+## Slowave memory
+
+Use Slowave MCP tools as long-term memory for every task/session.
+
+Mandatory lifecycle:
+1. First Slowave call: `slowave_session_start(agent="claude-code", project="<repo-name>")` and store the returned `session_id`.
+2. Immediately log the user request: `slowave_event(session_id, "user_message", "<self-contained request>")`.
+3. Load working memory: `slowave_context(query="<task>", application="claude-code", project="<repo-name>", topics=[...], entities=[...], limit=8, mode="default")`.
+4. During work, call `slowave_event(session_id, type, content)` for meaningful user/assistant messages, tool calls/results, decisions, discoveries, errors, and completion/failure.
+5. End every task/session with a final `assistant_message` when applicable, `task_complete` or `task_failed`, then `slowave_session_end(session_id)`.
+
+Event content must be 1-3 self-contained sentences with the reason/result, not vague notes like "ran command".
+
+Use `slowave_remember(content, type, project)` for durable facts, preferences, decisions, constraints, procedures, warnings, lessons, tasks, open questions, or artifacts.
+
+Use `slowave_context` for default prompt priming. Use `slowave_recall` only when broad history/evidence is explicitly needed. Do not call `slowave_recall` by default after `slowave_context`.
+
+Broken-session anti-patterns:
+- Starting and ending a session without `slowave_event` calls.
+- Batching all events at the end.
+- Forgetting or changing the returned `session_id`.
+- Treating `slowave_recall` as default scoped context.
+```
+
+## 4. Verify
+
+Ask Claude Code:
+
+```text
+Remember that my temporary Slowave Claude Code test preference is chamomile tea.
+```
+
+Then run:
+
+```bash
+slowave stats
+slowave recall "chamomile tea" --top-k 5 --evidence
+slowave dashboard --no-open
+```
+
+Expected signs:
+
+- Claude Code called `slowave_session_start`.
+- It logged the user request with `slowave_event`.
+- It called `slowave_context`.
+- It logged work events during the task.
+- It called `slowave_session_end`.
+- `slowave recall "chamomile tea"` finds the test memory.
