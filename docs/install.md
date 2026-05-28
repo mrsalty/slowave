@@ -21,23 +21,26 @@ The default memory path is brain-only: sentence-transformer embeddings, SQLite, 
 
 ## 1. Install
 
-### Homebrew recommended on macOS
+### Recommended: pipx
+
+For the CLI and MCP server, `pipx` keeps Slowave and its dependencies isolated:
+
+```bash
+pipx install slowave
+```
+
+### pip
+
+```bash
+pip install slowave
+```
+
+### Homebrew on macOS
 
 ```bash
 brew tap mrsalty/slowave
 brew install slowave
 ```
-
-### PyPI status
-
-Slowave is **not published to PyPI yet**. These commands currently fail:
-
-```bash
-pip install slowave
-pipx install slowave
-```
-
-Use Homebrew or install from source until PyPI publishing is enabled.
 
 ### From source
 

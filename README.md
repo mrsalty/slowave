@@ -35,12 +35,26 @@ Slowave is a local memory service. Installing the package gives you two commands
 - `slowave`: CLI, dashboard, manual recall/debugging.
 - `slowave-mcp`: MCP server used by Claude Desktop, Claude Code, and Cline.
 
+Recommended for isolated CLI installs:
+
+```bash
+pipx install slowave
+```
+
+Or install with pip:
+
+```bash
+pip install slowave
+```
+
+Homebrew is also available on macOS:
+
 ```bash
 brew tap mrsalty/slowave
 brew install slowave
 ```
 
-PyPI publishing is not enabled yet, so `pip install slowave` / `pipx install slowave` will not work until the package is published to PyPI. If you are not using Homebrew, install from source:
+To install from source:
 
 ```bash
 git clone https://github.com/mrsalty/slowave

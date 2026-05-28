@@ -59,8 +59,13 @@ create a fine-grained PAT secret and pass it to the action as `token:`.
 
 ## PyPI publishing
 
-PyPI publishing is not enabled yet. When ready, prefer PyPI Trusted Publishing:
+Slowave is published on PyPI as [`slowave`](https://pypi.org/project/slowave/).
+Releases publish through PyPI Trusted Publishing from `.github/workflows/release-please.yml`.
 
-1. Register/configure the `slowave` project on PyPI.
-2. Add a PyPI trusted publisher for this repository and workflow.
-3. Add a publish job gated by `steps.release.outputs.release_created`.
+Trusted publisher configuration:
+
+- Repository: `mrsalty/slowave`
+- Workflow: `release-please.yml`
+- Environment: any
+
+The publish step is gated by `steps.release.outputs.release_created`, so packages are uploaded only when Release Please creates a release after its release PR is merged.

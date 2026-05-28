@@ -9,12 +9,26 @@ Claude Desktop requires **both**:
 
 ## 1. Install and verify Slowave
 
+Recommended for isolated CLI installs:
+
+```bash
+pipx install slowave
+```
+
+Or install with pip:
+
+```bash
+pip install slowave
+```
+
+Homebrew is also available on macOS:
+
 ```bash
 brew tap mrsalty/slowave
 brew install slowave
 ```
 
-PyPI publishing is not enabled yet, so `pip install slowave` / `pipx install slowave` will not work until the package is published to PyPI. If you are not using Homebrew, install from source:
+To install from source:
 
 ```bash
 git clone https://github.com/mrsalty/slowave
