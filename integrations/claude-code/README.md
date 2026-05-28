@@ -1,6 +1,6 @@
 # Claude Code + Slowave
 
-Goal: configure Claude Code with Slowave long-term memory in under 30 minutes.
+Goal: configure Claude Code with Slowave long-term memory quickly.
 
 Claude Code requires **both**:
 

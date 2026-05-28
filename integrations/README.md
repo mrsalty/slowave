@@ -1,8 +1,6 @@
 # Slowave integrations
 
-This directory is the fastest path from a fresh install to working long-term memory in a client.
-
-Target: **under 30 minutes** for one client.
+This directory is the fast path from a fresh install to working long-term memory in a client.
 
 ## Pick your client
 

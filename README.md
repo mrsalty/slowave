@@ -83,9 +83,11 @@ Then choose your client and follow the short guide:
 
 **Important:** MCP setup alone is not enough. Every client needs:
 
-1. MCP configuration so the `slowave_*` tools are visible.
-2. Instruction/rules injection so the client actually calls Slowave during the task.
-3. A background worker for ongoing consolidation into distilled schemas.
+| Setup layer | Why it matters |
+|---|---|
+| MCP configuration | Makes the `slowave_*` tools visible to the client. |
+| Instruction/rules injection | Makes the client actually call Slowave during the task. |
+| Background worker | Consolidates episodes into durable schemas for better future context. |
 
 Episodes are created immediately when a session ends. The worker is what turns accumulated episodes into durable latent schemas for better future `slowave_context` injection.
 

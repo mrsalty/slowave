@@ -1,6 +1,6 @@
 # Claude Desktop + Slowave
 
-Goal: configure Claude Desktop with Slowave long-term memory in under 30 minutes.
+Goal: configure Claude Desktop with Slowave long-term memory quickly.
 
 Claude Desktop requires **both**:
 

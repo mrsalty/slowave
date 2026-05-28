@@ -1,6 +1,6 @@
 # Cline + Slowave
 
-Goal: configure Cline with Slowave long-term memory in under 30 minutes.
+Goal: configure Cline with Slowave long-term memory quickly.
 
 Cline requires **both**:
 
