@@ -46,7 +46,7 @@ class RetrievalConfig:
     # Spreading-activation knobs (Stage 1)
     use_spreading: bool = True
     spread_steps: int = 2
-    spread_decay: float = 0.5
+    spread_decay: float = 0.6
     spread_activation_floor: float = 1e-3
     episodes_per_prototype: int = 6
     # Score awarded to a fully-activated graph-harvested episode. This is
@@ -56,7 +56,7 @@ class RetrievalConfig:
     # cosine match, so graph-harvested episodes don't have anything to
     # compete with; LoCoMo-style queries have many moderate cosine
     # matches and graph noise must not displace them.
-    spread_episode_weight: float = 0.25
+    spread_episode_weight: float = 0.15
     # Hard ceiling on the harvest score expressed as a fraction of the
     # worst cosine-top-k score, so graph candidates can never out-rank
     # a real cosine candidate by themselves. Salience can still re-rank
@@ -76,7 +76,7 @@ class RetrievalConfig:
     # the recall biases toward recent memories, which is the brain's
     # default behaviour.
     use_temporal: bool = True
-    temporal_weight: float = 0.15
+    temporal_weight: float = 0.25
 
     # Stage 9 — multi-scale retrieval. When True the pipeline queries
     # both the fine (CA3-like) and coarse (CA1-like) prototype graphs
@@ -86,7 +86,7 @@ class RetrievalConfig:
     # See docs/2026-05-26_stage9_proposal.md.
     use_multi_scale: bool = True
     coarse_semantic_top_k: int = 6
-    multi_scale_co_occurrence_bonus: float = 0.15
+    multi_scale_co_occurrence_bonus: float = 0.25
     # Predictive completion (Stage 3): ask the trained TransitionModel
     # what the next embedding after the query would be, and use that as a
     # second cosine seed. Lets queries like "what do I usually do after

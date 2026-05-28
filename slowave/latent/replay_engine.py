@@ -19,7 +19,7 @@ class ReplayConfig:
     sample_size: int = 256
     # KMeans-like clustering (simple, no sklearn dependency): we do online assignment to nearest centroid.
     max_prototypes_per_replay: int = 32
-    assignment_threshold: float = 0.85  # cosine similarity to existing prototype to reuse
+    assignment_threshold: float = 0.60  # cosine similarity to existing prototype to reuse
     transition_batch_size: int = 64
     transition_steps: int = 50
 
@@ -84,11 +84,11 @@ class ReplayConfig:
     # graphs differ only in their assignment threshold. See
     # docs/2026-05-26_stage9_proposal.md for the full architecture.
     use_multi_scale: bool = True
-    coarse_assignment_threshold: float = 0.55
+    coarse_assignment_threshold: float = 0.60
     # The fine-scale threshold reuses ``assignment_threshold`` above
-    # (default 0.85). The coarse threshold is loose enough that broad
-    # topics cluster together while semantically distant topics still
-    # form separate coarse prototypes.
+    # (default 0.60). The coarse threshold is tuned to match fine-scale
+    # for balanced dual-scale assignment — both set to 0.60 per grid
+    # search Phase 1 results (2026-05-28).
 
 
 class ReplayEngine:
