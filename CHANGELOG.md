@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.1.8] - 2026-05-29
+
+### Fixed
+- `slowave setup`: use `Path.absolute()` instead of `Path.resolve()` when locating
+  `slowave-mcp` and `slowave` binaries. `resolve()` followed Homebrew symlinks into the
+  versioned Cellar path (`/opt/homebrew/Cellar/slowave/0.1.7/libexec/bin/slowave-mcp`),
+  which broke silently on every `brew upgrade`. The stable symlink
+  (`/opt/homebrew/bin/slowave-mcp`) is now preserved in all generated configs.
+
+### Changed
+- `requires-python` lifted from `>=3.10,<3.13` to `>=3.10`. All dependencies
+  (`torch`, `faiss-cpu`, `sentence-transformers`, `spacy`, `numpy`) ship `cp313` wheels
+  as of their current releases. Python 3.13 classifier added.
+- `slowave doctor`: removed the hard-coded "Python 3.13 not supported" message.
+- `docs/install.md`: requirement updated to `Python 3.10+`.
+
 ## [0.1.7] - 2026-05-29
 
 ### Added
