@@ -24,7 +24,7 @@ Most agent memory systems do one of two things: append your conversations to a M
 | Start fresh every session | Cross-session memory that persists, consolidates, and evolves |
 | Siloed to one tool | One shared memory store across all your AI clients |
 
-## At a glance
+## ✨ At a glance
 
 | What you get | Why it matters |
 |---|---|
@@ -52,7 +52,7 @@ flowchart LR
     style E fill:#1a3a2d,stroke:#44cc88,color:#e8f5e9
 ```
 
-## How it works
+## ⚙️ How it works
 
 1. You work with your AI client (Claude Code, Cline, Claude Desktop, or any MCP-compatible tool) on a task.
 2. The client logs observations through MCP as the work happens.
@@ -63,7 +63,7 @@ flowchart LR
 
 Slowave can remember project conventions, architectural decisions, personal preferences, debugging lessons, open questions, constraints, and any context that should survive across sessions — for coding work and general chat alike.
 
-## Install
+## 🚀 Install
 
 > **TL;DR — two commands and you're done:**
 > ```bash
@@ -143,7 +143,7 @@ slowave stats    # shows stored events, episodes, and schemas
 
 Memory is stored locally at `~/.slowave/slowave.db`. No Ollama, OpenRouter, hosted vector database, or cloud service is required.
 
-## Local dashboard
+## 📊 Local dashboard
 
 Run a read-only web UI for memory inspection:
 
@@ -154,13 +154,13 @@ slowave dashboard
 
 The dashboard binds to `127.0.0.1` by default and shows DB health, Slowave/MCP processes, schemas, a recall playground, and a schema graph.
 
-## CLI usage
+## ⌨️ CLI usage
 
 The CLI is useful for debugging, manual memory writes, dashboard access, and benchmark/research workflows. It should not be the first path for most users; real agent memory needs MCP plus prompt/rules injection.
 
 See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 
-## Documentation
+## 📚 Documentation
 
 | Guide | Covers |
 |---|---|
@@ -174,7 +174,7 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 | [docs/limitations.md](docs/limitations.md) | Known limitations: schema quality, language support, scale |
 | [docs/reproducibility.md](docs/reproducibility.md) | How to reproduce benchmark numbers |
 
-## Benchmarks
+## 📈 Benchmarks
 
 > **Alpha-stage numbers.** Internal runs, not independently verified. Treat as directional. See [docs/benchmarks.md](docs/benchmarks.md) for full run conditions and known gaps.
 
@@ -254,7 +254,7 @@ For full per-category results, run conditions, and known gaps see [docs/benchmar
 For evaluation scripts and reproduction steps see [docs/reproducibility.md](docs/reproducibility.md).  
 For known limitations see [docs/limitations.md](docs/limitations.md).
 
-## License
+## ⚖️ License
 
 Slowave is licensed under the **GNU Affero General Public License v3.0 or later** starting with version **0.1.5**.
 
