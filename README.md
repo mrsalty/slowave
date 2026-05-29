@@ -106,14 +106,14 @@ Installing Slowave gives you two commands:
 Choose one install path:
 
 ```bash
-# Recommended for isolated CLI installs
+# Recommended — isolated, no virtualenv management needed
 pipx install slowave
 
-# Or use pip
+# pip
 pip install slowave
 
-# macOS Homebrew
-brew tap mrsalty/slowave
+# macOS Homebrew (formula lives in the main repo)
+brew tap mrsalty/slowave https://github.com/mrsalty/slowave
 brew install slowave
 ```
 
