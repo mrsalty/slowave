@@ -42,24 +42,19 @@ jobs:
           name: dist
           path: dist/
 
-  # To re-enable PyPI publishing later:
-  #   1. Register `slowave` on PyPI
-  #   2. Configure PyPI Trusted Publisher pointing at this repo + release.yml + environment `pypi`
-  #   3. Uncomment the publish-pypi job and add it to github-release's `needs`
-  #
-  # publish-pypi:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   environment: pypi
-  #   permissions:
-  #     id-token: write
-  #   steps:
-  #     - uses: actions/download-artifact@v4
-  #       with: { name: dist, path: dist/ }
-  #     - uses: pypa/gh-action-pypi-publish@release/v1
+  publish-pypi:
+    needs: build
+    runs-on: ubuntu-latest
+    environment: pypi
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { name: dist, path: dist/ }
+      - uses: pypa/gh-action-pypi-publish@release/v1
 
   github-release:
-    needs: build
+    needs: [build, publish-pypi]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

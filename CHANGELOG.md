@@ -1,31 +1,36 @@
 # Changelog
 
-## [Unreleased]
+## [0.1.9] - 2026-05-30
 
 ### Fixed
-- `slowave setup` (Claude Desktop): the Skill-upload notice is now a yellow `⚠ REQUIRED` warning
-  instead of a dim `ℹ` info hint, making it clear the upload is mandatory (Claude Desktop has no
-  hooks API; without the Skill the model sees tools but won't reliably call them).
-- `slowave setup` now resolves the installed `slowave.skill` file path from package data
-  (works for `pip`, `pipx`, and Homebrew installs) and prints it in the required-step message.
-  Falls back to the GitHub raw download URL when the file cannot be located locally.
-- `slowave/data/slowave.skill` bundled as package data so the Skill file is always
-  available after `pip install slowave` / `pipx install slowave` / `brew install slowave`.
-- **`slowave setup` now installs the Slowave Skill automatically** into Claude Desktop's
-  skills directory (`local-agent-mode-sessions/skills-plugin/`) — no manual upload
-  required. Falls back to printing manual instructions if Claude Desktop hasn't been
-  opened yet or the directory is not found.
+- `slowave setup` (Claude Desktop): Skill is now installed **automatically** by writing
+  directly to Claude Desktop's skills directory — no manual upload required. Falls back to
+  manual instructions if the directory is not found (Claude Desktop not yet opened).
+- `slowave setup`: stale versioned Homebrew Cellar path (`/opt/homebrew/Cellar/slowave/X.Y.Z/...`)
+  is detected and rewritten to the stable symlink on re-run. Fixed in v0.1.8;
+  `re-run slowave setup` to repair existing installs.
+- Suppress HF Hub unauthenticated-request warning and all progress bars (`Loading weights`,
+  download bars) on model load. Both logger level AND handler level must be set after
+  `sentence_transformers` import to silence the warning correctly.
+- NER tests (`TestExtractRolesNer`) now skip cleanly when `en_core_web_sm` is not installed,
+  fixing flaky CI failures.
+
+### Added
+- **Brain spinner** (`🧠 ··· loading memory`) during cold model load on any CLI command
+  that encodes text. No-op when stderr is not a TTY.
+- **Sleep spinner** (`💤 zzZ sleeping (4m 32s)`) during worker idle phase, with countdown.
+- **Fancy `slowave stats`** output: emoji rows with salience bars and thousand-formatted counts.
+- **Fancy `slowave doctor`** output: emoji per dependency, ✅/❌ status, `✨ all checks passed`.
+- **Fancy `slowave recall`** output: schema cards with status dot, salience bar, episode count;
+  compact episode list with dates and salience bars.
+- `slowave/data/slowave.skill` bundled as package data — available after any install method.
 
 ### Changed
-- **Documentation restructure** — eliminated repeated install instructions across 6 files.
-  `docs/install.md` is now the single authoritative install + setup guide covering all clients
-  and all install methods in one place (Step 1: install → Step 2: `slowave setup` → Step 2a:
-  Claude Desktop Skill upload → Step 3: verify → Manual setup section → Troubleshooting).
-  `README.md` install section trimmed to 2 commands + a pointer to `docs/install.md`.
-  `integrations/README.md` reduced to a 30-line index page.
-  `integrations/claude-{code,desktop}/README.md` and `integrations/cline/README.md` each
-  reduced to a ~75-line quick-ref card covering only the client-specific steps.
-  Total: 695 lines removed, 346 added (net −349 lines of duplicated content).
+- **Documentation restructure**: `docs/install.md` is the single authoritative guide;
+  `integrations/` pages are quick-ref cards; `docs/design.md` rewritten as decision record;
+  `docs/architecture.md` state machine diagram fixed, stale LLM appendix removed.
+- CI matrix dropped from Python 3.10+3.12 to Python 3.12 only (no version-split code).
+- Worker output uses emoji timestamps and `🧠`/`💤` markers.
 
 ## [0.1.8] - 2026-05-29
 
