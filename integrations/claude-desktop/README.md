@@ -36,6 +36,15 @@ Claude Desktop resets its skills directory on each launch, so the Skill must be 
 
 This is a one-time step — Claude Desktop persists uploaded skills across restarts.
 
+> **Turn-1 limitation:** Claude Desktop loads Skills after the first response starts, so Slowave fires from turn 2 onward. To get full turn-1 coverage, also add the lifecycle instruction to **Settings → Claude → Custom Instructions**:
+>
+> ```
+> At the start of every new conversation, before writing your first word,
+> call slowave_session_start(agent="claude-desktop", project=null),
+> then slowave_event with the user message, then slowave_context.
+> Do not respond until all three calls complete.
+> ```
+
 ---
 
 ## Manual MCP config (if `slowave setup` didn't work)
