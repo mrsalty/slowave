@@ -39,7 +39,7 @@ pip install slowave
 Homebrew is also available on macOS:
 
 ```bash
-brew tap mrsalty/slowave
+brew tap mrsalty/slowave https://github.com/mrsalty/slowave
 brew install slowave
 ```
 
