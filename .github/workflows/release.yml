@@ -50,7 +50,7 @@ jobs:
         with: { name: dist, path: dist/ }
       - name: Publish to PyPI
         run: |
-          pip install twine
+          pip install "twine>=6.1"
           twine upload dist/* --non-interactive
         env:
           TWINE_USERNAME: __token__

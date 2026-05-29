@@ -7,7 +7,7 @@ name = "slowave"
 version = "0.1.9"
 description = "Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval"
 requires-python = ">=3.10"
-license = "AGPL-3.0-or-later"
+license = {text = "AGPL-3.0-or-later"}
 readme = "README.md"
 authors = [{ name = "mrsalty" }]
 keywords = ["memory", "agent", "ai", "mcp", "neuroscience", "rag", "llm"]
