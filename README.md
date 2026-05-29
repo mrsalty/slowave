@@ -13,6 +13,16 @@ Slowave is not just a transcript store or a conventional RAG layer. It is inspir
 
 > **Slowave core idea:** sessions create episodes, replay distills recurring patterns, time changes salience, contradiction-aware updates keep memory current, and recall reinforces memories that prove useful.
 
+Most agent memory systems do one of two things: append your conversations to a Markdown file, or ask an LLM to rewrite your notes every turn. Both quietly accumulate stale text, forget context across sessions, or burn API calls on bookkeeping. Slowave does neither.
+
+| What most systems do | What Slowave does instead |
+|---|---|
+| Append to a Markdown file or flat vector store | Form structured episodes from live events |
+| Ask an LLM to summarise or rewrite memories | No LLM in the memory loop — ever |
+| Return the same stale text on every query | Memories reinforce, decay, and reshape over time |
+| Dump conversation history into the prompt | Inject a compact, cue-relevant brief via `slowave_context` |
+| Start fresh every session | Cross-session memory that persists, consolidates, and evolves |
+
 ## At a glance
 
 | What you get | Why it matters |
