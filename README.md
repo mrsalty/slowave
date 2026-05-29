@@ -22,6 +22,7 @@ Most agent memory systems do one of two things: append your conversations to a M
 | Return the same stale text on every query | Memories reinforce, decay, and reshape over time |
 | Dump conversation history into the prompt | Inject a compact, cue-relevant brief via `slowave_context` |
 | Start fresh every session | Cross-session memory that persists, consolidates, and evolves |
+| Siloed to one tool | One shared memory store across all your AI clients |
 
 ## At a glance
 
