@@ -310,6 +310,28 @@ class SlowaveEngine:
             )
         return event_id
 
+    # ---- consolidation ----------------------------------------------------
+    def consolidate_once(self) -> dict[str, Any]:
+        """Run one replay + latent consolidation pass.
+
+        Equivalent to running ``slowave consolidate`` from the CLI.
+        Returns a stats dict with keys ``replay`` and ``consolidation``.
+
+        Use this instead of calling engine internals directly::
+
+            stats = engine.consolidate_once()
+            print(stats["replay"]["prototypes_touched"])
+            print(stats["consolidation"]["schemas_created"])
+        """
+        import dataclasses as _dc
+        replay_stats = self.replay_engine.replay_once()
+        consolidation: dict[str, Any] = {}
+        if self.consolidator is not None:
+            protos = self._prototypes_for_episodes([])
+            cs = self.consolidator.consolidate(prototype_ids=protos)
+            consolidation = _dc.asdict(cs)
+        return {"replay": replay_stats, "consolidation": consolidation}
+
     # ---- recall -----------------------------------------------------------
     def refresh_indices(self) -> None:
         """Rebuild in-memory FAISS indices from SQLite.

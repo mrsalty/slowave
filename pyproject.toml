@@ -4,9 +4,9 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slowave"
-version = "0.1.3"
+version = "0.1.4"
 description = "Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 license = { text = "MIT" }
 readme = "README.md"
 authors = [{ name = "mrsalty" }]
@@ -24,12 +24,12 @@ classifiers = [
   "Topic :: Software Development :: Libraries :: Python Modules",
 ]
 dependencies = [
-  "numpy",
-  "torch",
-  "faiss-cpu",
-  "click>=8.1",
-  "sentence-transformers",
-  "mcp[cli]",
+  "numpy>=1.26",
+  "torch>=2.2",
+  "faiss-cpu>=1.7",
+  "click>=8.1,<9",
+  "sentence-transformers>=2.7",
+  "mcp[cli]>=1.0",
 ]
 
 [project.urls]

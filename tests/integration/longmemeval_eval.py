@@ -182,7 +182,7 @@ def run_question(
                 neighbor_top_k=0 if no_graph_expansion else 6,
                 use_multi_scale=not no_multi_scale,
             ),
-            disable_llm=(not consolidate),
+            disable_llm=(schema_mode != "llm" or not consolidate),
             disable_encoder=False,
             schema_mode=schema_mode,
         )
@@ -641,7 +641,7 @@ def main() -> None:
         help="Path to longmemeval JSON file",
     )
     parser.add_argument(
-        "--categories", nargs="+", default=["knowledge-update", "single-session-preference"],
+        "--categories", nargs="+", default=["knowledge-update","single-session-preference","multi-session","single-session-user","single-session-assistant","temporal-reasoning"],
         help="Question types to evaluate",
     )
     parser.add_argument(
@@ -673,7 +673,7 @@ def main() -> None:
         help="Run replay/transition training without LLM consolidation (Stage 3 latent-only test)",
     )
     parser.add_argument(
-        "--schema-mode", choices=["llm", "latent"], default="llm",
+        "--schema-mode", choices=["llm", "latent"], default="latent",
         help="Stage 6: how schemas are formed. 'llm' (default) uses LLM "
              "schema extraction. 'latent' uses pure prototype geometry "
              "(zero LLM calls during ingest).",

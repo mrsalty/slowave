@@ -31,6 +31,7 @@ newer one has higher confidence.
 """
 from __future__ import annotations
 
+import re
 import time
 from dataclasses import dataclass, field
 from typing import Optional
@@ -70,6 +71,15 @@ class LatentSchema:
     confidence: float               # 1.0 - normalised within-cluster variance
     support_count: int              # how many episodes back this schema
 
+    # Lexical abstraction (Stage 7a) — contrastive TF-IDF over cluster texts.
+    # A dict of {term: score} where score is the within-cluster term frequency
+    # weighted by cluster distinctiveness vs the rest of the corpus.
+    # Empty when the cluster has too few texts to compute.
+    lexical_signature: dict = field(default_factory=dict)
+    # Human-readable label derived from top lexical terms.
+    # Example: "faiss / sqlite / local"  — deterministic, no LLM.
+    display_label: str = ""
+
     # Hooks for the existing Consolidator API
     tags: list[str] = field(default_factory=list)
     facets: dict = field(default_factory=dict)
@@ -98,6 +108,93 @@ class GeometricVerdict:
     facet_distance: float
     time_delta_s: int
 
+
+
+# ---------------------------------------------------------------------------
+# Lexical signature helpers (Stage 7a)
+# ---------------------------------------------------------------------------
+
+# Minimal English stopword list — no external dependency.
+_STOPWORDS = frozenset({
+    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
+    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
+    "being", "have", "has", "had", "do", "does", "did", "will", "would",
+    "could", "should", "may", "might", "shall", "can", "need", "dare",
+    "it", "its", "this", "that", "these", "those", "i", "we", "you",
+    "he", "she", "they", "me", "us", "him", "her", "them", "my", "our",
+    "your", "his", "their", "what", "which", "who", "when", "where",
+    "why", "how", "all", "each", "every", "both", "few", "more", "most",
+    "other", "some", "such", "no", "not", "only", "own", "same", "so",
+    "than", "too", "very", "just", "user", "assistant", "remember",
+})
+
+
+def _tokenize(text: str) -> list[str]:
+    """Lowercase alphabetic tokens, length >= 3, not stopwords."""
+    return [
+        w for w in re.split(r"[^a-z]+", text.lower())
+        if len(w) >= 3 and w not in _STOPWORDS
+    ]
+
+
+def _build_lexical_signature(
+    cluster_texts: list[str],
+    corpus_texts: list[str],
+    top_n: int = 8,
+) -> dict[str, float]:
+    """Contrastive TF-IDF: terms that are common *within* this cluster
+    but distinctive *against* the full episode corpus.
+
+    Score formula::
+
+        score(term) = tf_cluster(term) * log(1 + corpus_df / (1 + cluster_df))
+
+    where ``tf_cluster`` is the normalised frequency inside the cluster and
+    ``cluster_df`` / ``corpus_df`` are document frequencies (how many docs
+    contain the term) in cluster vs corpus.  Contrastive scaling suppresses
+    generic words that appear everywhere.
+
+    Returns a dict {term: score} of at most ``top_n`` terms, sorted
+    descending by score.
+    """
+    import math
+    if not cluster_texts:
+        return {}
+
+    # Term frequencies within the cluster
+    cluster_tf: dict[str, int] = {}
+    cluster_df: dict[str, int] = {}
+    for text in cluster_texts:
+        tokens = _tokenize(text)
+        for tok in tokens:
+            cluster_tf[tok] = cluster_tf.get(tok, 0) + 1
+        for tok in set(tokens):
+            cluster_df[tok] = cluster_df.get(tok, 0) + 1
+
+    if not cluster_tf:
+        return {}
+
+    # Document frequency over the full corpus
+    corpus_df: dict[str, int] = {}
+    for text in corpus_texts:
+        for tok in set(_tokenize(text)):
+            corpus_df[tok] = corpus_df.get(tok, 0) + 1
+
+    n_corpus = max(1, len(corpus_texts))
+    n_cluster = max(1, len(cluster_texts))
+    total_cluster_terms = max(1, sum(cluster_tf.values()))
+
+    scores: dict[str, float] = {}
+    for term, tf in cluster_tf.items():
+        tf_norm = tf / total_cluster_terms
+        cdf = corpus_df.get(term, 0)
+        # Boost terms that are rare in corpus but common in cluster
+        idf_contrast = math.log(1.0 + n_corpus / (1.0 + cdf))
+        scores[term] = tf_norm * idf_contrast
+
+    # Sort and return top_n
+    sorted_terms = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    return {t: round(s, 4) for t, s in sorted_terms[:top_n]}
 
 
 # ---- Builder -------------------------------------------------------------
@@ -176,6 +273,20 @@ class LatentSchemaBuilder:
         else:
             confidence = 1.0
 
+        # Lexical signature: contrastive TF-IDF over cluster episode texts.
+        # Pass all episode texts as the "corpus" so the contrast is relative
+        # to what the cluster itself contains (intra-cluster distinctiveness).
+        # With more context (e.g. all schemas' texts) the contrast would be
+        # even sharper; this is the minimal-dependency version.
+        cluster_texts = [str(ep.content_text) for ep in member_episodes if ep.content_text]
+        lexical_sig = _build_lexical_signature(
+            cluster_texts=cluster_texts,
+            corpus_texts=cluster_texts,  # intra-cluster distinctiveness
+            top_n=8,
+        )
+        top_terms = list(lexical_sig.keys())[:3]
+        display_lbl = " / ".join(top_terms) if top_terms else ""
+
         return LatentSchema(
             centroid=cen,
             facet_axes=facet_axes,
@@ -187,12 +298,15 @@ class LatentSchemaBuilder:
             ts_span_s=ts_span,
             confidence=confidence,
             support_count=int(embs.shape[0]),
+            lexical_signature=lexical_sig,
+            display_label=display_lbl,
             tags=[],
             facets={
                 "schema_class": "latent",
                 "confidence": float(confidence),
                 "mean_ts": int(mean_ts),
                 "ts_span_s": int(ts_span),
+                "display_label": display_lbl,
             },
             evidence_indices=list(range(1, len(member_episodes) + 1)),
             evidence_quote=None,

@@ -161,7 +161,7 @@ def run_conversation(sample,*,model,ollama_url,consolidate,shared_encoder,
                                       use_spreading=not no_graph_expansion,
                                       use_transition=not no_transition,
                                       use_multi_scale=not no_multi_scale),
-            disable_llm=not consolidate, disable_encoder=False,
+            disable_llm=(schema_mode != "llm" or not consolidate), disable_encoder=False,
             schema_mode=schema_mode,
         )
         eng=SlowaveEngine(cfg,shared_encoder=shared_encoder)
@@ -405,7 +405,7 @@ def main():
     parser.add_argument('--keep-debug-dbs',action='store_true')
     parser.add_argument('--timeout',type=float,default=180.0,
                         help='Per-LLM-call timeout in seconds (default 180; increase for 7-8B models)')
-    parser.add_argument('--schema-mode',choices=['llm','latent'],default='llm',
+    parser.add_argument('--schema-mode',choices=['llm','latent'],default='latent',
                         help="Stage 6: 'llm' uses LLM schema extraction, 'latent' uses pure prototype geometry (zero LLM during ingest).")
     parser.add_argument('--no-pattern-separation',action='store_true',
                         help='Stage 8 ablation: disable dentate-gyrus-style competitive prototype assignment.')

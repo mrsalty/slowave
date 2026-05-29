@@ -15,13 +15,15 @@ Slowave is not just a transcript store or a conventional RAG layer. It is inspir
 
 ## Status
 
-Slowave is early-stage software. The core local memory path, MCP server, CLI, and dashboard are available, while integrations, benchmark coverage, and consolidation policies are still evolving.
+**v0.1.4 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.12 is supported and tested; Python 3.13 is not yet supported.
+
+Run `slowave doctor` after installing to verify your environment.
 
 ## At a glance
 
 | What you get | Why it matters |
 |---|---|
-| **No LLM in the core memory loop** | No API key, cloud extraction step, or per-query model call is required for the default path. |
+| **No LLM in the core memory loop** | No API key, cloud extraction step, or per-query model call required. Memory ingest, consolidation, and retrieval are all LLM-free. |
 | **Privacy-first local memory** | Memory is stored and processed locally; no cloud memory backend, API extraction step, or remote LLM inference is required. |
 | **Local CPU inference** | Uses BAAI/bge-small-en-v1.5 embeddings, SQLite, FAISS, and deterministic geometry. |
 | **Brain-inspired consolidation** | Raw events become episodes; episodes replay into prototypes; prototypes consolidate into latent schemas. |
@@ -29,10 +31,20 @@ Slowave is early-stage software. The core local memory path, MCP server, CLI, an
 | **Time-aware memory** | Salience, decay, temporal anchors, supersession, and contradiction-aware updates help keep memory current. Episodes are date-stamped (ISO 8601) and recalled with temporal context. |
 | **Gated working memory** | `slowave_context` injects a compact, cue-relevant brief instead of dumping history into the prompt. |
 
-```text
-events ──session end──▶ episodes ──replay──▶ prototypes ──consolidation──▶ schemas
-  ▲                                                                           │
-  └────────────────────── recall reinforces useful memory ◀───────────────────┘
+```mermaid
+flowchart LR
+    A([💬 Events]) -->|session end| B([🧠 Episodes])
+    B -->|replay| C([🌀 Prototypes])
+    C -->|consolidation| D([📖 Schemas])
+    D -->|recall| E([⚡ Context brief])
+    E -.->|reinforces| B
+    E -.->|reinforces| C
+
+    style A fill:#2d4a3e,stroke:#4caf87,color:#e8f5e9
+    style B fill:#1a3a5c,stroke:#4a9eff,color:#e3f0ff
+    style C fill:#3a2d5c,stroke:#9b7fee,color:#f0ebff
+    style D fill:#4a2d1a,stroke:#ff9944,color:#fff3e0
+    style E fill:#1a3a2d,stroke:#44cc88,color:#e8f5e9
 ```
 
 ## How it works
@@ -115,10 +127,10 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-Verify:
+Verify your environment:
 
 ```bash
-which slowave-mcp
+slowave doctor           # check Python version, torch, faiss, embedding backend
 slowave --help
 slowave-mcp --help
 slowave stats
@@ -177,36 +189,31 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 | [docs/design.md](docs/design.md) | Why the LLM path was removed from the memory loop |
 | [docs/dashboard.md](docs/dashboard.md) | Local dashboard guide |
 | [docs/cli.md](docs/cli.md) | CLI quickstart and command reference |
+| [docs/benchmarks.md](docs/benchmarks.md) | Benchmark results, run conditions, per-category breakdown |
+| [docs/limitations.md](docs/limitations.md) | Known limitations: schema quality, language support, scale |
+| [docs/reproducibility.md](docs/reproducibility.md) | How to reproduce benchmark numbers |
 
 ## Benchmarks
 
-> **All numbers use the brain-only path: local CPU, BAAI/bge-small-en-v1.5 embeddings, SQLite + FAISS — zero LLM calls, no API key, no cloud service, ~$0/query.**
+> **Alpha-stage numbers.** Internal runs, not independently verified. Treat as directional. See [docs/benchmarks.md](docs/benchmarks.md) for full run conditions and known gaps.
 
-Public benchmarks mostly test explicit fact recall. They do not measure Slowave's consolidation, time-aware adaptation, contradiction handling, or recall-driven reinforcement — so they understate the full picture. With that caveat, here is where things stand.
+**All runs: brain-only path, local CPU, BAAI/bge-small-en-v1.5 embeddings, SQLite + FAISS, zero LLM calls.**
+
+Two modes are reported. The **with-consolidation** numbers (70.0% / 74.6%) represent the full Slowave pipeline: sessions → episodes → replay → latent schemas → recall. The **episode-only baseline** (60.2% / 74.6%) is retrieval without consolidation — episodes recalled directly, no schemas. The difference shows the contribution of the consolidation layer.
 
 ### Overall results
 
-| Benchmark | Questions | Slowave (brain-only) | Cosine-only ablation² | Δ |
+| Benchmark | Questions | With consolidation | Episode-only baseline | Cosine-only ablation¹ |
 |---|---:|---:|---:|---:|
-| LongMemEval | 500 | **70.0%** | 60.0% | **+10 pp** |
-| LoCoMo | 1 986 | **75.5%** | 68.0% | **+7.5 pp** |
+| LongMemEval | 500 | **70.0%** | 60.2% | ~60.0% |
+| LoCoMo | 1 986 | **74.6%** | 74.6%² | ~68.0% |
 
-*Metric: keyword hit-rate (answer keywords present in retrieved context). All runs: zero LLM calls, ~10 ms recall, data stays on device.*
+*Metric: keyword hit-rate. All runs: zero LLM calls, ~10 ms recall latency, data on device.*
 
-² *Cosine-only ablation = same Slowave engine and embeddings, but with spreading activation, graph expansion, and transition model disabled. Plain FAISS nearest-neighbour over the episodic store.*
+¹ Cosine-only ablation: spreading activation, graph expansion, and transition model all disabled.  
+² LoCoMo is multi-session by design; episode retrieval already captures most of the signal and consolidation adds schemas on top of a strong baseline.
 
-### Highlights
-
-- **+10 pp over plain cosine retrieval on LongMemEval, +7.5 pp on LoCoMo** — the gain comes entirely from brain-inspired mechanisms: spreading activation, multi-scale prototypes, temporal weighting, replay, consolidation. No LLM extraction step.
-- **LongMemEval single-session-user: 100%.** Perfect retrieval of single-session facts.
-- **LoCoMo adversarial: 95.5%.** Robust against misleading and contradictory cues.
-- **LoCoMo multi-session: 86.3%** — cross-session fact aggregation, no special handling.
-- **On LME, Slowave scores 70.0% with zero LLM calls.** ChatGPT GPT-4o scores 57.7% on the same benchmark (LLM-as-judge metric; not directly comparable, but directionally meaningful).
-- Full LongMemEval ingestion + eval in **~3 min on a Mac CPU**.
-
-### Per-category breakdown
-
-**LongMemEval** (500q, 6 categories)
+### LongMemEval per-category (with consolidation)
 
 | Category | Score | Notes |
 |---|---:|---|
@@ -217,23 +224,23 @@ Public benchmarks mostly test explicit fact recall. They do not measure Slowave'
 | Multi-session | 60.9% | ⚠ number aggregation gap |
 | Single-session-preference | 20.0% | ⚠ preference abstraction gap |
 
-**LoCoMo** (1986q, 5 categories)
+### LoCoMo per-category (with consolidation)
 
 | Category | Score | Notes |
 |---|---:|---|
-| Adversarial | **82.3%** | ✅ robust |
 | Multi-session | **86.2%** | ✅ strong cross-session recall |
+| Adversarial | **82.3%** | ✅ robust |
 | Single-session | 64.9% | ✅ solid |
 | Temporal | **56.1%** | ✅ solid |
-| Commonsense | 27.1% | — |
+| Commonsense | 27.1% | — world knowledge not in store |
 
-### Known gaps and roadmap
+### Known gaps
 
 | Gap | Root cause | Status |
 |---|---|---|
-| Temporal date arithmetic (LME) | "How many days between X and Y?" requires arithmetic over two retrieved timestamps — no retrieval fix can solve this | Open — answer-construction layer (Stage 11a) |
-| Multi-session LME (60.9%) | Summing/comparing quantities across episodes — aggregate answer is never in any single episode | Open — explicit number aggregation |
-| Preference LME (20%) | Implicit preferences not abstracted into queryable facts — keyword scoring caps this category structurally | Open — preference-extraction schema layer |
+| Temporal date arithmetic | "How many days between X and Y?" requires arithmetic, not retrieval | Open — answer-construction layer |
+| Multi-session aggregation (LME 60.9%) | Summing quantities across episodes — no single episode holds the answer | Open — explicit aggregation layer |
+| Preference abstraction (LME 20%) | Implicit preferences not abstracted into queryable schema entries | Open — preference-extraction layer |
 
 ### Language support
 
@@ -243,7 +250,9 @@ Public benchmarks mostly test explicit fact recall. They do not measure Slowave'
 
 The probe phrase list is in `slowave/latent/temporal.py` (`_TEMPORAL_PROBES`). Adding phrases in other languages extends the compass to those languages without any other code change.
 
-For evaluation scripts, model versions, and configuration see [docs/architecture.md](docs/architecture.md).
+For full per-category results, run conditions, and known gaps see [docs/benchmarks.md](docs/benchmarks.md).  
+For evaluation scripts and reproduction steps see [docs/reproducibility.md](docs/reproducibility.md).  
+For known limitations see [docs/limitations.md](docs/limitations.md).
 
 ## License
 

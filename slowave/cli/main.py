@@ -495,20 +495,8 @@ def dedup_schemas_cmd(ctx: click.Context, apply_changes: bool) -> None:
 def consolidate_cmd(ctx: click.Context) -> None:
     """Manually trigger a replay + latent consolidation pass."""
     eng = _build_engine(ctx.obj["db"], disable_llm=True, schema_mode="latent")
-    stats = eng.replay_engine.replay_once()
-    consolidation: dict[str, Any] = {}
-    if eng.consolidator is not None:
-        # Process all prototypes that have any episode mapping.
-        protos = eng._prototypes_for_episodes([])
-        cs = eng.consolidator.consolidate(prototype_ids=protos)
-        consolidation = {
-            "prototypes_processed": cs.prototypes_processed,
-            "schemas_created": cs.schemas_created,
-            "schemas_reinforced": cs.schemas_reinforced,
-            "schemas_contradicted": cs.schemas_contradicted,
-            "schemas_skipped": cs.schemas_skipped,
-        }
-    _print({"replay": stats, "consolidation": consolidation}, ctx.obj["json"])
+    result = eng.consolidate_once()
+    _print(result, ctx.obj["json"])
     eng.close()
 
 
@@ -555,19 +543,7 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
     signal.signal(signal.SIGINT, _handle_signal)
 
     def _run_pass() -> dict[str, Any]:
-        replay_stats = eng.replay_engine.replay_once()
-        consolidation: dict[str, Any] = {}
-        if eng.consolidator is not None:
-            protos = eng._prototypes_for_episodes([])
-            cs = eng.consolidator.consolidate(prototype_ids=protos)
-            consolidation = {
-                "prototypes_processed": cs.prototypes_processed,
-                "schemas_created": cs.schemas_created,
-                "schemas_reinforced": cs.schemas_reinforced,
-                "schemas_contradicted": cs.schemas_contradicted,
-                "schemas_skipped": cs.schemas_skipped,
-            }
-        return {"replay": replay_stats, "consolidation": consolidation}
+        return eng.consolidate_once()
 
     if once:
         result = _run_pass()
@@ -597,6 +573,106 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
 
     eng.close()
     click.echo("worker: stopped.")
+
+
+
+
+
+@cli.command("doctor")
+def doctor_cmd() -> None:
+    """Check the local Slowave environment and report any issues.
+
+    Verifies Python version, core dependencies, the embedding backend,
+    SQLite write access, and MCP server availability. Exits with code 1
+    if any check fails.
+    """
+    import sys
+    import tempfile
+    import shutil
+
+    ok = True
+
+    def _check(label, passed, detail=""):
+        nonlocal ok
+        icon = "\u2713" if passed else "\u2717"
+        msg = "  " + icon + "  " + label
+        if detail:
+            msg += "\n       " + detail
+        click.echo(msg)
+        if not passed:
+            ok = False
+
+    click.echo("Slowave doctor\n")
+
+    # Python version
+    vi = sys.version_info
+    py_ok = (vi.major == 3) and (10 <= vi.minor <= 12)
+    _check(
+        "Python {}.{}.{}".format(vi.major, vi.minor, vi.micro),
+        py_ok,
+        "" if py_ok else "Slowave is tested on Python 3.10-3.12. Python 3.13 is not yet supported.",
+    )
+
+    # torch
+    try:
+        import torch
+        _check("torch {}".format(torch.__version__), True)
+    except Exception as e:
+        _check("torch", False, str(e))
+
+    # faiss
+    try:
+        import faiss
+        _check("faiss-cpu {}".format(faiss.__version__), True)
+    except Exception as e:
+        _check("faiss", False, str(e))
+
+    # sentence-transformers
+    try:
+        import sentence_transformers as _st
+        _check("sentence-transformers {}".format(_st.__version__), True)
+    except Exception as e:
+        _check("sentence-transformers", False, str(e))
+
+    # embedding backend end-to-end
+    try:
+        from slowave.symbolic.encoder import TextEncoder
+        enc = TextEncoder()
+        v = enc.encode("doctor test")
+        _check("Embedding backend (dim={})".format(v.shape[0]), True)
+    except Exception as e:
+        _check("Embedding backend", False, str(e)[:200])
+
+    # SQLite write
+    try:
+        import sqlite3
+        import os
+        with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as tmp:
+            tmp_path = tmp.name
+        con = sqlite3.connect(tmp_path)
+        con.execute("CREATE TABLE t (x INTEGER)")
+        con.execute("INSERT INTO t VALUES (1)")
+        con.commit()
+        con.close()
+        os.unlink(tmp_path)
+        _check("SQLite write access", True)
+    except Exception as e:
+        _check("SQLite write access", False, str(e))
+
+    # MCP server
+    mcp_path = shutil.which("slowave-mcp")
+    _check(
+        "MCP server (slowave-mcp)",
+        mcp_path is not None,
+        "" if mcp_path else "Run: pip install slowave  (or pipx install slowave)",
+    )
+
+    click.echo("")
+    if ok:
+        click.echo("All checks passed.")
+    else:
+        click.echo("One or more checks failed. See details above.")
+        sys.exit(1)
 
 
 def main() -> None:
