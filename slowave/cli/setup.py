@@ -488,25 +488,10 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool) -> 
             else:
                 _skip("MCP server already present")
         # Claude Desktop: Custom Instructions is the only reliable injection path.
-        # Skills fire on turn 2+ only and can be reset by app updates.
-        click.echo(click.style(
-            "\n  ⚠  REQUIRED — add Slowave to Claude Desktop Custom Instructions.\n"
+        _warn(
+            "REQUIRED — add Slowave to Claude Desktop Custom Instructions.\n"
             "     Settings → General → Instructions for Claude\n"
-            "     (copy and paste the block below, then save)\n",
-            fg="yellow",
-        ))
-        click.echo(
-            "  ┌─────────────────────────────────────────────────────────────┐\n"
-            "  │ At the start of every new conversation, before your first   │\n"
-            "  │ word, call:                                                  │\n"
-            "  │   slowave_session_start(agent=\"claude-desktop\", project=null)│\n"
-            "  │   slowave_event(session_id, \"user_message\", <first message>) │\n"
-            "  │   slowave_context(query=<first message>,                     │\n"
-            "  │                   application=\"claude-desktop\", limit=8)     │\n"
-            "  │ Do not respond until all three calls complete.               │\n"
-            "  │ Log every exchange with slowave_event. End each conversation │\n"
-            "  │ with slowave_event(task_complete/failed) + session_end.      │\n"
-            "  └─────────────────────────────────────────────────────────────┘"
+            "     https://github.com/mrsalty/slowave/blob/main/integrations/claude-desktop/README.md#step-1--add-custom-instructions-required"
         )
 
     # 4. Cline
