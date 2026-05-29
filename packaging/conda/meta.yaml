@@ -53,7 +53,7 @@ test:
 about:
   home: https://github.com/mrsalty/slowave
   summary: Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval
-  license: MIT
+  license: AGPL-3.0-or-later
   license_file: LICENSE
   doc_url: https://github.com/mrsalty/slowave
   dev_url: https://github.com/mrsalty/slowave

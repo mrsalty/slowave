@@ -5,7 +5,7 @@ Shared across sessions, clients, and tools.**
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/pypi/pyversions/slowave?color=4c6f91)](https://pypi.org/project/slowave/)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
 Slowave plugs into **Claude Code**, **Cline**, and **Claude Desktop** through MCP, giving them a shared local memory that accumulates, consolidates, adapts, and recalls across sessions.
 
@@ -15,7 +15,7 @@ Slowave is not just a transcript store or a conventional RAG layer. It is inspir
 
 ## Status
 
-**v0.1.4 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.12 is supported and tested; Python 3.13 is not yet supported.
+**v0.1.5 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.12 is supported and tested; Python 3.13 is not yet supported.
 
 Run `slowave doctor` after installing to verify your environment.
 
@@ -256,4 +256,8 @@ For known limitations see [docs/limitations.md](docs/limitations.md).
 
 ## License
 
-MIT.
+Slowave is licensed under the **GNU Affero General Public License v3.0 or later** starting with version **0.1.5**.
+
+Versions published before 0.1.5 were released under the MIT License; those earlier releases remain available under the terms they were originally published with.
+
+This license keeps Slowave open for research, experimentation, and community use while ensuring that modified versions offered over a network make their source available under the same terms. Commercial licenses may be available for organizations that want to use Slowave in proprietary products, hosted services, or other contexts where AGPL compliance is not suitable. See [COMMERCIAL.md](COMMERCIAL.md).

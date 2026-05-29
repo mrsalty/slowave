@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.5] - 2026-05-29
+
+### Changed
+- License changed from MIT to AGPL-3.0-or-later for version 0.1.5 and later. Earlier published versions remain available under the licenses they were originally released with.
+- Added commercial licensing guidance for organizations that need non-AGPL terms.
+
 ## [0.1.4] - 2026-05-29
 
 ### Added
