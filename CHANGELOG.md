@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.1.7] - 2026-05-29
+
+### Added
+- **`slowave setup` command** — one-command cross-platform post-install wiring.
+  Automates the full setup pipeline in a single invocation:
+  - Locates `slowave-mcp` and `slowave` binaries (PATH, pipx, Homebrew, Windows AppData).
+  - Patches `~/.claude/settings.json` with the MCP server block.
+  - Injects `UserPromptSubmit` + `Stop` enforcement hooks into `~/.claude/settings.json`
+    (Claude Code only) — the only mechanism that fires on every turn unconditionally.
+  - Injects the mandatory lifecycle block into `~/.claude/CLAUDE.md` (marker-based, idempotent).
+  - Patches Claude Desktop MCP config (platform-correct path: macOS / Linux / Windows).
+  - Patches Cline `cline_mcp_settings.json` (detects VS Code and Cursor).
+  - Injects lifecycle block into `~/.clinerules`.
+  - Installs the background worker as a system service:
+    launchd plist (macOS), systemd user service (Linux), Task Scheduler task via PowerShell (Windows).
+  - Runs `slowave doctor` to verify the result.
+  - Flags: `--client all|claude-code|claude-desktop|cline`, `--dry-run`, `--no-worker`, `--no-hooks`.
+  - Fully idempotent — re-running is always safe.
+
+### Changed
+- `docs/install.md` — TL;DR one-liner (`pipx install slowave && slowave setup`) at top;
+  new `## Setup command reference` section with per-platform table.
+- `docs/cli.md` — `setup` added to the command reference table.
+- `integrations/README.md`, `integrations/claude-code/README.md`,
+  `integrations/claude-desktop/README.md` — "Fastest path" one-liner section at top of each.
+
 ## [0.1.6] - 2026-05-29
 
 ### Added
