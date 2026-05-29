@@ -101,19 +101,28 @@ slowave setup --client [claude-code|claude-desktop|cline|all]  # default: all
               --dry-run         # preview without writing anything
 ```
 
-> **Claude Desktop:** after `slowave setup`, you must upload the Slowave Skill once manually via the Claude Desktop UI. Claude Desktop resets its skills directory on each launch so filesystem injection is not persistent.
+> **Claude Desktop only:** `slowave setup` handles MCP config and the worker, but lifecycle instructions must be added manually — the Custom Instructions field is stored server-side with no automation path.
 
-### Step 2a — Claude Desktop: upload the Slowave Skill
+### Step 2a — Claude Desktop: add Custom Instructions
 
-`slowave setup` prints the skill file path. Upload it once in Claude Desktop:
+Open Claude Desktop → **Settings → General → Instructions for Claude** and paste:
 
-1. Open **Settings** → **Connectors** → **Customize** → **Skills**
-2. Click **Create** → **Upload**
-3. Select the `slowave.skill` file — `slowave setup` prints the exact path, or download from:
-   https://github.com/mrsalty/slowave/raw/main/integrations/claude-desktop/slowave.skill
-4. Restart Claude Desktop
+```
+At the start of every new conversation, before your first word:
+1. slowave_session_start(agent="claude-desktop", project=null) — store session_id
+2. slowave_event(session_id, "user_message", "<verbatim first message>")
+3. slowave_context(query="<first message>", application="claude-desktop", limit=8)
+Do not respond until all three calls complete.
 
-This is a one-time step. Claude Desktop persists uploaded skills across restarts.
+During the conversation, call slowave_event for every meaningful exchange
+(user_message, assistant_message, decision, error, discovery).
+
+Before your last message:
+4. slowave_event(session_id, "task_complete" or "task_failed", "<1-3 sentence outcome>")
+5. slowave_session_end(session_id)
+```
+
+`slowave setup` also prints this block so you can copy it directly from the terminal.
 
 ---
 
@@ -207,7 +216,7 @@ Anti-patterns to avoid:
 | Client | Location | `agent` value |
 |---|---|---|
 | Claude Code | `~/.claude/CLAUDE.md` (global) or repo `CLAUDE.md` | `claude-code` |
-| Claude Desktop | Upload as a Skill — see [Step 2a](#step-2a--claude-desktop-upload-the-slowave-skill) | `claude-desktop` |
+| Claude Desktop | **Settings → General → Instructions for Claude** — see [Step 2a](#step-2a--claude-desktop-add-custom-instructions) | `claude-desktop` |
 | Cline | `~/.clinerules` (global) or repo `.clinerules` | `cline-tui` |
 
 ### Background worker
@@ -313,7 +322,7 @@ Read-only local web UI. Shows DB health, Slowave/MCP processes, schemas, a recal
 |---|---|---|
 | Client doesn't show Slowave tools | MCP path wrong or client not restarted | Run `slowave setup --dry-run` to check the configured path; restart the client after any config change |
 | Client sees tools but never calls them | Lifecycle instructions missing | Run `slowave setup` — it injects `CLAUDE.md`, `.clinerules`, and Claude Code hooks |
-| Claude Desktop sees tools but doesn't use them | Skill not installed or Claude Desktop not restarted | Re-run `slowave setup` (installs skill automatically), then restart Claude Desktop — see [Step 2a](#step-2a--claude-desktop-restart-after-setup) |
+| Claude Desktop sees tools but doesn't use them | Custom Instructions not set | Add the lifecycle block to Settings → General → Instructions for Claude — see [Step 2a](#step-2a--claude-desktop-add-custom-instructions) |
 | Sessions exist but memory is empty | Client starts/ends sessions with no events | Verify the client is calling `slowave_event` during work; Claude Code hooks enforce this on every turn |
 | Recall returns nothing or stale results | Worker not running, or `slowave_recall` used as default | Run `slowave worker --once`; use `slowave_context` for default priming, not `slowave_recall` |
 | Schemas don't appear | Worker/consolidation not running | Run `slowave worker --once` or check the service is active (`launchctl list | grep slowave`) |

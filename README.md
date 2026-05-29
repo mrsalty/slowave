@@ -80,7 +80,7 @@ slowave stats    # shows stored events, episodes, and schemas
 Memory is stored locally at `~/.slowave/slowave.db`. No Ollama, OpenRouter, vector database, or cloud service required.
 
 > [!IMPORTANT]
-> **Claude Desktop:** after `slowave setup`, you must upload the Slowave Skill once via the Claude Desktop UI — Claude Desktop resets its skills directory on launch so filesystem injection is not persistent. `slowave setup` prints the file path. See [docs/install.md → Step 2a](docs/install.md#step-2a--claude-desktop-upload-the-slowave-skill).
+> **Claude Desktop:** after `slowave setup`, paste the lifecycle block into **Settings → General → Instructions for Claude**. `slowave setup` prints the exact text to copy. See [docs/install.md → Step 2a](docs/install.md#step-2a--claude-desktop-add-custom-instructions).
 
 **Full install guide** (all install methods, manual config, per-client setup, worker, troubleshooting): **[docs/install.md](docs/install.md)**
 

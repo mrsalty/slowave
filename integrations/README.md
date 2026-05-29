@@ -14,7 +14,7 @@ slowave doctor
 
 `slowave setup` auto-configures every client it detects, injects lifecycle instructions, and installs the background worker. It is idempotent — safe to re-run.
 
-> **Claude Desktop:** after `slowave setup`, upload the Slowave Skill once via the Claude Desktop UI — see [docs/install.md → Step 2a](../docs/install.md#step-2a--claude-desktop-upload-the-slowave-skill).
+> **Claude Desktop:** after `slowave setup`, paste the lifecycle block into **Settings → General → Instructions for Claude** — see [docs/install.md → Step 2a](../docs/install.md#step-2a--claude-desktop-add-custom-instructions).
 
 ---
 
@@ -22,7 +22,7 @@ slowave doctor
 
 | Client | Quick-ref | What's different |
 |---|---|---|
-| Claude Desktop | [claude-desktop/README.md](claude-desktop/README.md) | Requires Skill upload (no hooks API) |
+| Claude Desktop | [claude-desktop/README.md](claude-desktop/README.md) | Requires Custom Instructions (one manual paste) |
 | Claude Code | [claude-code/README.md](claude-code/README.md) | CLAUDE.md + enforcement hooks |
 | Cline | [cline/README.md](cline/README.md) | .clinerules injection |
 
