@@ -601,11 +601,11 @@ def doctor_cmd() -> None:
 
     # Python version
     vi = sys.version_info
-    py_ok = (vi.major == 3) and (10 <= vi.minor <= 12)
+    py_ok = (vi.major == 3) and (vi.minor >= 10)
     _check(
         "Python {}.{}.{}".format(vi.major, vi.minor, vi.micro),
         py_ok,
-        "" if py_ok else "Slowave is tested on Python 3.10-3.12. Python 3.13 is not yet supported.",
+        "" if py_ok else "Slowave requires Python 3.10+.",
     )
 
     # torch

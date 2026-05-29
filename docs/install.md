@@ -24,7 +24,7 @@ MCP only exposes tools; it does not make a model call them. Slowave works at reg
 
 ## Requirements
 
-- Python 3.10–3.12
+- Python 3.10+
 - macOS, Linux, or Windows
 - CPU is enough for the default path
 - No Ollama, OpenRouter, or other LLM backend required
