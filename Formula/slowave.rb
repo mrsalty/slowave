@@ -3,9 +3,9 @@ class Slowave < Formula
 
   desc "Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval"
   homepage "https://github.com/mrsalty/slowave"
-  url "https://github.com/mrsalty/slowave/archive/refs/tags/slowave-v0.1.4.tar.gz"
-  sha256 "a88a0db878c58a33cee20d816fdd890f031112dbfff5c46ed4ce6e2a661379e5"
-  license "MIT"
+  url "https://github.com/mrsalty/slowave/archive/refs/tags/v0.1.5.tar.gz"
+  sha256 "dd04186bf76424d60cc2e573f3b1d9539d6afaeec861f50f9e30aee25800347c"
+  license "AGPL-3.0-or-later"
   head "https://github.com/mrsalty/slowave.git", branch: "main"
 
   depends_on "python@3.12"

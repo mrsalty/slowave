@@ -1,0 +1,64 @@
+name: Update Homebrew Tap
+
+# Runs on every GitHub release (tag push via release.yml creates the release).
+# Computes the sha256 of the released tarball, updates Formula/slowave.rb in
+# this repo, then pushes the updated formula to mrsalty/homebrew-slowave so
+# `brew upgrade slowave` picks it up immediately.
+#
+# Required secret: HOMEBREW_TAP_TOKEN
+#   A GitHub PAT (classic) with `repo` scope on mrsalty/homebrew-slowave.
+#   Add it at: Settings → Secrets and variables → Actions → New repository secret
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  update-tap:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout slowave (main repo)
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Compute tarball sha256
+        id: sha
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          URL="https://github.com/mrsalty/slowave/archive/refs/tags/${GITHUB_REF_NAME}.tar.gz"
+          SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "url=$URL"         >> "$GITHUB_OUTPUT"
+          echo "sha256=$SHA"      >> "$GITHUB_OUTPUT"
+          echo "Version: $VERSION  SHA256: $SHA"
+
+      - name: Update Formula/slowave.rb in main repo
+        run: |
+          VERSION="${{ steps.sha.outputs.version }}"
+          URL="${{ steps.sha.outputs.url }}"
+          SHA="${{ steps.sha.outputs.sha256 }}"
+          sed -i "s|url \".*\"|url \"$URL\"|"           Formula/slowave.rb
+          sed -i "s|sha256 \".*\"|sha256 \"$SHA\"|"     Formula/slowave.rb
+          sed -i "s|license \".*\"|license \"AGPL-3.0-or-later\"|" Formula/slowave.rb
+
+      - name: Commit updated formula to main repo
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/slowave.rb
+          git diff --cached --quiet || git commit -m "chore: bump Homebrew formula to ${{ steps.sha.outputs.version }}"
+          git push
+
+      - name: Push formula to homebrew-slowave tap
+        env:
+          TAP_TOKEN: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+        run: |
+          git clone "https://x-access-token:${TAP_TOKEN}@github.com/mrsalty/homebrew-slowave.git" tap
+          cp Formula/slowave.rb tap/Formula/slowave.rb
+          cd tap
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/slowave.rb
+          git diff --cached --quiet || git commit -m "slowave ${{ steps.sha.outputs.version }}"
+          git push
