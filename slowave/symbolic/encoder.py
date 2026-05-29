@@ -44,10 +44,17 @@ class TextEncoder:
                 "Install it with: pip install sentence-transformers"
             ) from e
         # Silence HF hub advisory warning and progress bars.
-        # Must run after the import because sentence_transformers imports
-        # huggingface_hub which resets the logger level to WARNING.
+        # huggingface_hub installs a StreamHandler on its logger during import
+        # (triggered by the sentence_transformers import above). We must set both
+        # the logger level AND the handler level, otherwise NOTSET handlers inherit
+        # and still emit. TQDM_DISABLE must also be set before tqdm is first used.
         import logging as _logging
-        _logging.getLogger("huggingface_hub").setLevel(_logging.ERROR)
+        import os as _os
+        _os.environ["TQDM_DISABLE"] = "1"
+        _hf_log = _logging.getLogger("huggingface_hub")
+        _hf_log.setLevel(_logging.ERROR)
+        for _h in _hf_log.handlers:
+            _h.setLevel(_logging.ERROR)
         _logging.getLogger("huggingface_hub.utils._http").setLevel(_logging.ERROR)
         from slowave.utils.spinner import BrainSpinner
         with BrainSpinner("loading memory"):
