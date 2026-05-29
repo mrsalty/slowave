@@ -142,8 +142,16 @@ def _read_json(path: Path) -> dict[str, Any]:
     if path.exists():
         try:
             return json.loads(path.read_text(encoding="utf-8"))
-        except json.JSONDecodeError:
-            return {}
+        except json.JSONDecodeError as exc:
+            click.echo(
+                click.style(
+                    f"  ✗  {path} contains invalid JSON and cannot be patched safely.\n"
+                    f"     Fix the file first, then re-run slowave setup.\n"
+                    f"     Error: {exc}",
+                    fg="red",
+                )
+            )
+            sys.exit(1)
     return {}
 
 
