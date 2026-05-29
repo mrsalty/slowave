@@ -628,26 +628,27 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool) -> 
                 _ok(f"MCP server added → {desktop_path}")
             else:
                 _skip("MCP server already present")
-        # Skill install — attempt filesystem injection, but Claude Desktop resets this
-        # directory on launch so the manual upload is the only persistent path.
-        skill_file = _find_skill_file()
-        if skill_file:
-            if not dry_run:
-                _install_claude_desktop_skill(skill_file, dry_run=False)
-            skill_hint = f"     File: {skill_file}"
-        else:
-            skill_hint = f"     Download: {_SKILL_GITHUB_URL}"
+        # Claude Desktop: Custom Instructions is the only reliable injection path.
+        # Skills fire on turn 2+ only and can be reset by app updates.
         click.echo(click.style(
-            "\n  ⚠  REQUIRED — upload the Slowave Skill in Claude Desktop.\n"
-            "     Claude Desktop resets its skills directory on each launch,\n"
-            "     so the Skill must be uploaded manually once via the UI.\n"
-            "\n"
-            f"{skill_hint}\n"
-            "\n"
-            "     Steps: Settings → Connectors → Customize → Skills → Create → Upload\n"
-            "     Then restart Claude Desktop.",
+            "\n  ⚠  REQUIRED — add Slowave to Claude Desktop Custom Instructions.\n"
+            "     Settings → General → Instructions for Claude\n"
+            "     (copy and paste the block below, then save)\n",
             fg="yellow",
         ))
+        click.echo(
+            "  ┌─────────────────────────────────────────────────────────────┐\n"
+            "  │ At the start of every new conversation, before your first   │\n"
+            "  │ word, call:                                                  │\n"
+            "  │   slowave_session_start(agent=\"claude-desktop\", project=null)│\n"
+            "  │   slowave_event(session_id, \"user_message\", <first message>) │\n"
+            "  │   slowave_context(query=<first message>,                     │\n"
+            "  │                   application=\"claude-desktop\", limit=8)     │\n"
+            "  │ Do not respond until all three calls complete.               │\n"
+            "  │ Log every exchange with slowave_event. End each conversation │\n"
+            "  │ with slowave_event(task_complete/failed) + session_end.      │\n"
+            "  └─────────────────────────────────────────────────────────────┘"
+        )
 
     # 4. Cline
     if do_cl:

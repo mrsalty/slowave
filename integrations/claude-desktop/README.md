@@ -24,26 +24,23 @@ Then upload the Slowave Skill once (see below) and restart Claude Desktop.
 
 ---
 
-## Upload the Slowave Skill (required, one-time)
+## Add Custom Instructions (required)
 
-Claude Desktop resets its skills directory on each launch, so the Skill must be uploaded via the UI. `slowave setup` prints the file path.
+`slowave setup` handles MCP config and the worker. For Claude Desktop, lifecycle instructions must be added manually — the Custom Instructions field is stored server-side and has no automation path.
 
-1. Open Claude Desktop → **Settings** → **Connectors** → **Customize** → **Skills**
-2. Click **Create** → **Upload**
-3. Select the `slowave.skill` file — path printed by `slowave setup`, or download:
-   [slowave.skill](https://github.com/mrsalty/slowave/raw/main/integrations/claude-desktop/slowave.skill)
-4. Restart Claude Desktop
+**Settings → General → Instructions for Claude** — paste this:
 
-This is a one-time step — Claude Desktop persists uploaded skills across restarts.
+```
+At the start of every new conversation, before your first word, call:
+  slowave_session_start(agent="claude-desktop", project=null)
+  slowave_event(session_id, "user_message", <verbatim first message>)
+  slowave_context(query=<first message>, application="claude-desktop", limit=8)
+Do not respond until all three calls complete.
+Log every exchange with slowave_event. End each conversation with
+slowave_event(task_complete/failed, <outcome>) then slowave_session_end(session_id).
+```
 
-> **Turn-1 limitation:** Claude Desktop loads Skills after the first response starts, so Slowave fires from turn 2 onward. To get full turn-1 coverage, also add the lifecycle instruction to **Settings → Claude → Custom Instructions**:
->
-> ```
-> At the start of every new conversation, before writing your first word,
-> call slowave_session_start(agent="claude-desktop", project=null),
-> then slowave_event with the user message, then slowave_context.
-> Do not respond until all three calls complete.
-> ```
+`slowave setup` prints this block so you can copy it directly.
 
 ---
 
