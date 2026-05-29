@@ -307,6 +307,15 @@ class WorkingMemoryGate:
             activation += 0.08
             reasons.append(f"stability={stability}")
 
+        # schema_utility: composite of stability_score + recurrence_score.
+        # High-utility schemas (frequently recalled AND old/well-supported) get
+        # a modest activation bonus. Capped at 0.12 so it tilts ties, not dominates.
+        schema_utility = float(facets.get("schema_utility") or 0.0)
+        if schema_utility > 0.0:
+            utility_bonus = round(min(0.12, schema_utility * 0.15), 4)
+            activation += utility_bonus
+            reasons.append(f"utility={schema_utility:.2f}")
+
         layer = _lower(facets.get("memory_layer"))
         if layer == "profile":
             activation += 0.12

@@ -322,6 +322,7 @@ class SchemaStore:
                 (int(schema_id), episode_id, raw_event_id, quote, float(weight)),
             )
         conn.commit()
+        self._update_utility_scores(schema_id, recall_hit=False)
 
     def update_status(
         self,
@@ -371,6 +372,66 @@ class SchemaStore:
         conn.execute(
             "UPDATE schemas SET salience = salience + ?, last_updated_ts = ? WHERE id = ?",
             (float(amount), int(time.time()), int(schema_id)),
+        )
+        conn.commit()
+        self._update_utility_scores(schema_id, recall_hit=True)
+
+    def _update_utility_scores(self, schema_id: int, *, recall_hit: bool = False) -> None:
+        """Recompute and persist stability_score, recurrence_score, schema_utility.
+
+        Called after every reinforce() and reinforce_schema() so the composite
+        signal stays fresh without a separate background job.
+
+        stability_score  = sigmoid-like score based on schema age (days since
+                           first_formed_ts) and support count. Old, well-supported
+                           schemas score near 1.0; brand-new schemas start near 0.
+
+        recurrence_count = cumulative recall/reinforce hits (bumped each call).
+        recurrence_score = soft-capped normalisation: count / (count + 5).
+
+        schema_utility   = 0.5 * stability_score + 0.5 * recurrence_score.
+        """
+        conn = self.db.connect()
+        row = conn.execute(
+            "SELECT facets_json, first_formed_ts, last_updated_ts, supporting_episode_ids "
+            "FROM schemas WHERE id = ?",
+            (int(schema_id),),
+        ).fetchone()
+        if row is None:
+            return
+
+        now = int(time.time())
+        facets = loads_json(row["facets_json"])
+        if not isinstance(facets, dict):
+            facets = {}
+
+        # --- stability_score ---
+        age_days = max(0.0, (now - int(row["first_formed_ts"])) / 86400.0)
+        supporting = loads_json(row["supporting_episode_ids"])
+        support_count = len(supporting.get("ids", [])) if isinstance(supporting, dict) else 0
+        # age component: saturates at ~30 days (0→0, 7d→0.5, 30d→0.88)
+        age_score = 1.0 - 1.0 / (1.0 + age_days / 7.0)
+        # support component: saturates at ~10 episodes
+        support_score = support_count / (support_count + 10.0)
+        stability_score = round(0.5 * age_score + 0.5 * support_score, 4)
+
+        # --- recurrence_score ---
+        recurrence_count = int(facets.get("recurrence_count", 0))
+        if recall_hit:
+            recurrence_count += 1
+        recurrence_score = round(recurrence_count / (recurrence_count + 5.0), 4)
+
+        # --- schema_utility ---
+        schema_utility = round(0.5 * stability_score + 0.5 * recurrence_score, 4)
+
+        facets["stability_score"] = stability_score
+        facets["recurrence_count"] = recurrence_count
+        facets["recurrence_score"] = recurrence_score
+        facets["schema_utility"] = schema_utility
+
+        conn.execute(
+            "UPDATE schemas SET facets_json = ? WHERE id = ?",
+            (dumps_json(facets), int(schema_id)),
         )
         conn.commit()
 
@@ -704,6 +765,79 @@ class SchemaStore:
                 "avg": None if sal["avg_sal"] is None else float(sal["avg_sal"]),
                 "max": None if sal["max_sal"] is None else float(sal["max_sal"]),
             },
+        }
+
+    def decay_unused(
+        self,
+        *,
+        idle_days: float = 30.0,
+        decay_amount: float = 0.15,
+        review_threshold: float = 0.30,
+        dry_run: bool = False,
+    ) -> dict[str, Any]:
+        """Decay salience of active schemas that have never been recalled.
+
+        Brain analogue: memories that are never activated during waking or sleep
+        phases weaken over time. Schemas with zero recurrence that are older than
+        ``idle_days`` lose ``decay_amount`` salience per call. Those whose salience
+        falls below ``review_threshold`` are flagged ``needs_review`` for eventual
+        pruning.
+
+        Only affects ``active`` schemas with ``recurrence_count == 0`` (or missing)
+        and ``first_formed_ts`` older than ``idle_days``. Explicit-remember schemas
+        (``source_kind == "explicit_remember"``) are intentionally excluded — the
+        user asked us to keep those.
+
+        Returns a stats dict with ``decayed``, ``flagged_review``, ``dry_run``.
+        """
+        now = int(time.time())
+        cutoff_ts = now - int(idle_days * 86400)
+        conn = self.db.connect()
+        rows = conn.execute(
+            "SELECT id, salience, facets_json, first_formed_ts FROM schemas "
+            "WHERE status = 'active' AND first_formed_ts < ?",
+            (cutoff_ts,),
+        ).fetchall()
+
+        decayed = 0
+        flagged = 0
+        for row in rows:
+            facets = loads_json(row["facets_json"])
+            if not isinstance(facets, dict):
+                facets = {}
+            # Skip explicitly remembered schemas — user-authored memories are preserved.
+            source_kind = str(facets.get("source_kind") or facets.get("source") or "")
+            if source_kind == "explicit_remember":
+                continue
+            recurrence = int(facets.get("recurrence_count", 0))
+            if recurrence > 0:
+                continue  # schema has been recalled at least once — leave it alone
+
+            sid = int(row["id"])
+            new_salience = max(0.01, float(row["salience"]) - decay_amount)
+            flag_review = new_salience < review_threshold
+
+            if not dry_run:
+                sets = ["salience = ?", "last_updated_ts = ?"]
+                args: list[Any] = [new_salience, now]
+                if flag_review:
+                    sets.append("needs_review = 1")
+                args.append(sid)
+                conn.execute(f"UPDATE schemas SET {', '.join(sets)} WHERE id = ?", tuple(args))
+            decayed += 1
+            if flag_review:
+                flagged += 1
+
+        if not dry_run:
+            conn.commit()
+
+        return {
+            "idle_days": idle_days,
+            "decay_amount": decay_amount,
+            "review_threshold": review_threshold,
+            "decayed": decayed,
+            "flagged_review": flagged,
+            "dry_run": dry_run,
         }
 
     def count(self) -> int:

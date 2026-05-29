@@ -284,16 +284,17 @@ class SlowaveEngine:
 
     # ---- consolidation ----------------------------------------------------
     def consolidate_once(self) -> dict[str, Any]:
-        """Run one replay + latent consolidation pass.
+        """Run one replay + latent consolidation pass, then decay unused schemas.
 
         Equivalent to running ``slowave consolidate`` from the CLI.
-        Returns a stats dict with keys ``replay`` and ``consolidation``.
+        Returns a stats dict with keys ``replay``, ``consolidation``, and ``decay``.
 
         Use this instead of calling engine internals directly::
 
             stats = engine.consolidate_once()
             print(stats["replay"]["prototypes_touched"])
             print(stats["consolidation"]["schemas_created"])
+            print(stats["decay"]["decayed"])
         """
         import dataclasses as _dc
         replay_stats = self.replay_engine.replay_once()
@@ -302,7 +303,11 @@ class SlowaveEngine:
             protos = self._prototypes_for_episodes([])
             cs = self.consolidator.consolidate(prototype_ids=protos)
             consolidation = _dc.asdict(cs)
-        return {"replay": replay_stats, "consolidation": consolidation}
+        # Decay pass: weaken active schemas that have never been recalled and are
+        # older than 30 days. Runs after consolidation so newly-formed schemas
+        # are not immediately penalised.
+        decay = self.schemas.decay_unused(idle_days=30.0, dry_run=False)
+        return {"replay": replay_stats, "consolidation": consolidation, "decay": decay}
 
     # ---- recall -----------------------------------------------------------
     def refresh_indices(self) -> None:
@@ -558,6 +563,14 @@ class SlowaveEngine:
     def dedup_schemas_exact(self, *, dry_run: bool = True) -> dict[str, Any]:
         return self.schemas.dedup_exact(dry_run=dry_run)
 
+    def decay_schemas(self, *, idle_days: float = 30.0, dry_run: bool = False) -> dict[str, Any]:
+        """Decay salience of active schemas that have never been recalled.
+
+        Wraps ``SchemaStore.decay_unused``. Exposed here so the CLI and MCP
+        can trigger decay independently of a full consolidation pass.
+        """
+        return self.schemas.decay_unused(idle_days=idle_days, dry_run=dry_run)
+
     def close(self) -> None:
         self.db.close()
 
@@ -617,7 +630,18 @@ class SlowaveEngine:
                     if qsim is None:
                         continue
                     # Steering bias: small additive ~ qsim * confidence.
-                    boost = 0.08 * float(qsim) * float(conf)
+                    # High-utility schemas (frequently recalled + stable) get a
+                    # modest multiplier so well-established knowledge steers harder.
+                    schema_obj = None
+                    try:
+                        schema_obj = self.schemas.get(sid)
+                    except KeyError:
+                        pass
+                    utility = float(
+                        (schema_obj.facets or {}).get("schema_utility", 0.0)
+                    ) if schema_obj else 0.0
+                    utility_mult = 1.0 + 0.5 * utility  # 1.0 → 1.5 range
+                    boost = 0.08 * float(qsim) * float(conf) * utility_mult
                     prior_boost[eid] = max(prior_boost.get(eid, 0.0), boost)
                 elif status in ("superseded", "contradicted"):
                     age = max(0.0, float(now_ts - int(last_ts)))
