@@ -49,21 +49,21 @@ class TextEncoder:
         import logging as _logging
         _logging.getLogger("huggingface_hub").setLevel(_logging.ERROR)
         _logging.getLogger("huggingface_hub.utils._http").setLevel(_logging.ERROR)
-        try:
-            self._model = SentenceTransformer(self.cfg.model_name, device=self.cfg.device)
-        except (RuntimeError, ModuleNotFoundError, OSError) as e:
-            raise RuntimeError(
-                f"Local embedding backend failed to load.\n"
-                f"  Error: {type(e).__name__}: {e}\n"
-                f"  Likely cause: torch / torchvision / transformers version mismatch.\n"
-                f"  Tested Python versions: 3.10\u20133.12. Python 3.13 is not yet supported.\n"
-                f"  Fix: use Python 3.10\u20133.12, or run: pip install --upgrade torch torchvision transformers"
-            ) from e
-        # Use the current API name; fall back to the deprecated one for older versions
-        try:
-            self._dim = int(self._model.get_embedding_dimension())
-        except AttributeError:
-            self._dim = int(self._model.get_sentence_embedding_dimension())
+        from slowave.utils.spinner import BrainSpinner
+        with BrainSpinner("loading memory"):
+            try:
+                self._model = SentenceTransformer(self.cfg.model_name, device=self.cfg.device)
+            except (RuntimeError, ModuleNotFoundError, OSError) as e:
+                raise RuntimeError(
+                    f"Local embedding backend failed to load.\n"
+                    f"  Error: {type(e).__name__}: {e}\n"
+                    f"  Likely cause: torch / torchvision / transformers version mismatch.\n"
+                    f"  Fix: run: pip install --upgrade torch torchvision transformers"
+                ) from e
+            try:
+                self._dim = int(self._model.get_embedding_dimension())
+            except AttributeError:
+                self._dim = int(self._model.get_sentence_embedding_dimension())
 
     @property
     def dim(self) -> int:

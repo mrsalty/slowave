@@ -553,28 +553,37 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
         eng.close()
         return
 
-    click.echo(f"worker: starting (interval={interval}s). Ctrl-C or SIGTERM to stop.")
+    from slowave.utils.spinner import SleepSpinner
+
+    def _fmt_interval(s: int) -> str:
+        return f"{s // 60}m" if s >= 60 else f"{s}s"
+
+    click.echo(f"  🧠 worker starting  (interval={_fmt_interval(interval)})  Ctrl-C to stop.")
     while not stop:
         result = _run_pass()
         if ctx.obj["json"]:
             _print(result, True)
         else:
             cs = result.get("consolidation", {})
+            ts = __import__("datetime").datetime.now().strftime("%H:%M:%S")
             click.echo(
-                f"[{__import__('datetime').datetime.now().isoformat(timespec='seconds')}] "
-                f"consolidation: created={cs.get('schemas_created', 0)} "
-                f"reinforced={cs.get('schemas_reinforced', 0)} "
-                f"skipped={cs.get('schemas_skipped', 0)}"
+                f"  🧠 [{ts}]  "
+                f"schemas +{cs.get('schemas_created', 0)} "
+                f"~{cs.get('schemas_reinforced', 0)} "
+                f"skip={cs.get('schemas_skipped', 0)}"
             )
         # rebuild indices so next pass sees fresh state
         eng.refresh_indices()
+        spinner = SleepSpinner(interval_s=interval)
+        spinner.start()
         for _ in range(interval):
             if stop:
                 break
             _time.sleep(1)
+        spinner.stop()
 
     eng.close()
-    click.echo("worker: stopped.")
+    click.echo("  💤 worker stopped.")
 
 
 
