@@ -3,8 +3,10 @@ class Slowave < Formula
 
   desc "Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval"
   homepage "https://github.com/mrsalty/slowave"
-  url "https://github.com/mrsalty/slowave/archive/refs/tags/v0.1.5.tar.gz"
-  sha256 "dd04186bf76424d60cc2e573f3b1d9539d6afaeec861f50f9e30aee25800347c"
+  url "https://github.com/mrsalty/slowave/archive/refs/tags/v0.1.6.tar.gz"
+  # sha256 must be updated after pushing git tag v0.1.6:
+  #   curl -sL https://github.com/mrsalty/slowave/archive/refs/tags/v0.1.6.tar.gz | shasum -a 256
+  sha256 "PLACEHOLDER_UPDATE_AFTER_TAG_PUSH"
   license "AGPL-3.0-or-later"
   head "https://github.com/mrsalty/slowave.git", branch: "main"
 

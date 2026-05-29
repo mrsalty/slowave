@@ -189,7 +189,7 @@ class SlowaveEngine:
         synchronously. Use only for tests, scripts, or explicit one-shot
         invocations. In production, leave consolidate=False and run the
         background worker (slowave worker start) or call
-        slowave_consolidate / `slowave consolidate` on a schedule.
+        `slowave worker` or `slowave consolidate` on a schedule.
         """
         self.raw_log.end_session(session_id)
         episode_ids = self._form_episodes_from_session(session_id)

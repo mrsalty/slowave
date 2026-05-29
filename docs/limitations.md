@@ -18,6 +18,23 @@ Cross-session fact aggregation (summing quantities across multiple episodes) is 
 
 ## Language limitations
 
+### VSA dep-parse mode (English-only)
+
+The `vsa_mode="ner"` / `build_schema_vsa_ner` path in `slowave/latent/vsa.py` uses spaCy's
+`en_core_web_sm` model and is **English-only**. Despite the name, this mode does NOT use
+Named-Entity Recognition; it uses spaCy's **dependency parser** (tok2vec + tagger + parser)
+to extract subject / predicate / object roles from a schema's central-episode text.
+NER and lemmatizer components are explicitly disabled for performance.
+
+For multi-language deployments, use:
+- `vsa_mode="geometric"` (default) — language-agnostic; roles derived from centroid + PCA axes,
+  no text parsing required.
+- `vsa_mode="lexical"` — English-optimised regex verb-pattern matching; no language-specific
+  model, degrades gracefully on non-ASCII or non-English text.
+
+To extend `vsa_mode="ner"` to another language, replace `en_core_web_sm` with a multilingual
+or target-language spaCy model and update `_get_spacy_nlp()` in `slowave/latent/vsa.py`.
+
 ### Temporal anchor probe (English-calibrated)
 The temporal probe (Stage 10) estimates which past time period a query refers to ("last month", "two weeks ago") by comparing the query embedding against a set of pre-embedded **English** landmark phrases. For queries in other languages, the temporal probe does not fire and the system uses "now" as the temporal reference. This means temporal re-ranking may be slightly suboptimal for non-English past-anchored queries.
 

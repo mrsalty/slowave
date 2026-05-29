@@ -805,7 +805,32 @@ def update_prototype_graph(assignments_fine, transition_model):
 
 ### Default Path: Latent Schema Building
 
-For each prototype, `LatentSchemaBuilder` creates a schema purely from geometry—no LLM:
+For each prototype, `LatentSchemaBuilder` creates a schema purely from geometry—no LLM.
+
+#### VSA Role Binding (Stage 11)
+
+Every latent schema is also encoded as a **Vector Symbolic Architecture (VSA)** triple — a
+single 384-D vector that binds three semantic roles (subject / predicate / object) using
+Holographic Reduced Representations (HRR).  The binding uses circular convolution, which
+is O(d log d) via FFT and produces a vector nearly orthogonal to both inputs.  The triple
+is stored as a base64 blob in `facets_json["vsa_vec"]`.
+
+Three role-extraction modes are available via `LatentSchemaBuilder(vsa_mode=...)`:
+
+| Mode | How roles are extracted | Language | Encoder call? |
+|---|---|---|---|
+| `"geometric"` (default) | centroid → subject, PCA axis 1 → predicate, PCA axis 2 → object | language-agnostic | No |
+| `"lexical"` | regex verb detector + lexical signature | English-optimised | Yes (once per schema) |
+| `"ner"` | spaCy dep-parse (en_core_web_sm) | **English-only** | Yes (once per schema) |
+
+> **Language note:** `vsa_mode="ner"` uses spaCy's `en_core_web_sm` dependency parser.
+> Despite the name, Named-Entity Recognition is *disabled*; only the dependency parse
+> (tok2vec, tagger, parser) is used.  This mode is **English-only**.
+> For non-English deployments, use `vsa_mode="geometric"` (default, language-agnostic).
+> See [docs/limitations.md](limitations.md) for the full language support matrix.
+
+The VSA vector is stored per-schema and can be used for associative role-based retrieval
+(e.g. "find schemas where the subject is close to embedding X").
 
 ```mermaid
 flowchart TD
@@ -1030,7 +1055,7 @@ flowchart LR
 
 **All operations are on-device, zero external APIs.**
 
-MCP tools: `slowave_session_start`, `slowave_event`, `slowave_session_end`, `slowave_recall`, `slowave_remember`, `slowave_context`, `slowave_stats`, `slowave_consolidate`.
+MCP tools: `slowave_session_start`, `slowave_event`, `slowave_session_end`, `slowave_recall`, `slowave_remember`, `slowave_context`, `slowave_stats`.
 
 ---
 
@@ -1077,21 +1102,15 @@ slowave/
 │   ├── replay_engine.py
 │   ├── retrieval.py
 │   ├── salience.py
+│   ├── schema.py           LatentSchemaBuilder + LatentSchema + GeometricContradictionJudge
 │   ├── transition_model.py
-│   └── types.py
+│   ├── types.py
+│   └── vsa.py              VSA role binding (HRR, bind/unbind/bundle, geometric/lexical/dep-parse)
 ├── symbolic/
 │   ├── raw_log.py
 │   ├── episode_text.py
-│   ├── schema_store.py       SchemaStore + canonical_schema_text()
-│   ├── schema_extractor.py   SchemaExtractor → ExtractedSchema
-│   ├── contradiction.py      ContradictionJudge
+│   ├── schema_store.py     SchemaStore + canonical_schema_text()
 │   └── encoder.py
-├── llm/
-│   ├── base.py
-│   ├── ollama_backend.py
-│   └── prompts/
-│       ├── extract_schema.txt
-│       └── judge_contradiction.txt
 ├── storage/
 │   ├── sqlite_db.py
 │   └── schema.sql
@@ -1112,6 +1131,7 @@ slowave/
 | `transition_model` | Predictive coding / sequence learning |
 | Replay engine | Slow-wave sleep / hippocampal sharp-wave ripples |
 | `schemas` | Neocortical long-term semantic knowledge |
+| VSA role binding (`vsa.py`) | Hippocampal binding — superposition of who/what/where/when |
 | Salience decay | Forgetting curve (Ebbinghaus) |
 | Recall reinforcement | Memory reconsolidation / use-dependent strengthening |
 | Contradiction judge | Belief revision / predictive error correction |
@@ -1429,7 +1449,7 @@ recall("patterns in documents", project="doc-analysis")  # finds both sessions
 
 **Long-lived** (e.g., daemon):
 - Agent never ends session; keeps appending events indefinitely
-- Consolidation can be triggered explicitly: `slowave_consolidate()`
+- Consolidation runs via the background worker (`slowave worker`) — not triggered via MCP
 - Useful for stateful agents (chatbots, persistent assistants)
 - Caveat: large sessions (1M+ events) may hit memory limits
 

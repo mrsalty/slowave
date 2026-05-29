@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.1.6] - 2026-05-29
+
+### Added
+- **VSA (Vector Symbolic Architecture) role binding** — `slowave/latent/vsa.py` is now
+  fully documented and covered by tests.  Every latent schema carries a 384-D HRR triple
+  vector (`facets["vsa_vec"]`) binding subject / predicate / object roles via circular
+  convolution.  Three extraction modes are available via `LatentSchemaBuilder(vsa_mode=...)`:
+  - `"geometric"` (default) — language-agnostic; roles from centroid + PCA axes, no encoder call.
+  - `"lexical"` — English-optimised regex + lexical signature, encoder called once per schema.
+  - `"ner"` — spaCy dep-parse (`en_core_web_sm`); **English-only** (see Language note below).
+- **53 VSA unit tests** (was 32) — new test classes cover `_extract_roles_lexical`,
+  `_extract_roles_ner`, `LatentSchemaBuilder` vsa_mode guards, NER pipeline component
+  validation (confirms NER is disabled, dep-parse only), and edge cases (empty text,
+  long text truncation, determinism).
+
+### Changed
+- `slowave/latent/vsa.py` — `import re as _re` moved to module top (was at line 220);
+  `# Lexical role extraction` and `# NER role extraction` section comments updated with
+  clear language/model notes; `_extract_roles_ner` docstring now explicitly states it uses
+  the **dependency parser**, not Named-Entity Recognition, and is English-only.
+- `docs/architecture.md` — VSA Role Binding section added under §11 (Latent Schema Building);
+  biological analogies table updated; module map corrected (removed deleted LLM/symbolic files,
+  added `vsa.py` and `schema.py`).
+- `docs/limitations.md` — new "VSA dep-parse mode (English-only)" section added under
+  Language limitations; clarifies that `vsa_mode="ner"` requires `en_core_web_sm` and
+  documents the language-agnostic alternatives.
+- `docs/benchmarks.md` — version updated to 0.1.6 (no regression; VSA is a metadata/schema
+  encoding path with no effect on the retrieval ranking pipeline).
+- `README.md` — Language support section updated to list both English-only components
+  (temporal probe and VSA dep-parse mode) in a comparison table with fallback guidance.
+
+### Language note
+`vsa_mode="ner"` uses spaCy's `en_core_web_sm` **English-only** model.  Despite the name,
+NER tags are disabled; only the dependency parser is used.  For non-English deployments,
+use `vsa_mode="geometric"` (default, language-agnostic) or `vsa_mode="lexical"` (no
+model dependency).  Multi-language VSA support requires a multilingual or target-language
+spaCy model — tracked as a future roadmap item.
+
+### Benchmark results (v0.1.6, brain-only, zero LLM calls)
+
+No regression vs 0.1.5.  VSA is a schema-encoding path and does not affect the retrieval
+ranking pipeline.
+
+| Benchmark | n | v0.1.6 | v0.1.5 | Δ |
+|---|---:|---:|---:|---:|
+| LongMemEval (with consolidation) | 500 | **70.0%** | 70.0% | 0 |
+| LoCoMo (with consolidation) | 1 986 | **74.6%** | 74.6% | 0 |
+| DMR | 100 | **95.0%** | 95.0% | 0 |
+
 ## [0.1.5] - 2026-05-29
 
 ### Added

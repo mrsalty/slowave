@@ -25,7 +25,7 @@ def ks(hyp,ans):
 @dataclass
 class R:
     pid:str;name:str;q:str;ans:str;hyp:str;score:float;hit:bool;ns:int;ne:int;ti:float;tr:float;err:str|None=None
-def run(persona,enc,top_k=5,thr=0.65):
+def run(persona,enc,top_k=5,thr=0.65,vsa_mode='geometric'):
     pid=persona['persona_id'];name=persona['name']
     with tempfile.NamedTemporaryFile(suffix='.db',delete=False) as f: db=f.name
     out=[]
@@ -34,6 +34,9 @@ def run(persona,enc,top_k=5,thr=0.65):
             replay=ReplayConfig(assignment_threshold=thr,sample_size=256,max_prototypes_per_replay=32),
             retrieval=RetrievalConfig(salience_weight=0.3,neighbor_top_k=6),disable_encoder=False)
         eng=SlowaveEngine(cfg,shared_encoder=enc)
+        if vsa_mode != 'geometric':
+            from slowave.latent.schema import LatentSchemaBuilder
+            eng.consolidator.latent_builder = LatentSchemaBuilder(vsa_mode=vsa_mode, encoder=enc)
         t0=time.time()
         for sess in persona['sessions']:
             sid=eng.session_start(agent='dmr',project=pid)
@@ -72,6 +75,7 @@ def main():
     pa.add_argument('--top-k',type=int,default=5)
     pa.add_argument('--threshold',type=float,default=0.65)
     pa.add_argument('--out',default=None)
+    pa.add_argument('--vsa-mode',default='geometric',choices=['geometric','lexical','ner'])
     args=pa.parse_args()
     dp=Path(args.dataset)
     if not dp.is_absolute(): dp=REPO_ROOT/dp
@@ -88,7 +92,7 @@ def main():
     for i,persona in enumerate(personas,1):
         print('['+str(i)+'/'+str(len(personas))+'] '+persona['name']+' ...',end=' ',flush=True)
         t0=time.time()
-        rs=run(persona,enc=enc,top_k=args.top_k,thr=args.threshold)
+        rs=run(persona,enc=enc,top_k=args.top_k,thr=args.threshold,vsa_mode=args.vsa_mode)
         el=time.time()-t0
         h=sum(r.hit for r in rs)
         print(str(h)+'/'+str(len(rs))+' ('+str(round(100*h/max(1,len(rs))))+'%)  '+str(round(el,1))+'s')

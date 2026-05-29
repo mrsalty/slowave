@@ -50,7 +50,6 @@ from slowave.core.engine import SlowaveEngine
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
 from slowave.latent.salience import SalienceConfig
-from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
 
@@ -169,10 +168,6 @@ def run_question(
             db_path=db_path,
             dim=shared_encoder.dim,
             encoder=EncoderConfig(),
-            llm=LLMBackendConfig(
-                model=model, base_url=ollama_url,
-                backend=backend, api_key=api_key,
-            ),
             salience=SalienceConfig(tau_seconds=86400.0),
             replay=ReplayConfig(assignment_threshold=assignment_threshold,
                                 sample_size=256, max_prototypes_per_replay=32,
@@ -182,9 +177,7 @@ def run_question(
                 neighbor_top_k=0 if no_graph_expansion else 6,
                 use_multi_scale=not no_multi_scale,
             ),
-            disable_llm=(schema_mode != "llm" or not consolidate),
             disable_encoder=False,
-            schema_mode=schema_mode,
         )
         eng = SlowaveEngine(cfg, shared_encoder=shared_encoder)
 

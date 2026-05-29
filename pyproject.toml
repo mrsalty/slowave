@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "slowave"
-version = "0.1.5"
+version = "0.1.6"
 description = "Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval"
 requires-python = ">=3.10,<3.13"
 license = "AGPL-3.0-or-later"
@@ -29,6 +29,7 @@ dependencies = [
   "click>=8.1,<9",
   "sentence-transformers>=2.7",
   "mcp[cli]>=1.0",
+  "spacy>=3.8.14",
 ]
 
 [project.urls]

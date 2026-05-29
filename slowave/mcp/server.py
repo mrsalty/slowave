@@ -9,7 +9,7 @@ Tools exposed:
   - slowave_remember    : explicit typed memory
   - slowave_event       : append a session event
   - slowave_session_start / slowave_session_end
-  - slowave_consolidate : trigger replay + consolidation
+  - slowave_stats        : return system counts
   - slowave_stats       : counts
 
 The server uses an in-process SlowaveEngine. Each tool call opens a fresh
@@ -277,23 +277,12 @@ def slowave_session_end(session_id: str) -> dict[str, Any]:
 
     Fast path — never blocks. Episodes are formed immediately and
     are available for recall. Schema consolidation happens asynchronously
-    via the background worker or an explicit slowave_consolidate call.
+    via the background worker (`slowave worker`) or `slowave consolidate` CLI.
 
     Returns counts of episodes formed.
     """
     eng = _build_engine()
     return eng.session_end(session_id, consolidate=False)
-
-
-@mcp.tool()
-def slowave_consolidate() -> dict[str, Any]:
-    """Manually trigger a replay + latent consolidation pass.
-
-    Useful between long sessions to surface schemas without waiting for
-    session end.
-    """
-    eng = _build_engine()
-    return eng.consolidate_once()
 
 
 @mcp.tool()

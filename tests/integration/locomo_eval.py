@@ -34,7 +34,6 @@ from slowave.core.engine import SlowaveEngine
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
 from slowave.latent.salience import SalienceConfig
-from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig,TextEncoder
 
 CATEGORY_NAMES={1:'single-session',2:'temporal',3:'commonsense',4:'multi-session',5:'adversarial'}
@@ -148,21 +147,16 @@ def run_conversation(sample,*,model,ollama_url,consolidate,shared_encoder,
     try:
         cfg=SlowaveConfig(
             db_path=db_path, dim=shared_encoder.dim, encoder=EncoderConfig(),
-            llm=LLMBackendConfig(model=model,base_url=ollama_url,timeout_s=timeout_s,
-                                 backend=backend,api_key=api_key),
-            salience=SalienceConfig(tau_seconds=86400*30,recall_reinforcement=0.2),
+            salience=SalienceConfig(tau_seconds=86400*30),
             replay=ReplayConfig(assignment_threshold=assignment_threshold,
                                 sample_size=2048,
                                 max_prototypes_per_replay=max_prototypes_per_replay,
-                                use_pattern_separation=not no_pattern_separation,
                                 use_multi_scale=not no_multi_scale),
             retrieval=RetrievalConfig(salience_weight=0.0 if no_salience_rerank else 0.3,
                                       neighbor_top_k=0 if no_graph_expansion else 6,
-                                      use_spreading=not no_graph_expansion,
                                       use_transition=not no_transition,
                                       use_multi_scale=not no_multi_scale),
-            disable_llm=(schema_mode != "llm" or not consolidate), disable_encoder=False,
-            schema_mode=schema_mode,
+            disable_encoder=False,
         )
         eng=SlowaveEngine(cfg,shared_encoder=shared_encoder)
         t_ingest=time.time()

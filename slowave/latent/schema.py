@@ -210,12 +210,29 @@ class LatentSchemaConfig:
 class LatentSchemaBuilder:
     """Build a ``LatentSchema`` from a prototype + its member episodes.
 
-    Pure geometry. Zero LLM calls. Deterministic for a given set of
-    inputs.
+    Pure geometry. Zero LLM calls. Deterministic for a given set of inputs.
+
+    vsa_mode controls how the VSA triple vector is built:
+      "geometric" — current default: centroid + PCA axes (no encoder needed)
+      "lexical"   — regex + lexical signature + encoder.encode_many()
+      "ner"       — spaCy dependency parse + encoder.encode_many()
+
+    encoder must be supplied when vsa_mode != "geometric".
     """
 
-    def __init__(self, cfg: Optional[LatentSchemaConfig] = None):
+    def __init__(
+        self,
+        cfg: Optional[LatentSchemaConfig] = None,
+        vsa_mode: str = "geometric",
+        encoder=None,
+    ):
         self.cfg = cfg or LatentSchemaConfig()
+        if vsa_mode not in ("geometric", "lexical", "ner"):
+            raise ValueError(f"vsa_mode must be 'geometric', 'lexical', or 'ner'; got {vsa_mode!r}")
+        if vsa_mode != "geometric" and encoder is None:
+            raise ValueError(f"vsa_mode={vsa_mode!r} requires an encoder")
+        self.vsa_mode = vsa_mode
+        self.encoder = encoder
 
     def build(
         self,
@@ -287,6 +304,22 @@ class LatentSchemaBuilder:
         top_terms = list(lexical_sig.keys())[:3]
         display_lbl = " / ".join(top_terms) if top_terms else ""
 
+        # VSA binding: encode as a role-bound triple.
+        # Mode is controlled by self.vsa_mode (set at builder construction).
+        from slowave.latent.vsa import (
+            build_schema_vsa, build_schema_vsa_lexical,
+            build_schema_vsa_ner, vec_to_b64,
+        )
+        if self.vsa_mode == "lexical":
+            vsa_vec = build_schema_vsa_lexical(
+                cen, central_text, lexical_sig, self.encoder,
+            )
+        elif self.vsa_mode == "ner":
+            vsa_vec = build_schema_vsa_ner(cen, central_text, self.encoder)
+        else:  # "geometric" — default, no encoder needed
+            vsa_vec = build_schema_vsa(cen, facet_axes)
+        vsa_b64 = vec_to_b64(vsa_vec)
+
         return LatentSchema(
             centroid=cen,
             facet_axes=facet_axes,
@@ -307,6 +340,7 @@ class LatentSchemaBuilder:
                 "mean_ts": int(mean_ts),
                 "ts_span_s": int(ts_span),
                 "display_label": display_lbl,
+                "vsa_vec": vsa_b64,
             },
             evidence_indices=list(range(1, len(member_episodes) + 1)),
             evidence_quote=None,

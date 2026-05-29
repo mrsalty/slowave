@@ -15,7 +15,7 @@ Slowave is not just a transcript store or a conventional RAG layer. It is inspir
 
 ## Status
 
-**v0.1.5 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.12 is supported and tested; Python 3.13 is not yet supported.
+**v0.1.6 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.12 is supported and tested; Python 3.13 is not yet supported.
 
 Run `slowave doctor` after installing to verify your environment.
 
@@ -258,9 +258,16 @@ Slowave beats both published LLM-augmented baselines with zero API cost and ~9 m
 
 **All core memory operations are language-agnostic** — episode storage, embedding, retrieval, FAISS search, salience, spreading activation, the prototype graph, and multi-scale consolidation work on embedding vectors and numeric metadata with no language dependency.
 
-**One component is English-only: the temporal anchor probe (Stage 10).** This component estimates which past time period a query refers to ("last month", "two weeks ago") by comparing the query embedding against a set of pre-embedded English landmark phrases. For non-English queries, the temporal anchor probe does not fire and the system falls back to the previous default: the temporal re-ranking bonus is computed from "now", which is correct for atemporal queries and slightly suboptimal for past-anchored ones. No other capability is affected.
+**Two components are English-only:**
 
-The probe phrase list is in `slowave/latent/temporal.py` (`_TEMPORAL_PROBES`). Adding phrases in other languages extends the compass to those languages without any other code change.
+| Component | English-only reason | Fallback for non-English |
+|---|---|---|
+| **Temporal anchor probe (Stage 10)** | Pre-embedded English landmark phrases ("last month", "two weeks ago") calibrate the temporal compass | Temporal re-ranking defaults to "now" — correct for atemporal queries, slightly suboptimal for past-anchored ones |
+| **VSA dep-parse mode (`vsa_mode="ner"`)** | Uses spaCy `en_core_web_sm` dependency parser for subject/predicate/object role extraction | Use `vsa_mode="geometric"` (default, language-agnostic) or `vsa_mode="lexical"` (regex-based, no model dependency) |
+
+The temporal probe phrase list is in `slowave/latent/temporal.py` (`_TEMPORAL_PROBES`). Adding phrases in other languages extends the compass to those languages without any other code change.
+
+For a full language support matrix and multi-language deployment guide, see [docs/limitations.md](docs/limitations.md).
 
 For full per-category results, run conditions, and known gaps see [docs/benchmarks.md](docs/benchmarks.md).  
 For evaluation scripts and reproduction steps see [docs/reproducibility.md](docs/reproducibility.md).  

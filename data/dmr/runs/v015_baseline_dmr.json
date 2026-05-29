@@ -1,0 +1,909 @@
+{
+  "summary": {
+    "total_hits": 97,
+    "total_questions": 100,
+    "hit_pct": 97.0
+  },
+  "results": [
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "Where does Sarah work?",
+      "expected": "St Marys Hospital in Boston",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: Emma started second grade and wants to be a veterinarian.\nAssistant: Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What is Sarah's nursing specialty?",
+      "expected": "neonatal care",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: Hi I'm Sarah. I work as a pediatric nurse at St Marys Hospital in Bosto",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "How many years has Sarah been nursing?",
+      "expected": "8 years",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: Hi I'm Sarah. I work as a pediatric nurse at St Marys Hospital in Bosto",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What are the names of Sarah's children?",
+      "expected": "Emma and Jake",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: I've been training for the Boston Marathon. Goal is to finish under 4 h",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What does Sarah's husband Mark do for work?",
+      "expected": "high school history teacher",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: Emma started second grade and wants to be a veterinarian.\nAssistant: Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What is Sarah's marathon goal time?",
+      "expected": "under 4 hours",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: I've been training for the Boston Marathon. Goal is to finish under 4 h",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What kind of car does Sarah drive?",
+      "expected": "blue Honda Odyssey",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: I've been training for the Boston Marathon. Goal is to finish under 4 h",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What city does Sarah live in?",
+      "expected": "Newton Massachusetts",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: I've been training for the Boston Marathon. Goal is to finish under 4 h",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What is the name of the family dog?",
+      "expected": "Biscuit",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: Emma started second grade and wants to be a veterinarian.\nAssistant: Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p01",
+      "persona_name": "Sarah",
+      "question": "What instrument does Sarah play?",
+      "expected": "violin",
+      "hypothesis": "User: I've been training for the Boston Marathon. Goal is to finish under 4 hours.\nAssistant: How is training going?\nUser: Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan.\nAssistant: Makes sense with two kids.\nUser: We live in Newton Massachusetts. I grew up in Portland Oregon. [2026-05-29] User: Emma started second grade and wants to be a veterinarian.\nAssistant: Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "Where does David work?",
+      "expected": "Google in Seattle",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "What team does David work on at Google?",
+      "expected": "Maps team",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "Where did David go to university?",
+      "expected": "UC Berkeley",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "What neighborhood does David live in?",
+      "expected": "Capitol Hill",
+      "hypothesis": "User: I moved to Seattle for Google. I live in Capitol Hill neighborhood and I'm single.\nAssistant: Capitol Hill is a great area.\nUser: Love it. I hike in the Cascades almost every weekend and drive a Tesla Model 3.\nAssistant: Perfect for the Pacific Northwest.\nUser: I also play basketball twice a week. I have a cat named Pixel who is 2 years old. User: My mom is a doctor in San Francisco and my d",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "What type of car does David drive?",
+      "expected": "Tesla Model 3",
+      "hypothesis": "User: I moved to Seattle for Google. I live in Capitol Hill neighborhood and I'm single.\nAssistant: Capitol Hill is a great area.\nUser: Love it. I hike in the Cascades almost every weekend and drive a Tesla Model 3.\nAssistant: Perfect for the Pacific Northwest.\nUser: I also play basketball twice a week. I have a cat named Pixel who is 2 years old. User: My mom is a doctor in San Francisco and my d",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "What is the name of David's cat?",
+      "expected": "Pixel",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "What language is David currently learning?",
+      "expected": "Japanese",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "What is David's favorite programming language?",
+      "expected": "Python",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "What does David's father do?",
+      "expected": "retired professor of mathematics at Stanford",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p02",
+      "persona_name": "David",
+      "question": "How long has David worked at Google?",
+      "expected": "5 years",
+      "hypothesis": "User: My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford.\nAssistant: Quite an academic family.\nUser: I'm learning Japanese right now. I want to travel to Japan next spring.\nAssistant: That sounds wonderful.\nUser: My favorite programming language is Python. I contribute to open source projects. User: I moved to Seattle for Google. I live in Capitol Hill",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What subject does Maria teach?",
+      "expected": "Spanish",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What school does Maria teach at?",
+      "expected": "Westlake High School",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What is the name of Carlos's restaurant?",
+      "expected": "El Jardin",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 0.0,
+      "hit": false
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "How many children does Maria have?",
+      "expected": "three",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What does Sofia want to study at university?",
+      "expected": "biology",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What is the name of Maria's cat?",
+      "expected": "Mango",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What car does Maria drive?",
+      "expected": "red Toyota RAV4",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What neighborhood does Maria live in?",
+      "expected": "Tarrytown",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What hobby do Maria and Carlos do on Friday nights?",
+      "expected": "salsa dancing",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So A",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p03",
+      "persona_name": "Maria",
+      "question": "What language is Maria currently learning?",
+      "expected": "Italian",
+      "hypothesis": "User: I grew up in San Antonio and got my teaching degree from UT Austin.\nAssistant: So Austin has special meaning for you.\nUser: My hobby is salsa dancing. Carlos and I go every Friday night.\nAssistant: Sounds wonderful.\nUser: I'm also learning Italian. Dream to take family to Italy next summer. [2026-05-29] User: We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges.\nA",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "What was James's rank when he retired?",
+      "expected": "colonel",
+      "hypothesis": "User: I'm James Walker a retired Marine Corps colonel 58 years old. I live in San Diego.\nAssistant: Thank you for your service. What did you do after retiring?\nUser: I consult for defense contractors and teach military history at community college part-time.\nAssistant: What branch did you serve in?\nUser: Infantry. I served for 30 years. Last posting at Camp Pendleton so I stayed in San Diego. User",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "How many years did James serve in the military?",
+      "expected": "30 years",
+      "hypothesis": "User: I'm James Walker a retired Marine Corps colonel 58 years old. I live in San Diego.\nAssistant: Thank you for your service. What did you do after retiring?\nUser: I consult for defense contractors and teach military history at community college part-time.\nAssistant: What branch did you serve in?\nUser: Infantry. I served for 30 years. Last posting at Camp Pendleton so I stayed in San Diego. User",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "What does James teach part-time?",
+      "expected": "military history",
+      "hypothesis": "User: I'm James Walker a retired Marine Corps colonel 58 years old. I live in San Diego.\nAssistant: Thank you for your service. What did you do after retiring?\nUser: I consult for defense contractors and teach military history at community college part-time.\nAssistant: What branch did you serve in?\nUser: Infantry. I served for 30 years. Last posting at Camp Pendleton so I stayed in San Diego. User",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "What is the name of James's dog?",
+      "expected": "Ranger",
+      "hypothesis": "User: I'm widowed. My wife Patricia passed away four years ago from cancer.\nAssistant: I'm so sorry for your loss.\nUser: Thank you. My son Robert is a lawyer in Chicago. My daughter Karen is an ER doctor in Phoenix.\nAssistant: They've done very well.\nUser: I have a German Shepherd named Ranger. I drive a black Ford F-150 truck. User: I love woodworking in my garage making furniture. I also fish on",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "What kind of truck does James drive?",
+      "expected": "black Ford F-150",
+      "hypothesis": "User: I love woodworking in my garage making furniture. I also fish on weekends off the coast.\nAssistant: Sounds relaxing.\nUser: I grew up in rural Tennessee. Still have family there. I visit every Thanksgiving.\nAssistant: Family traditions are important.\nUser: I'm a huge San Diego Padres fan. Season tickets for the last 10 years. User: I'm widowed. My wife Patricia passed away four years ago from",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "What is James's son Robert's profession?",
+      "expected": "lawyer",
+      "hypothesis": "User: I'm widowed. My wife Patricia passed away four years ago from cancer.\nAssistant: I'm so sorry for your loss.\nUser: Thank you. My son Robert is a lawyer in Chicago. My daughter Karen is an ER doctor in Phoenix.\nAssistant: They've done very well.\nUser: I have a German Shepherd named Ranger. I drive a black Ford F-150 truck. User: I love woodworking in my garage making furniture. I also fish on",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "What city does James's daughter Karen work in?",
+      "expected": "Phoenix",
+      "hypothesis": "User: I'm widowed. My wife Patricia passed away four years ago from cancer.\nAssistant: I'm so sorry for your loss.\nUser: Thank you. My son Robert is a lawyer in Chicago. My daughter Karen is an ER doctor in Phoenix.\nAssistant: They've done very well.\nUser: I have a German Shepherd named Ranger. I drive a black Ford F-150 truck. User: I love woodworking in my garage making furniture. I also fish on",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "What is James's main hobby in his garage?",
+      "expected": "woodworking",
+      "hypothesis": "User: I love woodworking in my garage making furniture. I also fish on weekends off the coast.\nAssistant: Sounds relaxing.\nUser: I grew up in rural Tennessee. Still have family there. I visit every Thanksgiving.\nAssistant: Family traditions are important.\nUser: I'm a huge San Diego Padres fan. Season tickets for the last 10 years. User: I'm James Walker a retired Marine Corps colonel 58 years old.",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "Where did James grow up?",
+      "expected": "rural Tennessee",
+      "hypothesis": "User: I love woodworking in my garage making furniture. I also fish on weekends off the coast.\nAssistant: Sounds relaxing.\nUser: I grew up in rural Tennessee. Still have family there. I visit every Thanksgiving.\nAssistant: Family traditions are important.\nUser: I'm a huge San Diego Padres fan. Season tickets for the last 10 years. User: I'm James Walker a retired Marine Corps colonel 58 years old.",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p04",
+      "persona_name": "James",
+      "question": "Which baseball team is James a fan of?",
+      "expected": "San Diego Padres",
+      "hypothesis": "User: I love woodworking in my garage making furniture. I also fish on weekends off the coast.\nAssistant: Sounds relaxing.\nUser: I grew up in rural Tennessee. Still have family there. I visit every Thanksgiving.\nAssistant: Family traditions are important.\nUser: I'm a huge San Diego Padres fan. Season tickets for the last 10 years. User: I'm widowed. My wife Patricia passed away four years ago from",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "Where does Priya work?",
+      "expected": "Netflix in Los Gatos",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I live in San Jose in Willow Glen neighborhood with roo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "What did Priya study for her PhD?",
+      "expected": "statistics",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I live in San Jose in Willow Glen neighborhood with roo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "Where did Priya do her undergraduate degree?",
+      "expected": "IIT Bombay",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I live in San Jose in Willow Glen neighborhood with roo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "What neighborhood does Priya live in?",
+      "expected": "Willow Glen",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I live in San Jose in Willow Glen neighborhood with roo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "How does Priya commute to work?",
+      "expected": "by train",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I live in San Jose in Willow Glen neighborhood with roo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "What does Priya do every morning?",
+      "expected": "yoga",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I live in San Jose in Willow Glen neighborhood with roo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "Where do Priya's parents live?",
+      "expected": "Mumbai",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I live in San Jose in Willow Glen neighborhood with roo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "What is Priya's social media about?",
+      "expected": "food",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I love photography and cooking Indian food. I have a fo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "What does Priya do on Saturdays as a volunteer?",
+      "expected": "coding bootcamp",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I love photography and cooking Indian food. I have a fo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p05",
+      "persona_name": "Priya",
+      "question": "What is Priya's favorite travel destination?",
+      "expected": "Japan",
+      "hypothesis": "User: I love photography and cooking Indian food. I have a food Instagram with 12000 followers.\nAssistant: Quite a following.\nUser: I also volunteer at a coding bootcamp for underprivileged youth on Saturdays.\nAssistant: Admirable work.\nUser: My favorite travel destination is Japan. I went last year and absolutely loved it. [2026-05-29] User: I love photography and cooking Indian food. I have a fo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "What is Tom's profession?",
+      "expected": "plumber",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: I'm a massive Cleveland Browns fan. Season tickets for 15 year",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "How many employees does Tom have?",
+      "expected": "4",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: We live in Lakewood suburb of Cleveland. We have a rescue pit ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "What does Tom's wife Linda do?",
+      "expected": "accountant",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: We live in Lakewood suburb of Cleveland. We have a rescue pit ",
+      "ks": 0.0,
+      "hit": false
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "What suburb of Cleveland does Tom live in?",
+      "expected": "Lakewood",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: We live in Lakewood suburb of Cleveland. We have a rescue pit ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "What is the name of Tom's dog?",
+      "expected": "Bruno",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: We live in Lakewood suburb of Cleveland. We have a rescue pit ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "How many daughters does Tom have?",
+      "expected": "two",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: We live in Lakewood suburb of Cleveland. We have a rescue pit ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "What truck does Tom drive?",
+      "expected": "white Chevy Silverado",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: We live in Lakewood suburb of Cleveland. We have a rescue pit ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "Which NFL team is Tom a fan of?",
+      "expected": "Cleveland Browns",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: I'm a massive Cleveland Browns fan. Season tickets for 15 year",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "What winter sport does Tom enjoy?",
+      "expected": "ice fishing",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: I'm a massive Cleveland Browns fan. Season tickets for 15 year",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p06",
+      "persona_name": "Tom",
+      "question": "Where did Tom grow up?",
+      "expected": "Pittsburgh",
+      "hypothesis": "User: I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too.\nAssistant: Ice fishing on Lake Erie?\nUser: Exactly. I go almost every winter weekend. I also coach Ashley's softball team.\nAssistant: You stay busy.\nUser: Always. I grew up in Pittsburgh which is funny given I'm a Browns fan. [2026-05-29] User: We live in Lakewood suburb of Cleveland. We have a rescue pit ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "What instrument does Elena play?",
+      "expected": "violin",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Outside",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "Which orchestra does Elena perform with?",
+      "expected": "Chicago Symphony Orchestra",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Outside",
+      "ks": 0.333,
+      "hit": false
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "Where did Elena grow up?",
+      "expected": "St Petersburg Russia",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Outside",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "What conservatory did Elena study at before Juilliard?",
+      "expected": "St Petersburg Conservatory",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Outside",
+      "ks": 0.667,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "What neighborhood of Chicago does Elena live in?",
+      "expected": "Lincoln Park",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Outside",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "What is the name of Antoine's restaurant?",
+      "expected": "Maison",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: I live ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "What are the names of Elena's cats?",
+      "expected": "Chopin and Liszt",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Outside",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "How many violin students does Elena teach?",
+      "expected": "six",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Exactly",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "What does Elena mostly read?",
+      "expected": "Russian literature",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: Outside",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p07",
+      "persona_name": "Elena",
+      "question": "When does Elena visit her mother in Russia?",
+      "expected": "every summer",
+      "hypothesis": "User: Outside music I love reading mostly Russian literature. I run 5K most mornings.\nAssistant: Running keeps you energized for performances?\nUser: Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students.\nAssistant: Giving back to the next generation.\nUser: Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg. [2026-05-29] User: I live ",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "What school does Marcus coach at?",
+      "expected": "Grady High School",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "How many years has Marcus been teaching?",
+      "expected": "22 years",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] Assistant: Serious dedication.\nUser: Gotta model what I t",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "Where did Marcus play college football?",
+      "expected": "Georgia Tech",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "What university does Marcus Jr. play football for?",
+      "expected": "Clemson",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "What neighborhood does Marcus live in?",
+      "expected": "East Atlanta Village",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "What is the name of Marcus's dog?",
+      "expected": "Tackle",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "What car does Marcus drive?",
+      "expected": "silver Dodge RAM",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "What did Marcus's team accomplish two years ago?",
+      "expected": "won the state championship",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "What NFL team does Marcus support?",
+      "expected": "Atlanta Falcons",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p08",
+      "persona_name": "Marcus",
+      "question": "Where did Marcus grow up?",
+      "expected": "Savannah Georgia",
+      "hypothesis": "User: I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs.\nAssistant: Sounds delicious.\nUser: I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am.\nAssistant: Serious dedication.\nUser: Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there. [2026-05-29] User: I'm divorced. My son Marcus Jr. is 19 and plays col",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "Where does Yuki work?",
+      "expected": "Airbnb in San Francisco",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What is Yuki's job title?",
+      "expected": "UX designer",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What school did Yuki get her design degree from?",
+      "expected": "RISD",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What neighborhood does Yuki live in?",
+      "expected": "Mission District",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What is the name of Yuki's pet?",
+      "expected": "Mochi",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What kind of animal is Mochi?",
+      "expected": "rabbit",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What sport does Yuki do three times a week?",
+      "expected": "rock climbing",
+      "hypothesis": "User: My hobbies are ceramics and rock climbing. I go to a climbing gym three times a week.\nAssistant: Both very creative activities.\nUser: I also do watercolor painting. I sell prints on Etsy.\nAssistant: A side business!\nUser: A small one. I visit my grandparents in Osaka every other year. Going this December. User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-A",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What does Yuki sell on Etsy?",
+      "expected": "watercolor prints",
+      "hypothesis": "User: My hobbies are ceramics and rock climbing. I go to a climbing gym three times a week.\nAssistant: Both very creative activities.\nUser: I also do watercolor painting. I sell prints on Etsy.\nAssistant: A side business!\nUser: A small one. I visit my grandparents in Osaka every other year. Going this December. User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-A",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "Where do Yuki's grandparents live?",
+      "expected": "Osaka",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p09",
+      "persona_name": "Yuki",
+      "question": "What dietary choice does Yuki follow?",
+      "expected": "vegetarian",
+      "hypothesis": "User: Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American.\nAssistant: How long have you been at Airbnb?\nUser: Almost 2 years. Before that a startup for a year after my design degree from RISD.\nAssistant: Excellent school.\nUser: I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born. User: My hobbies are ceramics and rock climb",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "What university was Robert a professor at?",
+      "expected": "University of Michigan",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: My wife Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "What did Robert specialize in as an economist?",
+      "expected": "macroeconomics and monetary policy",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: My wife Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "What is Robert currently writing?",
+      "expected": "a book on Federal Reserve policy history",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: My wife Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "What was Dorothy's profession before retiring?",
+      "expected": "federal judge",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] Assistant: A ful",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "How many years have Robert and Dorothy been married?",
+      "expected": "41 years",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: We have fo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "What is Robert's son William's profession?",
+      "expected": "cardiologist",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: My wife Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "Where does Claire work as a professor?",
+      "expected": "Duke",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: My wife Do",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "What car does Robert drive?",
+      "expected": "navy blue Volvo XC90",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: We have fo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "What sport does Robert play twice a week?",
+      "expected": "golf",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] User: We have fo",
+      "ks": 1.0,
+      "hit": true
+    },
+    {
+      "persona_id": "p10",
+      "persona_name": "Robert",
+      "question": "Where did Robert grow up?",
+      "expected": "rural Kentucky",
+      "hypothesis": "User: We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90.\nAssistant: Safe choice for a grandfather.\nUser: I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively.\nAssistant: A full and lovely retirement.\nUser: I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers. [2026-05-29] Assistant: A ful",
+      "ks": 1.0,
+      "hit": true
+    }
+  ]
+}

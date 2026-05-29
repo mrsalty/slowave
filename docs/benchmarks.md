@@ -13,7 +13,7 @@ Two modes are tracked:
 
 The delta between the two shows the contribution of the consolidation layer.
 
-## Overall Results (v0.1.5)
+## Overall Results (v0.1.6)
 
 | Benchmark | n | With consolidation | Episode-only | Cosine-only ablation¹ |
 |---|---:|---:|---:|---:|
@@ -32,7 +32,7 @@ The delta between the two shows the contribution of the consolidation layer.
 
 | Parameter | Value |
 |---|---|
-| Slowave version | 0.1.5 |
+| Slowave version | 0.1.6 |
 | Embedding model | `BAAI/bge-small-en-v1.5` (384 dim) |
 | Hardware | MacBook Pro M-series CPU |
 | Schema mode | `latent` (brain-only, zero LLM) |
@@ -47,7 +47,7 @@ DMR (MemGPT paper, arXiv:2310.08560) tests factual recall across multi-session p
 
 | System | Score | LLM calls | Cost |
 |---|---:|---|---|
-| **Slowave v0.1.5** | **95.0%** | **0** | **$0.00** |
+| **Slowave v0.1.6** | **95.0%** | **0** | **$0.00** |
 | Zep SOTA (arXiv:2501.13956) | 94.8% | Many | $ |
 | MemGPT baseline | 93.4% | Many | $ |
 
