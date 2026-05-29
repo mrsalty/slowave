@@ -1,19 +1,31 @@
 # Installing Slowave
 
-For the fastest client-specific walkthroughs, start with [integrations/](../integrations/).
+## TL;DR — one-liner install
+
+```bash
+pipx install slowave   # or: pip install slowave
+slowave setup          # wires MCP, hooks, CLAUDE.md, .clinerules, and the worker
+slowave doctor         # verify
+```
+
+`slowave setup` auto-detects your platform (macOS / Linux / Windows) and configures everything in one shot. It is idempotent — safe to re-run. Jump to [Setup command reference](#setup-command-reference) for options.
+
+---
+
+For the fastest client-specific walkthroughs, see [integrations/](../integrations/).
 
 Slowave has three setup layers:
 
 1. **Install local binaries**: `slowave` and `slowave-mcp`.
-2. **Wire an AI client correctly**: MCP config plus prompt/rules injection.
+2. **Wire an AI client correctly**: MCP config plus lifecycle instruction injection.
 3. **Run the worker**: background consolidation for durable schemas and high-quality `slowave_context`.
 
 MCP only exposes tools; it does not make a model call them. Slowave works at regime only when the client is instructed to start sessions, log events, load context, and end sessions.
 
 ## Requirements
 
-- Python 3.10+
-- macOS or Linux recommended
+- Python 3.10–3.12
+- macOS, Linux, or Windows
 - CPU is enough for the default path
 - No Ollama, OpenRouter, or other LLM backend required
 
@@ -308,12 +320,41 @@ slowave dashboard
 
 The dashboard is local and read-only. It shows DB health, Slowave/MCP processes, schemas, recall results, and the schema graph.
 
+## Setup command reference
+
+`slowave setup` automates steps 3–6 above. It is the fastest path from install to working memory.
+
+```
+Usage: slowave setup [OPTIONS]
+
+Options:
+  --client [claude-code|claude-desktop|cline|all]
+                        Which client(s) to configure.  [default: all]
+  --worker / --no-worker
+                        Install the background worker as a system service.  [default: worker]
+  --hooks / --no-hooks  Inject UserPromptSubmit + Stop hooks (Claude Code only).  [default: hooks]
+  --dry-run             Preview changes without writing any files.
+  --help                Show this message and exit.
+```
+
+What it does per platform:
+
+| Step | macOS | Linux | Windows |
+|---|---|---|---|
+| MCP config patch | `~/.claude/settings.json`, Desktop config, Cline settings | same paths via `$XDG_CONFIG_HOME` | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Lifecycle instructions | `~/.claude/CLAUDE.md`, `~/.clinerules` | same | same |
+| Enforcement hooks | `UserPromptSubmit` + `Stop` in `~/.claude/settings.json` | same | same |
+| Worker service | launchd plist → `~/Library/LaunchAgents/` | systemd user service → `~/.config/systemd/user/` | Task Scheduler task via PowerShell |
+
+All steps are idempotent. Re-running `slowave setup` will report `–` (already present) for anything already configured.
+
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Client does not show Slowave tools | MCP path wrong or client not restarted | Use `which slowave-mcp`, use an absolute path, restart the client |
-| Client sees tools but never calls them | Prompt/rules injection missing | Add the lifecycle block to `CLAUDE.md`, `.clinerules`, or custom instructions |
-| Sessions exist but memory is empty | Client starts/ends sessions without events | Require immediate `user_message` and event logging during the task |
+| Client does not show Slowave tools | MCP path wrong or client not restarted | Run `slowave setup --dry-run` to check the path; restart the client |
+| Client sees tools but never calls them | Prompt/rules injection missing | Run `slowave setup` — it injects `CLAUDE.md`, `.clinerules`, and hooks |
+| Sessions exist but memory is empty | Client starts/ends sessions without events | Hooks inject a reminder each turn; verify with `slowave status` |
 | Recall returns stale/noisy memories | Client uses `slowave_recall` as default priming | Use `slowave_context` for prompt injection; reserve recall for broad evidence search |
-| Distilled schemas do not appear | Worker/consolidation not running | Run `slowave worker --once` or keep `slowave worker --interval 300` running |
+| Distilled schemas do not appear | Worker/consolidation not running | Run `slowave worker --once` or let `slowave setup` install the service |
+| `slowave setup` can't find slowave-mcp | Binary not on PATH | Use absolute path: run `which slowave-mcp` and pass it manually if needed |

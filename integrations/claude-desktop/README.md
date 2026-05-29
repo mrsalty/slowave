@@ -2,6 +2,20 @@
 
 Goal: configure Claude Desktop with Slowave long-term memory quickly.
 
+## Fastest path — one command
+
+```bash
+pipx install slowave   # or: pip install slowave
+slowave setup --client claude-desktop
+```
+
+`slowave setup` automatically patches the Claude Desktop MCP config and installs the background worker.
+Then upload the Skill manually (no API for this yet — see step 3).
+
+---
+
+## Manual setup
+
 Claude Desktop requires **both**:
 
 1. MCP server configuration so the `slowave_*` tools are available.

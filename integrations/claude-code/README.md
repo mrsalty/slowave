@@ -2,10 +2,29 @@
 
 Goal: configure Claude Code with Slowave long-term memory quickly.
 
+## Fastest path — one command
+
+```bash
+pipx install slowave   # or: pip install slowave
+slowave setup --client claude-code
+```
+
+That's it. `slowave setup` automatically:
+- Patches `~/.claude/settings.json` with the MCP server block.
+- Injects `UserPromptSubmit` + `Stop` hooks that remind Claude every turn.
+- Injects the mandatory lifecycle block into `~/.claude/CLAUDE.md`.
+- Installs the background worker service (launchd / systemd / Task Scheduler).
+
+Restart Claude Code, then [verify](#5-verify).
+
+---
+
+## Manual setup
+
 Claude Code requires **both**:
 
 1. MCP server configuration so the `slowave_*` tools are available.
-2. `CLAUDE.md` instructions so Claude Code consistently follows the memory lifecycle.
+2. `CLAUDE.md` instructions + enforcement hooks so Claude Code consistently follows the memory lifecycle.
 
 ## 1. Install and verify Slowave
 

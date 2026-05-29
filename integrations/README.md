@@ -1,5 +1,17 @@
 # Slowave integrations
 
+## Fastest path
+
+```bash
+pipx install slowave   # or: pip install slowave
+slowave setup          # auto-configures all detected clients + worker service
+slowave doctor         # verify
+```
+
+`slowave setup` handles MCP config, `CLAUDE.md`/`.clinerules` injection, enforcement hooks, and the background worker service on macOS, Linux, and Windows. It is idempotent — safe to re-run.
+
+---
+
 This directory is the fast path from a fresh install to working long-term memory in a client.
 
 ## Pick your client

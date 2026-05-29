@@ -36,6 +36,7 @@ slowave dashboard
 | `slowave worker --interval 300` | Run periodic background consolidation |
 | `slowave dashboard --port 8765` | Run the local read-only web dashboard |
 | `slowave doctor` | Check Python version, dependencies, embedding backend, SQLite write access, and MCP server availability. Exits 1 on failure. |
+| `slowave setup [--client all\|claude-code\|claude-desktop\|cline] [--dry-run]` | One-command post-install wiring: patches MCP configs, injects CLAUDE.md/clinerules lifecycle block, installs enforcement hooks (Claude Code), and registers the background worker service (launchd/systemd/Task Scheduler). Idempotent. |
 
 ## Event types
 

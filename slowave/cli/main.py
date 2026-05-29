@@ -26,6 +26,7 @@ os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 import click
 
+from slowave.cli.setup import setup_cmd
 from slowave.core.config import SlowaveConfig
 from slowave.core.paths import default_db_path
 from slowave.core.engine import SlowaveEngine
@@ -667,6 +668,9 @@ def doctor_cmd() -> None:
     else:
         click.echo("One or more checks failed. See details above.")
         sys.exit(1)
+
+
+cli.add_command(setup_cmd)
 
 
 def main() -> None:
