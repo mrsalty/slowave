@@ -4,13 +4,13 @@
 
 ```mermaid
 flowchart TD
-    RE([raw_events])
-    EP([episodes\non session_end · <1ms · no LLM])
-    PR([prototypes\nfine 0.85 + coarse 0.55])
-    LS([latent schemas\ncentroid + SVD axes + temporal anchor])
-    CD([contradiction\ndetection])
-    PG([prototype graph\n+ latent schemas])
-    RC([recall\ncosine · predictive seed · spreading activation · multi-scale])
+    RE([raw events])
+    EP([episodes])
+    PR([prototypes])
+    LS([latent schemas])
+    CD([contradiction detection])
+    PG([prototype graph])
+    RC([recall])
 
     RE -->|session_end| EP
     EP -->|background worker| PR
