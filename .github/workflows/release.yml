@@ -73,3 +73,16 @@ jobs:
           files: dist/*
           generate_release_notes: true
           tag_name: ${{ github.ref_name }}
+
+      - name: Update Homebrew formula
+        run: |
+          VERSION="${{ needs.build.outputs.version }}"
+          URL="https://github.com/mrsalty/slowave/archive/refs/tags/v${VERSION}.tar.gz"
+          SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
+          sed -i "s|url \".*\"|url \"$URL\"|"       Formula/slowave.rb
+          sed -i "s|sha256 \".*\"|sha256 \"$SHA\"|" Formula/slowave.rb
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/slowave.rb
+          git diff --cached --quiet || git commit -m "chore: bump Homebrew formula to ${VERSION}"
+          git push
