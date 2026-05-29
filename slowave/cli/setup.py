@@ -101,7 +101,9 @@ def _cline_mcp_settings_path() -> Path:
 def _find_mcp_binary() -> str | None:
     found = shutil.which("slowave-mcp")
     if found:
-        return str(Path(found).resolve())
+        # Keep the stable symlink path (e.g. /opt/homebrew/bin/slowave-mcp) rather
+        # than resolving it to a versioned Cellar path that breaks on brew upgrade.
+        return str(Path(found).absolute())
     extras: list[Path] = [
         _home() / ".local" / "bin" / "slowave-mcp",
         _home() / ".local" / "pipx" / "venvs" / "slowave" / "bin" / "slowave-mcp",
@@ -115,14 +117,15 @@ def _find_mcp_binary() -> str | None:
         ]
     for p in extras:
         if p.exists():
-            return str(p.resolve())
+            return str(p.absolute())
     return None
 
 
 def _find_slowave_binary() -> str:
     found = shutil.which("slowave")
     if found:
-        return str(Path(found).resolve())
+        # Same: keep the stable symlink, don't resolve into a versioned path.
+        return str(Path(found).absolute())
     mcp = _find_mcp_binary() or ""
     # e.g. /opt/homebrew/bin/slowave-mcp -> /opt/homebrew/bin/slowave
     candidate = mcp.replace("-mcp.exe", ".exe").replace("-mcp", "")
