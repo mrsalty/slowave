@@ -1,5 +1,26 @@
 # Changelog
 
+## [0.1.10] - 2026-05-30
+
+### Fixed
+- **Claude Desktop:** replaced unreliable Skill filesystem injection with Custom Instructions
+  approach. `slowave setup` now prints a single `⚠ REQUIRED` warning with the exact
+  Settings path and a link to the instruction block. Skills fired on turn 2+ and were
+  reset by Claude Desktop on each launch; Custom Instructions fire before turn 1 and
+  persist permanently.
+- Removed ~140 lines of dead Skill injection code (`_find_skill_file`,
+  `_skills_plugin_base`, `_install_claude_desktop_skill`) from `setup.py`.
+- Replaced personal names (`Matteo`) in tests with neutral names (`Alex`).
+- Replaced `chamomile tea` demo with `spaghetti` / `what is my favourite food`.
+
+### Changed
+- `integrations/claude-desktop/README.md` rewritten: Custom Instructions as Step 1,
+  fenced code block with GitHub copy button, explains why Skills don't work for turn 1.
+- `slowave setup --client claude-desktop` output: compact warning + link instead of
+  a large ASCII box.
+- Release workflow unified: PyPI + Homebrew formula update both triggered automatically
+  via release-please on PR merge.
+
 ## [0.1.9] - 2026-05-30
 
 ### Fixed
