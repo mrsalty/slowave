@@ -2,15 +2,22 @@
 
 ## Overview
 
-```
-raw_events  →  episodes (on session_end, <1ms, no LLM)
-                  ↓ background worker
-                  ↓ cluster into prototypes (fine 0.85 + coarse 0.55)
-                  ↓ build latent schema (centroid + SVD axes + temporal anchor)
-                  ↓ geometric contradiction detection
-              prototype graph + latent schemas
-                  ↓
-              recall: cosine + predictive seed + spreading activation + multi-scale
+```mermaid
+flowchart LR
+    RE([raw_events])
+    EP([episodes\non session_end\n<1ms · no LLM])
+    PR([prototypes\nfine 0.85 + coarse 0.55])
+    LS([latent schemas\ncentroid + SVD axes\n+ temporal anchor])
+    CD([contradiction\ndetection])
+    PG([prototype graph\n+ latent schemas])
+    RC([recall\ncosine · predictive seed\nspreading activation\nmulti-scale])
+
+    RE -->|session_end| EP
+    EP -->|background worker| PR
+    PR --> LS
+    LS --> CD
+    CD --> PG
+    PG --> RC
 ```
 
 **Episodes** form immediately on session close — sub-millisecond, no LLM.  
