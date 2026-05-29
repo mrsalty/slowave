@@ -3,14 +3,14 @@
 ## Overview
 
 ```mermaid
-flowchart LR
+flowchart TD
     RE([raw_events])
-    EP([episodes\non session_end\n<1ms · no LLM])
+    EP([episodes\non session_end · <1ms · no LLM])
     PR([prototypes\nfine 0.85 + coarse 0.55])
-    LS([latent schemas\ncentroid + SVD axes\n+ temporal anchor])
+    LS([latent schemas\ncentroid + SVD axes + temporal anchor])
     CD([contradiction\ndetection])
     PG([prototype graph\n+ latent schemas])
-    RC([recall\ncosine · predictive seed\nspreading activation\nmulti-scale])
+    RC([recall\ncosine · predictive seed · spreading activation · multi-scale])
 
     RE -->|session_end| EP
     EP -->|background worker| PR
