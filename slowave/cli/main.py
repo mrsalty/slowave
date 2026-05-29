@@ -619,23 +619,25 @@ def doctor_cmd() -> None:
 
     ok = True
 
-    def _check(label, passed, detail=""):
+    def _check(emoji, label, passed, detail=""):
         nonlocal ok
-        icon = "\u2713" if passed else "\u2717"
-        msg = "  " + icon + "  " + label
+        status = "✅" if passed else "❌"
+        msg = f"  {status}  {emoji}  {label}"
         if detail:
-            msg += "\n       " + detail
+            msg += "\n          " + detail
         click.echo(msg)
         if not passed:
             ok = False
 
-    click.echo("Slowave doctor\n")
+    click.echo()
+    click.echo("  🧠 slowave doctor")
+    click.echo("  " + "─" * 30)
 
     # Python version
     vi = sys.version_info
     py_ok = (vi.major == 3) and (vi.minor >= 10)
     _check(
-        "Python {}.{}.{}".format(vi.major, vi.minor, vi.micro),
+        "🐍", "Python {}.{}.{}".format(vi.major, vi.minor, vi.micro),
         py_ok,
         "" if py_ok else "Slowave requires Python 3.10+.",
     )
@@ -643,32 +645,32 @@ def doctor_cmd() -> None:
     # torch
     try:
         import torch
-        _check("torch {}".format(torch.__version__), True)
+        _check("🔥", "torch {}".format(torch.__version__), True)
     except Exception as e:
-        _check("torch", False, str(e))
+        _check("🔥", "torch", False, str(e))
 
     # faiss
     try:
         import faiss
-        _check("faiss-cpu {}".format(faiss.__version__), True)
+        _check("🔍", "faiss-cpu {}".format(faiss.__version__), True)
     except Exception as e:
-        _check("faiss", False, str(e))
+        _check("🔍", "faiss", False, str(e))
 
     # sentence-transformers
     try:
         import sentence_transformers as _st
-        _check("sentence-transformers {}".format(_st.__version__), True)
+        _check("🤗", "sentence-transformers {}".format(_st.__version__), True)
     except Exception as e:
-        _check("sentence-transformers", False, str(e))
+        _check("🤗", "sentence-transformers", False, str(e))
 
     # embedding backend end-to-end
     try:
         from slowave.symbolic.encoder import TextEncoder
         enc = TextEncoder()
         v = enc.encode("doctor test")
-        _check("Embedding backend (dim={})".format(v.shape[0]), True)
+        _check("🧠", "embedding backend  dim={}".format(v.shape[0]), True)
     except Exception as e:
-        _check("Embedding backend", False, str(e)[:200])
+        _check("🧠", "embedding backend", False, str(e)[:200])
 
     # SQLite write
     try:
@@ -682,24 +684,25 @@ def doctor_cmd() -> None:
         con.commit()
         con.close()
         os.unlink(tmp_path)
-        _check("SQLite write access", True)
+        _check("💾", "SQLite write access", True)
     except Exception as e:
-        _check("SQLite write access", False, str(e))
+        _check("💾", "SQLite write access", False, str(e))
 
     # MCP server
     mcp_path = shutil.which("slowave-mcp")
     _check(
-        "MCP server (slowave-mcp)",
+        "🔌", "slowave-mcp",
         mcp_path is not None,
-        "" if mcp_path else "Run: pip install slowave  (or pipx install slowave)",
+        "" if mcp_path else "run: pip install slowave  (or pipx install slowave)",
     )
 
-    click.echo("")
+    click.echo()
     if ok:
-        click.echo("All checks passed.")
+        click.echo("  ✨ all checks passed")
     else:
-        click.echo("One or more checks failed. See details above.")
+        click.echo("  ⚠️  one or more checks failed — see details above")
         sys.exit(1)
+    click.echo()
 
 
 cli.add_command(setup_cmd)
