@@ -56,10 +56,29 @@ jobs:
 
       - name: Publish package to PyPI
         if: ${{ steps.release.outputs.release_created }}
-        uses: pypa/gh-action-pypi-publish@release/v1
+        run: |
+          pip install "twine>=6.1"
+          twine upload dist/* --non-interactive
+        env:
+          TWINE_USERNAME: __token__
+          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Upload artifacts to GitHub release
         if: ${{ steps.release.outputs.release_created }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: gh release upload "${{ steps.release.outputs.tag_name }}" dist/* --clobber
+
+      - name: Update Homebrew formula
+        if: ${{ steps.release.outputs.release_created }}
+        run: |
+          VERSION="${{ steps.release.outputs.version }}"
+          URL="https://github.com/mrsalty/slowave/archive/refs/tags/v${VERSION}.tar.gz"
+          SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
+          sed -i "s|url \".*\"|url \"$URL\"|"       Formula/slowave.rb
+          sed -i "s|sha256 \".*\"|sha256 \"$SHA\"|" Formula/slowave.rb
+          git config user.name  "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/slowave.rb
+          git diff --cached --quiet || git commit -m "chore: bump Homebrew formula to ${VERSION}"
+          git push
