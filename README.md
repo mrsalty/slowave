@@ -94,7 +94,7 @@ This makes Slowave useful when you want:
 | Project continuity | Conventions, decisions, constraints, and lessons learned can survive across sessions. |
 | Inspectability | The CLI and dashboard help inspect the local memory state. |
 
-## Install in minutes
+## Install
 
 > **TL;DR — two commands and you're done:**
 > ```bash
