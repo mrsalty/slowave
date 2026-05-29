@@ -1,4 +1,4 @@
-# 🧠 Slowave
+# Slowave
 
 **Brain-inspired, latent-space long-term memory for MCP-compatible AI agents, coding assistants, and chats.  
 Shared across sessions, clients, and tools.**
