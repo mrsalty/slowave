@@ -7,17 +7,11 @@ Shared across sessions, clients, and tools.**
 [![Python](https://img.shields.io/pypi/pyversions/slowave?color=4c6f91)](https://pypi.org/project/slowave/)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
-Slowave plugs into **Claude Code**, **Cline**, and **Claude Desktop** through MCP, giving them a shared local memory that accumulates, consolidates, adapts, and recalls across sessions.
+Slowave plugs into **Claude Code**, **Cline**, **Claude Desktop**, and more through MCP, giving them a shared local memory that accumulates, consolidates, adapts, and recalls across sessions.
 
 Slowave is not just a transcript store or a conventional RAG layer. It is inspired by the idea that memory is a dynamic system shaped by association, time, salience, replay, and retrieval. The default memory path uses local embeddings, SQLite, FAISS, deterministic geometry, and background consolidation — without requiring an LLM call in the core memory loop.
 
 > **Slowave core idea:** sessions create episodes, replay distills recurring patterns, time changes salience, contradiction-aware updates keep memory current, and recall reinforces memories that prove useful.
-
-## Status
-
-**v0.1.8 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.13 is supported and tested.
-
-Run `slowave doctor` after installing to verify your environment.
 
 ## At a glance
 
@@ -49,50 +43,14 @@ flowchart LR
 
 ## How it works
 
-A typical Slowave flow looks like this:
+1. You work with your AI client (Claude Code, Cline, Claude Desktop, or any MCP-compatible tool) on a task.
+2. The client logs observations through MCP as the work happens.
+3. When the session ends, Slowave forms an episode from those events.
+4. The background worker consolidates episodes into prototypes and latent schemas.
+5. In a future session, `slowave_context` injects a compact, cue-relevant memory brief.
+6. Recalled memories are reinforced — shaping future retrieval.
 
-1. You work with Cline, Claude Code, or Claude Desktop on a project or conversation.
-2. The client writes task-relevant observations through MCP.
-3. When the session ends, Slowave forms an episode.
-4. The background worker consolidates accumulated episodes into prototypes and schemas.
-5. In a future session, `slowave_context` retrieves a compact, relevant memory brief.
-6. If a memory is useful during recall, it is reinforced.
-
-Slowave represents memory primarily through embeddings, metadata, salience, temporal structure, and learned geometry rather than repeated LLM summarization.
-
-## What Slowave is for
-
-Slowave is a local long-term memory substrate for tools that otherwise forget between sessions. It can remember:
-
-| Memory type | Examples |
-|---|---|
-| Project context | Conventions, architectural decisions, recurring commands |
-| Personal context | Preferences, communication style, planning patterns |
-| Work history | Debugging sessions, lessons learned, open questions |
-| Constraints | Warnings, artifacts, superseded decisions, active assumptions |
-| Desktop chat context | Non-coding conversations that should persist locally |
-
-Existing memory systems often retrieve stored text or ask an LLM to rewrite memories. Slowave treats memory as a living system: sessions create episodes, replay distills patterns, time changes salience, contradiction-aware updates revise beliefs, and recall reinforces what was useful.
-
-## Why Slowave is different
-
-Most agent memory systems fall into one of two categories:
-
-1. **Transcript stores** that save and retrieve previous messages.
-2. **LLM-written memory systems** that ask a model to extract, rewrite, summarize, or update memories.
-
-Slowave takes a different path. It keeps the default memory loop local, embedding-based, and geometry-driven. Memories are not only retrieved; they evolve through salience, decay, replay, activation, and consolidation.
-
-This makes Slowave useful when you want:
-
-| Need | Slowave approach |
-|---|---|
-| Shared memory across tools | One local store can be used by Claude Code, Cline, Claude Desktop, and other MCP clients. |
-| Low-friction local setup | No hosted memory service or remote inference backend is required. |
-| Compact context injection | `slowave_context` returns a short, cue-relevant memory brief. |
-| Memory that changes over time | Recall, decay, salience, and replay affect future retrieval. |
-| Project continuity | Conventions, decisions, constraints, and lessons learned can survive across sessions. |
-| Inspectability | The CLI and dashboard help inspect the local memory state. |
+Slowave can remember project conventions, architectural decisions, personal preferences, debugging lessons, open questions, constraints, and any context that should survive across sessions — for coding work and general chat alike.
 
 ## Install
 
@@ -101,7 +59,7 @@ This makes Slowave useful when you want:
 > pipx install slowave
 > slowave setup
 > ```
-> `slowave setup` detects your platform, wires every client you have (Claude Code, Cline, Claude Desktop), injects lifecycle instructions, and installs the background worker — all in one shot. It is idempotent: safe to re-run at any time.
+> `slowave setup` detects your platform, wires every client you have (Claude Code, Cline, Claude Desktop, and more as support expands), injects lifecycle instructions, and installs the background worker — all in one shot. It is idempotent: safe to re-run at any time.
 
 ---
 
@@ -139,7 +97,7 @@ Installing gives you two binaries:
 | Binary | Purpose |
 |---|---|
 | `slowave` | CLI, dashboard, manual recall, debugging, and research workflows. |
-| `slowave-mcp` | MCP server used by Claude Desktop, Claude Code, and Cline. |
+| `slowave-mcp` | MCP server used by Claude Desktop, Claude Code, Cline, and any MCP-compatible client. |
 
 ---
 
@@ -195,7 +153,7 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 
 | Guide | Covers |
 |---|---|
-| [integrations/](integrations/) | Fast client-specific setup guides for Claude Desktop, Claude Code, and Cline |
+| [integrations/](integrations/) | Client-specific setup guides (Claude Desktop, Claude Code, Cline — more coming) |
 | [docs/install.md](docs/install.md) | Full install and setup guide, `slowave setup` reference, manual wiring steps |
 | [docs/architecture.md](docs/architecture.md) | Brain-inspired mechanisms, data flow, storage, recall, consolidation |
 | [docs/design.md](docs/design.md) | Why the LLM path was removed from the memory loop |
