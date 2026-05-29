@@ -65,83 +65,24 @@ Slowave can remember project conventions, architectural decisions, personal pref
 
 ## 🚀 Install
 
-> **TL;DR — two commands and you're done:**
-> ```bash
-> pipx install slowave
-> slowave setup
-> ```
-> `slowave setup` detects your platform, wires every client you have (Claude Code, Cline, Claude Desktop, and more as support expands), injects lifecycle instructions, and installs the background worker — all in one shot. It is idempotent: safe to re-run at any time.
-
----
-
-### Step 1 — Install
-
-Choose the method that fits your workflow:
-
 ```bash
-# Recommended: pipx (isolated, no venv management)
 pipx install slowave
-
-# pip
-pip install slowave
-
-# macOS Homebrew (formula lives in the main repo)
-brew tap mrsalty/slowave https://github.com/mrsalty/slowave
-brew install slowave
-```
-
-<details>
-<summary>Install from source</summary>
-
-```bash
-git clone https://github.com/mrsalty/slowave
-cd slowave
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-</details>
-
-Installing gives you two binaries:
-
-| Binary | Purpose |
-|---|---|
-| `slowave` | CLI, dashboard, manual recall, debugging, and research workflows. |
-| `slowave-mcp` | MCP server used by Claude Desktop, Claude Code, Cline, and any MCP-compatible client. |
-
----
-
-### Step 2 — Wire clients and start the worker
-
-```bash
 slowave setup
 ```
 
-This single command handles everything:
-
-| What it configures | Details |
-|---|---|
-| MCP config | Patches `~/.claude/settings.json`, Claude Desktop config, and Cline settings with the `slowave-mcp` server block |
-| Lifecycle instructions | Injects the mandatory Slowave block into `~/.claude/CLAUDE.md` and `~/.clinerules` |
-| Enforcement hooks | Adds `UserPromptSubmit` + `Stop` hooks in Claude Code so the model always calls Slowave |
-| Background worker | Installs as a system service (launchd on macOS, systemd on Linux, Task Scheduler on Windows) |
-
-Options: `--client [claude-code|claude-desktop|cline|all]` · `--no-worker` · `--no-hooks` · `--dry-run`
-
-> [!IMPORTANT]
-> MCP configuration alone is not enough — the client also needs the lifecycle instructions to reliably call Slowave tools. `slowave setup` handles both. See [docs/install.md](docs/install.md) for the full manual walkthrough and per-client integration guides in [integrations/](integrations/).
-
----
-
-### Step 3 — Verify
+`slowave setup` detects your platform, wires every client it finds (Claude Code, Cline, Claude Desktop), injects lifecycle instructions, and installs the background worker — all in one shot. It is idempotent: safe to re-run.
 
 ```bash
-slowave doctor   # checks Python, torch, faiss, and the embedding backend
+slowave doctor   # verify: checks Python, torch, faiss, embedding backend
 slowave stats    # shows stored events, episodes, and schemas
 ```
 
-Memory is stored locally at `~/.slowave/slowave.db`. No Ollama, OpenRouter, hosted vector database, or cloud service is required.
+Memory is stored locally at `~/.slowave/slowave.db`. No Ollama, OpenRouter, vector database, or cloud service required.
+
+> [!NOTE]
+> **Claude Desktop:** after `slowave setup`, **restart Claude Desktop** — the Slowave Skill is installed automatically. If automatic install fails, `slowave setup` prints manual fallback instructions. See [docs/install.md → Step 2a](docs/install.md#step-2a--claude-desktop-restart-after-setup).
+
+**Full install guide** (all install methods, manual config, per-client setup, worker, troubleshooting): **[docs/install.md](docs/install.md)**
 
 ## 📊 Local dashboard
 
@@ -164,12 +105,12 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 
 | Guide | Covers |
 |---|---|
-| [integrations/](integrations/) | Client-specific setup guides (Claude Desktop, Claude Code, Cline — more coming) |
-| [docs/install.md](docs/install.md) | Full install and setup guide, `slowave setup` reference, manual wiring steps |
+| [docs/install.md](docs/install.md) | **Install, setup, and per-client wiring** — the single authoritative guide |
+| [integrations/](integrations/) | Per-client quick-ref cards (Claude Desktop, Claude Code, Cline) |
+| [docs/cli.md](docs/cli.md) | CLI command reference |
+| [docs/dashboard.md](docs/dashboard.md) | Local dashboard guide |
 | [docs/architecture.md](docs/architecture.md) | Brain-inspired mechanisms, data flow, storage, recall, consolidation |
 | [docs/design.md](docs/design.md) | Why the LLM path was removed from the memory loop |
-| [docs/dashboard.md](docs/dashboard.md) | Local dashboard guide |
-| [docs/cli.md](docs/cli.md) | CLI quickstart and command reference |
 | [docs/benchmarks.md](docs/benchmarks.md) | Benchmark results, run conditions, per-category breakdown |
 | [docs/limitations.md](docs/limitations.md) | Known limitations: schema quality, language support, scale |
 | [docs/reproducibility.md](docs/reproducibility.md) | How to reproduce benchmark numbers |

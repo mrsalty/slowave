@@ -20,6 +20,24 @@ import base64
 import numpy as np
 import pytest
 
+# ---------------------------------------------------------------------------
+# Optional model availability — checked once at import time.
+# en_core_web_sm is not a pip dependency; it must be installed separately via
+#   python -m spacy download en_core_web_sm
+# Tests that require the model are skipped when it is absent so that the
+# standard `pip install -e ".[dev]"` CI path stays clean.
+# ---------------------------------------------------------------------------
+try:
+    import spacy as _spacy
+    _EN_CORE_WEB_SM_AVAILABLE: bool = _spacy.util.is_package("en_core_web_sm")
+except Exception:
+    _EN_CORE_WEB_SM_AVAILABLE = False
+
+_requires_en_core_web_sm = pytest.mark.skipif(
+    not _EN_CORE_WEB_SM_AVAILABLE,
+    reason="en_core_web_sm not installed — run: python -m spacy download en_core_web_sm",
+)
+
 from slowave.latent.vsa import (
     ROLE_OBJECT,
     ROLE_PREDICATE,
@@ -327,12 +345,16 @@ class TestExtractRolesLexical:
 # NER (dep-parse) role extraction — English-only (en_core_web_sm)
 # ---------------------------------------------------------------------------
 
+@_requires_en_core_web_sm
 class TestExtractRolesNer:
     """Tests for _extract_roles_ner — spaCy dependency-parse extraction.
 
     Despite the _ner suffix, this uses the dep parser only (tok2vec+tagger+parser).
     NER tags are disabled.  en_core_web_sm is English-only; tests verify
     graceful fallback for edge-case inputs.
+
+    Skipped when en_core_web_sm is not installed (standard CI path).
+    Install with:  python -m spacy download en_core_web_sm
     """
 
     def setup_method(self):

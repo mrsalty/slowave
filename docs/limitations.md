@@ -72,14 +72,14 @@ In the default LLM-free path, a latent schema stores:
 
 The central episode text is a *representative example*, not a synthesised summary. It is the episode whose embedding is geometrically closest to the cluster centroid — the most typical member. It will look like raw agent/user text, not like an LLM-written abstract.
 
-The lexical signature and display label (added in 0.1.4) give a more useful at-a-glance view of what the cluster is about. Both are deterministic and auditable — no LLM, no generation.
+The lexical signature and display label give a more useful at-a-glance view of what the cluster is about. Both are deterministic and auditable — no LLM, no generation.
 
 If you need human-quality summaries, that requires a verbalization layer (Stage 11 in the roadmap), which is explicitly out of scope for the LLM-free path.
 
 
 ## No LLM required
 
-Slowave is designed to be fully LLM-free. Ingest, consolidation, and retrieval require no API key or LLM call. An internal `schema_mode=llm` code path exists from early development and is being removed; do not depend on it.
+Slowave is fully LLM-free. Ingest, consolidation, and retrieval require no API key or LLM call. The LLM-based schema extraction code path was removed in v0.1.5.
 
 ## Alpha status
 

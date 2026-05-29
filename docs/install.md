@@ -1,60 +1,56 @@
-# Installing Slowave
+# Installing and setting up Slowave
 
-## TL;DR — one-liner install
-
-```bash
-pipx install slowave   # or: pip install slowave
-slowave setup          # wires MCP, hooks, CLAUDE.md, .clinerules, and the worker
-slowave doctor         # verify
-```
-
-`slowave setup` auto-detects your platform (macOS / Linux / Windows) and configures everything in one shot. It is idempotent — safe to re-run. Jump to [Setup command reference](#setup-command-reference) for options.
+This is the single authoritative guide for every install and client setup scenario.
+Client-specific quick-ref cards live in [`integrations/`](../integrations/).
 
 ---
 
-For the fastest client-specific walkthroughs, see [integrations/](../integrations/).
+## The short version
 
-Slowave has three setup layers:
+```bash
+pipx install slowave
+slowave setup
+slowave doctor
+```
 
-1. **Install local binaries**: `slowave` and `slowave-mcp`.
-2. **Wire an AI client correctly**: MCP config plus lifecycle instruction injection.
-3. **Run the worker**: background consolidation for durable schemas and high-quality `slowave_context`.
+`slowave setup` detects your platform, patches every AI client config it finds (Claude Desktop, Claude Code, Cline), injects lifecycle instructions, and installs the background worker — in one shot. It is idempotent: safe to re-run at any time.
 
-MCP only exposes tools; it does not make a model call them. Slowave works at regime only when the client is instructed to start sessions, log events, load context, and end sessions.
+If something went wrong or you want to do it manually, read on.
+
+---
 
 ## Requirements
 
 - Python 3.10+
 - macOS, Linux, or Windows
-- CPU is enough for the default path
-- No Ollama, OpenRouter, or other LLM backend required
+- CPU is enough — no GPU, Ollama, OpenRouter, or cloud service required
 
-The default memory path is brain-only: sentence-transformer embeddings, SQLite, FAISS, replay/consolidation, and geometry-based recall.
+---
 
-## 1. Install
+## Step 1 — Install
 
-### Recommended: pipx
+Choose one method. They all give you the same two binaries: `slowave` (CLI) and `slowave-mcp` (MCP server).
 
-For the CLI and MCP server, `pipx` keeps Slowave and its dependencies isolated:
+**pipx** *(recommended — isolated, no venv management)*
 
 ```bash
 pipx install slowave
 ```
 
-### pip
+**pip**
 
 ```bash
 pip install slowave
 ```
 
-### Homebrew on macOS
+**Homebrew (macOS)**
 
 ```bash
 brew tap mrsalty/slowave https://github.com/mrsalty/slowave
 brew install slowave
 ```
 
-### From source
+**From source**
 
 ```bash
 git clone https://github.com/mrsalty/slowave
@@ -62,33 +58,110 @@ cd slowave
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-scripts/slowave-check.sh
 ```
 
-If you use the source install, use the absolute executable path inside the venv for MCP config:
+Verify the install:
 
 ```bash
-pwd
-# then use: /path/to/slowave/.venv/bin/slowave-mcp
+which slowave        # e.g. /opt/homebrew/bin/slowave
+which slowave-mcp    # e.g. /opt/homebrew/bin/slowave-mcp
+slowave doctor       # checks Python, torch, faiss, embedding backend
+slowave stats        # shows stored events / episodes / schemas
 ```
 
-## 2. Verify local commands
+> **Important:** always use the absolute path from `which slowave-mcp` — not just `slowave-mcp` — when configuring MCP clients. Some clients run with a restricted PATH and will not find the binary otherwise.
+
+Slowave stores data in `~/.slowave/slowave.db`. Set `SLOWAVE_DB=/absolute/path` only if you intentionally want a different database.
+
+---
+
+## Step 2 — Wire clients and start the worker
 
 ```bash
-which slowave
-which slowave-mcp
-slowave --help
-slowave-mcp --help
+slowave setup
+```
+
+Run once after install. What it does:
+
+| Action | Detail |
+|---|---|
+| MCP config | Patches `~/.claude/settings.json` (Claude Code), `~/Library/Application Support/Claude/claude_desktop_config.json` (Claude Desktop, macOS), and Cline's MCP settings JSON |
+| Lifecycle instructions | Injects the mandatory Slowave block into `~/.claude/CLAUDE.md` (Claude Code) and `~/.clinerules` (Cline) |
+| Enforcement hooks | Adds `UserPromptSubmit` + `Stop` hooks in `~/.claude/settings.json` so Claude Code always calls Slowave on every turn |
+| Background worker | Installs a user service: launchd plist on macOS, systemd user service on Linux, Task Scheduler task on Windows |
+
+`slowave setup` is **idempotent** — re-running it is always safe. It reports `–` for anything already up-to-date and only writes what has changed.
+
+Options:
+
+```
+slowave setup --client [claude-code|claude-desktop|cline|all]  # default: all
+              --no-worker       # skip worker service install
+              --no-hooks        # skip Claude Code hooks
+              --dry-run         # preview without writing anything
+```
+
+> **Claude Desktop:** `slowave setup` now installs the Slowave Skill automatically by writing it directly to Claude Desktop's skills directory. Just **restart Claude Desktop** after running `slowave setup` — no manual upload required.
+>
+> If automatic install fails (e.g. Claude Desktop has never been opened yet), `slowave setup` will print manual fallback instructions.
+
+### Step 2a — Claude Desktop: restart after setup
+
+After `slowave setup` completes, **restart Claude Desktop**. The Slowave Skill is installed automatically into:
+
+```
+~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/
+```
+
+You can verify it appeared by opening **Settings → Connectors → Customize → Skills** — "slowave" should be listed and enabled.
+
+**If the automatic install failed** (printed a warning), install it manually:
+
+1. Open **Settings** → **Connectors** → **Customize** → **Skills**
+2. Click **Create** → **Upload**
+3. Select the `slowave.skill` file — path printed by `slowave setup`, or download from:
+   https://github.com/mrsalty/slowave/raw/main/integrations/claude-desktop/slowave.skill
+
+---
+
+## Step 3 — Verify
+
+After setup, ask your client:
+
+```text
+Remember that my temporary Slowave install test preference is chamomile tea.
+```
+
+Then in a terminal:
+
+```bash
 slowave stats
+slowave recall "chamomile tea" --top-k 5 --evidence
 ```
 
-Use the absolute path printed by `which slowave-mcp` in client config.
+A working setup produces:
+1. Non-zero event/episode counts in `slowave stats`
+2. The chamomile tea memory in recall results
 
-Slowave stores data in `~/.slowave/slowave.db` by default. Set `SLOWAVE_DB=/absolute/path/to/slowave.db` only when you intentionally want a different memory database.
+If it doesn't work, see [Troubleshooting](#troubleshooting) below.
 
-## 3. Configure MCP
+---
 
-Add `slowave-mcp` to the client MCP configuration.
+## Manual setup (without `slowave setup`)
+
+Use this if you prefer to configure things by hand, or if `slowave setup` can't find your client.
+
+### What every client needs
+
+Every client requires exactly three things:
+
+1. **MCP server configuration** — so the `slowave_*` tools appear in the client
+2. **Lifecycle instructions** — so the client actually calls those tools
+3. **Background worker** — so episodes consolidate into durable schemas
+
+MCP configuration alone is not sufficient. A client that can see the tools but has no instructions to call them will produce empty or sparse memory.
+
+### MCP config block
 
 ```jsonc
 {
@@ -100,30 +173,18 @@ Add `slowave-mcp` to the client MCP configuration.
 }
 ```
 
-Known client locations:
+Replace `/absolute/path/to/slowave-mcp` with the output of `which slowave-mcp`.
 
-| Client | MCP config location |
+| Client | Config file |
 |---|---|
 | Claude Code | `~/.claude/settings.json` |
-| Cline | Cline MCP settings JSON |
-| Claude Desktop | macOS: `~/Library/Application Support/Claude/claude_desktop_config.json`; then upload the Slowave Skill bundle |
+| Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
+| Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Cline (VS Code / Cursor, macOS) | `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
 
-Notes:
+### Lifecycle instruction block
 
-- Use an absolute executable path, not `slowave-mcp`, if the client runs with a restricted PATH.
-- If multiple clients share the same default DB, they share the same long-term memory.
-
-## 4. Inject the Slowave lifecycle prompt
-
-Add a Slowave rule block to the instruction surface the client actually reads. For Claude Desktop, use the Skill upload path rather than relying only on a freeform custom instruction.
-
-| Client | Instruction location |
-|---|---|
-| Claude Code | global/user `~/.claude/CLAUDE.md` and/or repo `CLAUDE.md` |
-| Cline | global `~/.clinerules` or repo `.clinerules` |
-| Claude Desktop | Settings -> Connectors -> Customize -> Skills -> Create -> Upload [`integrations/claude-desktop/slowave.skill`](../integrations/claude-desktop/slowave.skill) |
-
-Use this minimal block:
+Paste this into the appropriate location for each client (see table below).
 
 ```md
 ## Slowave memory
@@ -131,117 +192,53 @@ Use this minimal block:
 Use Slowave MCP tools as long-term memory for every task/session.
 
 Mandatory lifecycle:
-1. First Slowave call: `slowave_session_start(agent="<client-id>", project="<repo-or-domain-or-null>")` and store the returned `session_id`.
-2. Immediately log the user request: `slowave_event(session_id, "user_message", "<self-contained request>")`.
-3. Load working memory: `slowave_context(query="<current task or user message>", application="<client-id>", project="<repo-or-domain-or-null>", topics=[...], entities=[...], limit=8, mode="default")`.
-4. During work, call `slowave_event(session_id, type, content)` for meaningful user/assistant messages, tool calls/results, decisions, discoveries, errors, and completion/failure.
-5. End every task/session with a final `assistant_message` when applicable, `task_complete` or `task_failed`, then `slowave_session_end(session_id)`.
+1. First call: `slowave_session_start(agent="<client-id>", project="<repo-or-null>")` — store the returned `session_id`.
+2. Log the user request: `slowave_event(session_id, "user_message", "<self-contained request>")`.
+3. Load working memory: `slowave_context(query="<current task>", application="<client-id>", project="<repo-or-null>", limit=8)`.
+4. During work: call `slowave_event(session_id, type, content)` for every meaningful message, decision, tool call/result, discovery, error, and completion.
+5. End every session: `slowave_event(session_id, "task_complete"|"task_failed", "<outcome>")` then `slowave_session_end(session_id)`.
 
-Event content must be 1-3 self-contained sentences with the reason/result, not vague notes like "ran command".
+Event content = 1-3 self-contained sentences (reason + result). Not vague notes like "ran command".
 
-Use `slowave_remember(content, type, project)` for durable facts, preferences, decisions, constraints, procedures, warnings, lessons, tasks, open questions, or artifacts.
+Use `slowave_remember(content, type, project)` for durable facts, preferences, decisions, constraints, warnings, lessons.
+Use `slowave_context` for default priming. Use `slowave_recall` only when broad history is explicitly needed.
 
-Use `slowave_context` for default prompt priming. Use `slowave_recall` only when broad history/evidence is explicitly needed. Do not call `slowave_recall` by default after `slowave_context`.
-
-Broken-session anti-patterns:
-- Starting and ending a session without `slowave_event` calls.
-- Batching all events at the end.
+Anti-patterns to avoid:
+- Starting/ending a session with no `slowave_event` calls in between.
+- Batching all events at the end of a session.
 - Forgetting or changing the returned `session_id`.
-- Treating `slowave_recall` as default scoped context.
 ```
 
+**Where to put it:**
 
-### Claude Desktop Skill upload
+| Client | Location | `agent` value |
+|---|---|---|
+| Claude Code | `~/.claude/CLAUDE.md` (global) or repo `CLAUDE.md` | `claude-code` |
+| Claude Desktop | Installed automatically by `slowave setup`; or upload manually — see [Step 2a](#step-2a--claude-desktop-restart-after-setup) | `claude-desktop` |
+| Cline | `~/.clinerules` (global) or repo `.clinerules` | `cline-tui` |
 
-After MCP is configured in Claude Desktop, upload the packaged Slowave Skill:
+### Background worker
 
-1. Open **Settings**.
-2. Go to **Connectors**.
-3. Click **Customize**.
-4. Open **Skills**.
-5. Click **Create**.
-6. Click **Upload**.
-7. Select [`integrations/claude-desktop/slowave.skill`](../integrations/claude-desktop/slowave.skill).
+The worker runs offline replay and consolidation so episodes become durable schemas.
 
-This is the tested Claude Desktop path for injecting the Slowave lifecycle instructions. Without the Skill upload, Claude Desktop may expose the MCP tools but not consistently call them.
-
-Recommended ids:
-
-| Client | `agent` / `application` |
-|---|---|
-| Claude Code | `claude-code` |
-| Cline | `cline-tui` |
-| Claude Desktop | `claude-desktop` |
-
-## 5. Verify the integration
-
-After configuring MCP and prompt injection, run a tiny task such as:
-
-```text
-Remember that my temporary Slowave install test preference is chamomile tea.
-```
-
-Then verify from a terminal:
-
-```bash
-slowave stats
-slowave recall "chamomile tea" --top-k 5 --evidence
-slowave dashboard --no-open
-```
-
-Expected signs of a working integration:
-
-1. The client called `slowave_session_start`.
-2. The first user request was logged with `slowave_event`.
-3. The client called `slowave_context` with the current query.
-4. The client logged at least one assistant response or task event.
-5. The client called `slowave_session_end`.
-6. `slowave stats` shows non-zero events/episodes after the task.
-
-## 6. Run consolidation in the background
-
-`slowave_session_end` creates episodic memories immediately. That is enough for raw/broad recall to find recent sessions.
-
-The worker is still important for normal long-term use: it performs offline replay and latent consolidation so accumulated episodes become durable schemas. Those schemas are what `slowave_context` uses for compact prompt injection. Without a worker, new memories can exist as episodes, but schema-level personalization will lag until you run consolidation.
-
-### Quick/manual worker
-
-For testing or short sessions, run one pass:
-
+**One-shot (for testing):**
 ```bash
 slowave worker --once
-# or
-slowave consolidate
 ```
 
-For regular daily use, run the worker in a separate terminal:
+**Persistent (recommended for daily use):**
 
-```bash
-slowave worker --interval 300
-```
-
-### Recommended: auto-start worker service
-
-For daily use, install the worker as a user service so it restarts after reboot/crash.
-
-First find the executable path:
-
-```bash
-which slowave
-```
-
-#### macOS launchd
+*macOS — launchd:*
 
 Create `~/Library/LaunchAgents/com.slowave.worker.plist`:
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
   <dict>
-    <key>Label</key>
-    <string>com.slowave.worker</string>
-
+    <key>Label</key><string>com.slowave.worker</string>
     <key>ProgramArguments</key>
     <array>
       <string>/opt/homebrew/bin/slowave</string>
@@ -249,27 +246,19 @@ Create `~/Library/LaunchAgents/com.slowave.worker.plist`:
       <string>--interval</string>
       <string>300</string>
     </array>
-
-    <key>RunAtLoad</key>
-    <true/>
-
-    <key>KeepAlive</key>
-    <true/>
-
-    <key>StandardOutPath</key>
-    <string>/tmp/slowave-worker.log</string>
-    <key>StandardErrorPath</key>
-    <string>/tmp/slowave-worker.err</string>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/tmp/slowave-worker.log</string>
+    <key>StandardErrorPath</key><string>/tmp/slowave-worker.err</string>
   </dict>
 </plist>
 ```
 
-Replace `/opt/homebrew/bin/slowave` with the path printed by `which slowave`, then load it:
+Replace `/opt/homebrew/bin/slowave` with the output of `which slowave`, then:
 
 ```bash
 launchctl load ~/Library/LaunchAgents/com.slowave.worker.plist
-launchctl start com.slowave.worker
-launchctl list | grep slowave
+launchctl list | grep slowave   # should show a pid
 ```
 
 To stop/uninstall:
@@ -278,7 +267,7 @@ To stop/uninstall:
 launchctl unload ~/Library/LaunchAgents/com.slowave.worker.plist
 ```
 
-#### Linux systemd user service
+*Linux — systemd user service:*
 
 Create `~/.config/systemd/user/slowave-worker.service`:
 
@@ -295,7 +284,7 @@ RestartSec=10
 WantedBy=default.target
 ```
 
-Replace `/usr/local/bin/slowave` with the path printed by `which slowave`, then enable it:
+Replace `/usr/local/bin/slowave` with the output of `which slowave`, then:
 
 ```bash
 systemctl --user daemon-reload
@@ -303,58 +292,37 @@ systemctl --user enable --now slowave-worker
 systemctl --user status slowave-worker
 ```
 
-### Verify worker activity
+*Windows:* `slowave setup` handles Task Scheduler automatically. Run it with `--client all` or `--client claude-desktop`.
+
+Verify the worker is running:
 
 ```bash
 slowave status
-slowave stats
-tail -f /tmp/slowave-worker.log   # macOS launchd example
+tail -f /tmp/slowave-worker.log   # macOS launchd
 ```
 
-## 7. Inspect with the dashboard
+---
+
+## Dashboard
 
 ```bash
 slowave dashboard
 # open http://127.0.0.1:8765
 ```
 
-The dashboard is local and read-only. It shows DB health, Slowave/MCP processes, schemas, recall results, and the schema graph.
+Read-only local web UI. Shows DB health, Slowave/MCP processes, schemas, a recall playground, and the schema graph.
 
-## Setup command reference
-
-`slowave setup` automates the manual steps in §3–§6 above (MCP config, lifecycle injection, worker service). It is the fastest path from install to working memory.
-
-```
-Usage: slowave setup [OPTIONS]
-
-Options:
-  --client [claude-code|claude-desktop|cline|all]
-                        Which client(s) to configure.  [default: all]
-  --worker / --no-worker
-                        Install the background worker as a system service.  [default: worker]
-  --hooks / --no-hooks  Inject UserPromptSubmit + Stop hooks (Claude Code only).  [default: hooks]
-  --dry-run             Preview changes without writing any files.
-  --help                Show this message and exit.
-```
-
-What it does per platform:
-
-| Step | macOS | Linux | Windows |
-|---|---|---|---|
-| MCP config patch | `~/.claude/settings.json`, Desktop config, Cline settings | same paths via `$XDG_CONFIG_HOME` | `%APPDATA%\Claude\claude_desktop_config.json` |
-| Lifecycle instructions | `~/.claude/CLAUDE.md`, `~/.clinerules` | same | same |
-| Enforcement hooks | `UserPromptSubmit` + `Stop` in `~/.claude/settings.json` | same | same |
-| Worker service | launchd plist → `~/Library/LaunchAgents/` | systemd user service → `~/.config/systemd/user/` | Task Scheduler task via PowerShell |
-
-All steps are idempotent. Re-running `slowave setup` will report `–` (already present) for anything already configured.
+---
 
 ## Troubleshooting
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| Client does not show Slowave tools | MCP path wrong or client not restarted | Run `slowave setup --dry-run` to check the path; restart the client |
-| Client sees tools but never calls them | Prompt/rules injection missing | Run `slowave setup` — it injects `CLAUDE.md`, `.clinerules`, and hooks |
-| Sessions exist but memory is empty | Client starts/ends sessions without events | Hooks inject a reminder each turn; verify with `slowave status` |
-| Recall returns stale/noisy memories | Client uses `slowave_recall` as default priming | Use `slowave_context` for prompt injection; reserve recall for broad evidence search |
-| Distilled schemas do not appear | Worker/consolidation not running | Run `slowave worker --once` or let `slowave setup` install the service |
-| `slowave setup` can't find slowave-mcp | Binary not on PATH | Use absolute path: run `which slowave-mcp` and pass it manually if needed |
+| Client doesn't show Slowave tools | MCP path wrong or client not restarted | Run `slowave setup --dry-run` to check the configured path; restart the client after any config change |
+| Client sees tools but never calls them | Lifecycle instructions missing | Run `slowave setup` — it injects `CLAUDE.md`, `.clinerules`, and Claude Code hooks |
+| Claude Desktop sees tools but doesn't use them | Skill not installed or Claude Desktop not restarted | Re-run `slowave setup` (installs skill automatically), then restart Claude Desktop — see [Step 2a](#step-2a--claude-desktop-restart-after-setup) |
+| Sessions exist but memory is empty | Client starts/ends sessions with no events | Verify the client is calling `slowave_event` during work; Claude Code hooks enforce this on every turn |
+| Recall returns nothing or stale results | Worker not running, or `slowave_recall` used as default | Run `slowave worker --once`; use `slowave_context` for default priming, not `slowave_recall` |
+| Schemas don't appear | Worker/consolidation not running | Run `slowave worker --once` or check the service is active (`launchctl list | grep slowave`) |
+| `slowave setup` can't find `slowave-mcp` | Binary not on PATH | Run `which slowave-mcp`; if empty, re-install or use the absolute path |
+| Stale versioned Cellar path after `brew upgrade` | Pre-v0.1.8 setup wrote the resolved Cellar path instead of the stable symlink | Re-run `slowave setup` — it detects the mismatch and rewrites the config with the stable `/opt/homebrew/bin/slowave-mcp` symlink |

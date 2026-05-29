@@ -6,9 +6,8 @@ This document describes how to reproduce the benchmark numbers in [docs/benchmar
 
 | Requirement | Tested value |
 |---|---|
-| Python | 3.10 – 3.12 (3.13 not yet supported) |
-| Slowave | 0.1.4 |
-| Install | `pip install slowave==0.1.4` |
+| Python | 3.10+ |
+| Slowave | latest (`pip install slowave`) |
 | Hardware | Mac M-series CPU; x86-64 Linux should work |
 | RAM | ≥ 8 GB recommended |
 | LLM required | No |
@@ -40,7 +39,7 @@ Evaluation harnesses are in `tests/integration/`. Both scripts now default to th
 ```bash
 pip install -e ".[dev]"
 pytest tests/unit -q
-# Expected: all 34 tests pass in < 30 seconds
+# Expected: 100+ tests pass in < 60 seconds (NER tests skipped without en_core_web_sm)
 ```
 
 ### LongMemEval — episode-only (fast baseline, ~2-3 min)

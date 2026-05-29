@@ -13,7 +13,7 @@ Two modes are tracked:
 
 The delta between the two shows the contribution of the consolidation layer.
 
-## Overall Results (v0.1.6)
+## Overall Results
 
 | Benchmark | n | With consolidation | Episode-only | Cosine-only ablation¹ |
 |---|---:|---:|---:|---:|
@@ -32,12 +32,11 @@ The delta between the two shows the contribution of the consolidation layer.
 
 | Parameter | Value |
 |---|---|
-| Slowave version | 0.1.6 |
 | Embedding model | `BAAI/bge-small-en-v1.5` (384 dim) |
 | Hardware | MacBook Pro M-series CPU |
 | Schema mode | `latent` (brain-only, zero LLM) |
 | LLM calls | 0 |
-| Python | 3.13 (same encoder/FAISS behaviour as 3.10–3.12) |
+| Python | 3.12 |
 | LME elapsed | 149 s (episode-only) • ~10 min (with consolidation) |
 | LoCoMo elapsed | 57 s (episode-only) |
 
@@ -47,7 +46,7 @@ DMR (MemGPT paper, arXiv:2310.08560) tests factual recall across multi-session p
 
 | System | Score | LLM calls | Cost |
 |---|---:|---|---|
-| **Slowave v0.1.6** | **95.0%** | **0** | **$0.00** |
+| **Slowave** | **95.0%** | **0** | **$0.00** |
 | Zep SOTA (arXiv:2501.13956) | 94.8% | Many | $ |
 | MemGPT baseline | 93.4% | Many | $ |
 
@@ -122,8 +121,8 @@ The table below is informational only. Systems differ in encoder, metric, and ev
 
 | System | LongMemEval | LoCoMo | Notes |
 |---|---:|---:|---|
-| Slowave 0.1.4 (with consolidation) | 70.0% | 74.6% | keyword hit-rate, zero LLM |
-| Slowave 0.1.4 (episode-only) | 60.2% | 74.6% | keyword hit-rate, zero LLM, no consolidation |
+| Slowave (with consolidation) | 70.0% | 74.6% | keyword hit-rate, zero LLM |
+| Slowave (episode-only) | 60.2% | 74.6% | keyword hit-rate, zero LLM, no consolidation |
 | Cosine RAG (ablation) | ~60.0% | ~68.0% | same encoder, brain mechanisms disabled |
 | Mem0 (reported) | ~94.4% | ~92.5% | LLM extraction; different metric and protocol |
 

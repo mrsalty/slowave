@@ -14,12 +14,15 @@ All steps are idempotent — re-running is always safe.
 
 from __future__ import annotations
 
+import importlib.resources
 import json
 import os
 import platform
 import shutil
 import subprocess
 import sys
+import time
+import zipfile
 from pathlib import Path
 from typing import Any
 
@@ -92,6 +95,144 @@ def _cline_mcp_settings_path() -> Path:
         if p.exists():
             return p
     return candidates[0] if candidates else _home() / "cline_mcp_settings.json"
+
+
+# ---------------------------------------------------------------------------
+# Skill file location
+# ---------------------------------------------------------------------------
+
+_SKILL_GITHUB_URL = (
+    "https://github.com/mrsalty/slowave/raw/main"
+    "/integrations/claude-desktop/slowave.skill"
+)
+
+
+def _find_skill_file() -> str | None:
+    """Return the absolute path to the bundled slowave.skill, or None."""
+    # 1. Installed package data (pip / pipx / brew)
+    try:
+        ref = importlib.resources.files("slowave") / "data" / "slowave.skill"
+        with importlib.resources.as_file(ref) as p:
+            if p.exists():
+                return str(p)
+    except Exception:
+        pass
+    # 2. Relative to this file (source / editable install)
+    candidate = Path(__file__).parent.parent / "data" / "slowave.skill"
+    if candidate.exists():
+        return str(candidate)
+    # 3. Common repo layout: repo-root/integrations/claude-desktop/slowave.skill
+    repo_root = Path(__file__).parent.parent.parent
+    candidate2 = repo_root / "integrations" / "claude-desktop" / "slowave.skill"
+    if candidate2.exists():
+        return str(candidate2)
+    return None
+
+
+def _skills_plugin_base() -> Path | None:
+    """Return the skills-plugin base directory for Claude Desktop, or None."""
+    if SYSTEM == "Darwin":
+        base = _home() / "Library" / "Application Support" / "Claude" / "local-agent-mode-sessions" / "skills-plugin"
+    elif SYSTEM == "Windows":
+        appdata = os.environ.get("APPDATA", str(_home() / "AppData" / "Roaming"))
+        base = Path(appdata) / "Claude" / "local-agent-mode-sessions" / "skills-plugin"
+    else:
+        xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
+        base = Path(xdg) / "Claude" / "local-agent-mode-sessions" / "skills-plugin"
+    return base if base.exists() else None
+
+
+def _install_claude_desktop_skill(skill_path: str, dry_run: bool = False) -> tuple[bool, str]:
+    """
+    Install the Slowave skill into Claude Desktop's skills-plugin directory.
+
+    Returns (success, message).
+
+    The Skills filesystem layout is:
+      {base}/{session_uuid}/{account_uuid}/skills/{skill_name}/SKILL.md
+      {base}/{session_uuid}/{account_uuid}/manifest.json
+
+    This is internal Claude Desktop storage — format may change between app
+    versions. We operate best-effort and never modify files we don't own.
+    """
+    base = _skills_plugin_base()
+    if base is None:
+        return False, "Claude Desktop skills-plugin directory not found (Claude Desktop not installed or never opened)"
+
+    # Find all account directories by scanning session_uuid/account_uuid pairs.
+    account_dirs: list[Path] = []
+    for session_dir in base.iterdir():
+        if not session_dir.is_dir():
+            continue
+        for account_dir in session_dir.iterdir():
+            if account_dir.is_dir() and (account_dir / "manifest.json").exists():
+                account_dirs.append(account_dir)
+
+    if not account_dirs:
+        return False, "No Claude Desktop skill accounts found — open Claude Desktop at least once first"
+
+    # Extract SKILL.md from the .skill zip
+    try:
+        with zipfile.ZipFile(skill_path) as zf:
+            names = zf.namelist()
+            # The zip contains slowave/SKILL.md
+            skill_md_entry = next((n for n in names if n.endswith("SKILL.md")), None)
+            if not skill_md_entry:
+                return False, f"Invalid .skill file: no SKILL.md found inside {skill_path}"
+            skill_md_content = zf.read(skill_md_entry).decode("utf-8")
+    except Exception as exc:
+        return False, f"Could not read skill file {skill_path}: {exc}"
+
+    installed_count = 0
+    for account_dir in account_dirs:
+        skill_dir = account_dir / "skills" / "slowave"
+        skill_md_path = skill_dir / "SKILL.md"
+        manifest_path = account_dir / "manifest.json"
+
+        # Check if already up-to-date
+        if skill_md_path.exists() and skill_md_path.read_text(encoding="utf-8") == skill_md_content:
+            installed_count += 1
+            continue
+
+        if dry_run:
+            installed_count += 1
+            continue
+
+        # Write SKILL.md
+        skill_dir.mkdir(parents=True, exist_ok=True)
+        skill_md_path.write_text(skill_md_content, encoding="utf-8")
+
+        # Update manifest.json
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            manifest = {"skills": []}
+
+        skills: list[dict] = manifest.setdefault("skills", [])
+        existing = next((s for s in skills if s.get("skillId") == "slowave"), None)
+        entry = {
+            "skillId": "slowave",
+            "name": "slowave",
+            "description": (
+                "Use Slowave MCP tools as long-term memory for every task/session. "
+                "Start a session, log events during work, load context, remember durable facts, and end the session."
+            ),
+            "creatorType": "user",
+            "updatedAt": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "enabled": True,
+        }
+        if existing:
+            existing.update(entry)
+        else:
+            skills.append(entry)
+        manifest["lastUpdated"] = int(time.time() * 1000)
+        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+        installed_count += 1
+
+    if installed_count == 0:
+        return False, "No skill account directories found"
+    verb = "Would install" if dry_run else "Installed"
+    return True, f"{verb} Slowave skill into {installed_count} Claude Desktop account(s)"
 
 
 # ---------------------------------------------------------------------------
@@ -487,10 +628,26 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool) -> 
                 _ok(f"MCP server added → {desktop_path}")
             else:
                 _skip("MCP server already present")
-        click.echo(click.style(
-            "\n  ℹ  Claude Desktop has no hooks API. Upload the Skill to enforce lifecycle:\n"
-            "     integrations/claude-desktop/slowave.skill\n"
-            "     Settings → Connectors → Customize → Skills → Create → Upload", fg="cyan"))
+        # Skill install — try automatic first, fall back to manual instructions
+        skill_file = _find_skill_file()
+        if skill_file:
+            ok, msg = _install_claude_desktop_skill(skill_file, dry_run=dry_run)
+            if ok:
+                _ok(msg + " — restart Claude Desktop to activate")
+            else:
+                _warn(f"Automatic skill install failed: {msg}")
+                _warn(
+                    "Manual fallback: Settings → Connectors → Customize → Skills → Create → Upload\n"
+                    f"     File: {skill_file}"
+                )
+        else:
+            click.echo(click.style(
+                "\n  ⚠  REQUIRED — skill file not found locally. Download and upload manually:\n"
+                f"     {_SKILL_GITHUB_URL}\n"
+                "     Steps: Settings → Connectors → Customize → Skills → Create → Upload\n"
+                "     Then restart Claude Desktop.",
+                fg="yellow",
+            ))
 
     # 4. Cline
     if do_cl:

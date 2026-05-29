@@ -1,76 +1,33 @@
-# Claude Desktop + Slowave
+# Claude Desktop + Slowave — quick-ref
 
-Goal: configure Claude Desktop with Slowave long-term memory quickly.
-
-## Fastest path — one command
-
-```bash
-pipx install slowave   # or: pip install slowave
-slowave setup --client claude-desktop
-```
-
-`slowave setup` automatically patches the Claude Desktop MCP config and installs the background worker.
-Then upload the Skill manually (no API for this yet — see step 3).
+Full guide: **[../../docs/install.md](../../docs/install.md)**
 
 ---
 
-## Manual setup
-
-Claude Desktop requires **both**:
-
-1. MCP server configuration so the `slowave_*` tools are available.
-2. Slowave Skill upload so Claude Desktop consistently follows the memory lifecycle.
-
-## 1. Install and verify Slowave
-
-Recommended for isolated CLI installs:
+## Setup
 
 ```bash
 pipx install slowave
+slowave setup --client claude-desktop
 ```
 
-Or install with pip:
+Then **restart Claude Desktop**. That's it — the Slowave Skill is installed automatically.
 
-```bash
-pip install slowave
-```
+---
 
-Homebrew is also available on macOS:
+## What `slowave setup` configures automatically
 
-```bash
-brew tap mrsalty/slowave https://github.com/mrsalty/slowave
-brew install slowave
-```
+| What | Where |
+|---|---|
+| MCP server | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
+| Slowave Skill | `~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/` |
+| Background worker | launchd user service (macOS) / systemd (Linux) / Task Scheduler (Windows) |
 
-To install from source:
+---
 
-```bash
-git clone https://github.com/mrsalty/slowave
-cd slowave
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
+## Manual MCP config (if `slowave setup` didn't work)
 
-```bash
-which slowave
-which slowave-mcp
-slowave --help
-slowave-mcp --help
-slowave stats
-```
-
-Copy the absolute path printed by `which slowave-mcp`.
-
-## 2. Configure Claude Desktop MCP
-
-On macOS, edit:
-
-```text
-~/Library/Application Support/Claude/claude_desktop_config.json
-```
-
-Add or merge this block, replacing `/absolute/path/to/slowave-mcp` with your actual path:
+Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 
 ```jsonc
 {
@@ -82,75 +39,41 @@ Add or merge this block, replacing `/absolute/path/to/slowave-mcp` with your act
 }
 ```
 
-Restart Claude Desktop after editing the config.
+Use the path from `which slowave-mcp`. Restart Claude Desktop after editing.
 
-## 3. Upload the Slowave Skill
+---
 
-Upload the packaged Skill in this directory:
+## Manual Skill install (if automatic install failed)
 
-```text
-integrations/claude-desktop/slowave.skill
-```
+1. Open Claude Desktop → **Settings** → **Connectors** → **Customize** → **Skills**
+2. Click **Create** → **Upload**
+3. Download and select: [slowave.skill](https://github.com/mrsalty/slowave/raw/main/integrations/claude-desktop/slowave.skill)
+4. Restart Claude Desktop
 
-Claude Desktop path:
+---
 
-1. Open **Settings**.
-2. Go to **Connectors**.
-3. Click **Customize**.
-4. Open **Skills**.
-5. Click **Create**.
-6. Click **Upload**.
-7. Select `integrations/claude-desktop/slowave.skill`.
-
-The `.skill` file is a zip archive containing `slowave/SKILL.md`. It is configured for:
-
-```text
-agent="claude-desktop"
-application="claude-desktop"
-```
-
-## 4. Start the worker
-
-Episodes are created immediately when each session ends. The worker performs offline replay/consolidation so those episodes become durable schemas for future `slowave_context` calls.
-
-For quick testing, run this in a separate terminal:
-
-```bash
-slowave worker --interval 300
-```
-
-For daily use, install an auto-restarting user service. See [../../docs/install.md#run-consolidation-in-the-background](../../docs/install.md#run-consolidation-in-the-background).
-
-## 5. Verify
+## Verify
 
 Ask Claude Desktop:
 
 ```text
-Remember that my temporary Slowave Claude Desktop test preference is chamomile tea.
+Remember that my temporary Slowave test preference is chamomile tea.
 ```
 
-Then run:
+Then in a terminal:
 
 ```bash
 slowave stats
 slowave recall "chamomile tea" --top-k 5 --evidence
-slowave dashboard --no-open
 ```
 
-Expected signs:
-
-- Claude Desktop called `slowave_session_start`.
-- It logged the user request with `slowave_event`.
-- It called `slowave_context`.
-- It logged at least one assistant response or completion event.
-- It called `slowave_session_end`.
-- `slowave recall "chamomile tea"` finds the test memory.
+---
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Claude Desktop does not show Slowave tools | Check the absolute `slowave-mcp` path, JSON syntax, and restart Claude Desktop |
-| Claude Desktop sees tools but does not call them | Confirm the Slowave Skill was uploaded and enabled |
-| Empty sessions | The Skill/rules are missing or ignored; verify Claude is logging `slowave_event` during the task |
-| Stale/noisy memory | Use `slowave_context` for default priming; reserve `slowave_recall` for broad evidence search |
+| Tools don't appear | Check MCP path (`slowave setup --dry-run`), check JSON syntax, restart Claude Desktop |
+| Tools appear but aren't called | Re-run `slowave setup` (re-installs skill), then restart Claude Desktop |
+| Sessions are empty | Confirm Claude is calling `slowave_event` during work; check skill is enabled in Settings |
+| Stale MCP path after `brew upgrade` | Re-run `slowave setup` — it detects and fixes the stale path |

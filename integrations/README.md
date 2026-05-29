@@ -1,112 +1,29 @@
-# Slowave integrations
+# Slowave — client integrations
 
-## Fastest path
-
-```bash
-pipx install slowave   # or: pip install slowave
-slowave setup          # auto-configures all detected clients + worker service
-slowave doctor         # verify
-```
-
-`slowave setup` handles MCP config, `CLAUDE.md`/`.clinerules` injection, enforcement hooks, and the background worker service on macOS, Linux, and Windows. It is idempotent — safe to re-run.
+Full install and setup guide: **[../docs/install.md](../docs/install.md)**
 
 ---
 
-This directory is the fast path from a fresh install to working long-term memory in a client.
-
-## Pick your client
-
-| Client | Guide | Required setup |
-|---|---|---|
-| Claude Desktop | [claude-desktop/](claude-desktop/) | Install Slowave, configure MCP, upload `slowave.skill`, start worker, verify |
-| Claude Code | [claude-code/](claude-code/) | Install Slowave, configure MCP, add `CLAUDE.md` rules, start worker, verify |
-| Cline | [cline/](cline/) | Install Slowave, configure MCP, add `.clinerules`, start worker, verify |
-
-## The non-negotiable rule
-
-Every client needs three things:
-
-1. **MCP server configuration** so the `slowave_*` tools are visible.
-2. **Instruction/rules injection** so the client actually calls those tools.
-3. **Background worker** so episodes are consolidated into durable schemas over time.
-
-MCP alone is not enough. If the model can see Slowave but is not instructed to start sessions, log events, load context, and end sessions, memory will be sparse or empty. If the worker is not running, sessions still form episodes immediately, but distilled schemas and future `slowave_context` quality will lag until you run `slowave worker --once` or start the worker.
-
-## Shared install check
-
-Install Slowave once:
-
-Recommended for isolated CLI installs:
+## Quick-start (all clients)
 
 ```bash
 pipx install slowave
+slowave setup
+slowave doctor
 ```
 
-Or install with pip:
+`slowave setup` auto-configures every client it detects, injects lifecycle instructions, and installs the background worker. It is idempotent — safe to re-run.
 
-```bash
-pip install slowave
-```
+> **Claude Desktop:** after `slowave setup`, **restart Claude Desktop** — the Skill is installed automatically. See [docs/install.md → Step 2a](../docs/install.md#step-2a--claude-desktop-restart-after-setup) if the automatic install failed.
 
-Homebrew is also available on macOS:
+---
 
-```bash
-brew tap mrsalty/slowave https://github.com/mrsalty/slowave
-brew install slowave
-```
+## Client quick-ref cards
 
-To install from source:
+| Client | Quick-ref | What's different |
+|---|---|---|
+| Claude Desktop | [claude-desktop/README.md](claude-desktop/README.md) | Requires Skill upload (no hooks API) |
+| Claude Code | [claude-code/README.md](claude-code/README.md) | CLAUDE.md + enforcement hooks |
+| Cline | [cline/README.md](cline/README.md) | .clinerules injection |
 
-```bash
-git clone https://github.com/mrsalty/slowave
-cd slowave
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -e .
-```
-
-Verify:
-
-```bash
-which slowave
-which slowave-mcp
-slowave --help
-slowave-mcp --help
-slowave stats
-```
-
-Use the absolute path printed by `which slowave-mcp` in your client MCP config.
-
-## Start the worker
-
-For quick local testing, run this in a separate terminal:
-
-```bash
-slowave worker --interval 300
-```
-
-For daily use, install it as a user service so it restarts after reboot/crash. See [../docs/install.md#run-consolidation-in-the-background](../docs/install.md#run-consolidation-in-the-background).
-
-## Verification task
-
-After configuring a client, ask it:
-
-```text
-Remember that my temporary Slowave integration test preference is chamomile tea.
-```
-
-Then verify in a terminal:
-
-```bash
-slowave stats
-slowave recall "chamomile tea" --top-k 5 --evidence
-slowave dashboard --no-open
-```
-
-A working setup should show a new session/events/episodes and should recall the test preference.
-
-## Canonical references
-
-- [../docs/install.md](../docs/install.md): install, MCP, troubleshooting.
-- [../docs/cli.md](../docs/cli.md): manual inspection and debugging commands.
-- [../docs/dashboard.md](../docs/dashboard.md): local dashboard for memory inspection.
+Each card is a one-screen reminder of the client-specific steps. The full guide for every scenario is in [docs/install.md](../docs/install.md).

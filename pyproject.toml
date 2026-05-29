@@ -51,7 +51,7 @@ include = ["slowave*"]
 exclude = ["tests*", "migrations*", "scripts*"]
 
 [tool.setuptools.package-data]
-slowave = ["storage/schema.sql"]
+slowave = ["storage/schema.sql", "data/slowave.skill"]
 
 [tool.black]
 line-length = 100

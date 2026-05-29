@@ -49,7 +49,7 @@ Slowave is built on the observation that existing open-source agent memory syste
 - Deterministic geometry-based consolidation
 - Benchmarks: LongMemEval 70.0% overall (temporal-reasoning 67.7%), LoCoMo temporal 56.1% (+39 pp vs pre-Stage-10)
 
-The legacy LLM-extraction path has been removed entirely in v0.1.5. The latent brain-only path is now the only supported mode.
+The latent brain-only path is the only supported mode. LLM-based schema extraction was evaluated and removed.
 
 The system is designed to generalise across agent types and benchmarks, not to overfit to any single evaluation.
 
@@ -67,7 +67,7 @@ To extend temporal anchor estimation to other languages, replace or augment `_TE
 - Date stamping of retrieved episodes (`[YYYY-MM-DD]` prefix) — language-agnostic ISO 8601  
 - Sinusoidal temporal context vectors (Stage 7) — purely numeric, no language dependency  
 - Spreading activation, multi-scale retrieval, predictive seed — all language-agnostic  
-- Schema extraction (LLM path) — depends on the LLM's language support, not Slowave's
+- Latent schema building (geometric mode) — purely numeric, no language dependency
 
 ---
 
@@ -426,7 +426,7 @@ flowchart LR
 ```
 
 **Model Parameters**:
-- Input: 384-D episode embedding (from sentence-transformers `all-MiniLM-L6-v2`)
+- Input: 384-D episode embedding (from `BAAI/bge-small-en-v1.5`)
 - Hidden layers: 256-D with ReLU activations
 - Output: 384-D predicted embedding (tanh activation for bounded output)
 - Total parameters: ~300k
@@ -975,36 +975,6 @@ def judge_contradiction(new_schema, existing_schemas):
 
 ---
 
-### Legacy Path: LLM-Extraction (Stage 0-5, `--schema-mode llm`)
-
-When `config.schema_mode = "llm"`, the consolidator uses `SchemaExtractor` and `ContradictionJudge` LLM tools instead:
-
-```mermaid
-flowchart TD
-    Proto["Prototype<br/>(centroid, members)"]
-    Collect["Collect up to 8 episode texts<br/>(central + neighbors)"]
-    LLM["SchemaExtractor LLM<br/>(prompt: extract_schema.txt)"]
-    Output["Claims, facets, tags, confidence"]
-    Embed["Embed canonical schema text"]
-    Related{"Related existing<br/>schema?"}
-    
-    Proto --> Collect
-    Collect --> LLM
-    LLM --> Output
-    Output --> Embed
-    Embed --> Related
-    Related -->|no| Create["Create schema"]
-    Related -->|yes| Judge["ContradictionJudge LLM<br/>(prompt: judge_contradiction.txt)"]
-    Judge --> Update["Update or supersede"]
-    
-    Create --> Store["SchemaStore"]
-    Update --> Store
-```
-
-**Deprecated**: This path is no longer used. See Appendix A (Legacy LLM Path) for historical reference.
-
----
-
 ## 12. Storage Layout
 
 All data lives in a single **SQLite** file (WAL mode). Embeddings are stored as `BLOB` columns and loaded into **in-memory FAISS** indices on engine start.
@@ -1044,7 +1014,7 @@ flowchart LR
     ENGINE[SlowaveEngine<br/>zero LLM]
     DB[(SQLite)]
     FAISS[In-memory FAISS<br/>ANN indices]
-    ENCODER[Sentence Transformer<br/>all-MiniLM-L6-v2]
+    ENCODER[Sentence Transformer<br/>bge-small-en-v1.5]
     CLI --> ENGINE
     MCP --> ENGINE
     PY --> ENGINE
@@ -1065,9 +1035,7 @@ MCP tools: `slowave_session_start`, `slowave_event`, `slowave_session_end`, `slo
 SlowaveConfig(
     db_path               = "~/.slowave/slowave.db",
     dim                   = 384,
-    # *** Zero LLM by default ***
-    schema_mode           = "latent",   # only option (brain-only, zero LLM)
-    encoder               = EncoderConfig(model="all-MiniLM-L6-v2"),
+    encoder               = EncoderConfig(model="BAAI/bge-small-en-v1.5"),
     salience              = SalienceConfig(
         tau_seconds             = 3600.0,        # forgetting curve decay
         recall_reinforcement    = 0.2,           # +salience on recall
@@ -1078,12 +1046,10 @@ SlowaveConfig(
         max_prototypes_per_replay = 32,          # prototypes per cycle
         assignment_threshold    = 0.65,          # fine-scale clustering
     ),
-    # LLM config: DEPRECATED (not used)
-    llm                   = LLMBackendConfig(model="qwen2.5:7b-instruct"),
 )
 ```
 
-**No LLM needed.** The `llm` config is ignored. All schema building uses `LatentSchemaBuilder` (pure geometry). For historical information on the deprecated LLM path, see Appendix A.
+**No LLM needed.** All schema building uses `LatentSchemaBuilder` (pure geometry, zero LLM calls).
 
 ---
 
@@ -1273,51 +1239,27 @@ A session is a bounded context for memory logging. It captures one agent's task 
 ```mermaid
 stateDiagram-v2
     [*] --> IDLE
-    
-    IDLE --> OPEN: session_start(agent, project)
-    
-    OPEN --> OPEN: event_append(type, content)
-    note right of OPEN
-        Agent logs every turn.
-        Explicit protocol: must call slowave_event()
-        Implicit protocol (Option A): auto-wrapped
-    end
-    
-    OPEN --> CONSOLIDATING: session_end(consolidate=False)
-    note right of CONSOLIDATING
-        Episodes formed immediately (<1ms).
-        Consolidation queued for background worker.
-    end
-    
-    OPEN --> CONSOLIDATED: session_end(consolidate=True)
-    note right of CONSOLIDATED
-        Episodes formed + consolidation blocking.
-        Schemas available immediately.
-    end
-    
-    CONSOLIDATING --> CONSOLIDATED: background worker completes replay
-    note right of CONSOLIDATED
-        Prototypes clustered, schemas built.
-        Schemas ready for recall.
-    end
-    
+
+    IDLE --> OPEN : session_start(agent, project)
+
+    OPEN --> OPEN : event_append(type, content)
+
+    OPEN --> EPISODES_READY : session_end(consolidate=False)
+    OPEN --> CONSOLIDATED : session_end(consolidate=True)
+
+    EPISODES_READY --> CONSOLIDATED : background worker (replay + schema build)
+    EPISODES_READY --> IDLE
     CONSOLIDATED --> IDLE
-    CONSOLIDATING --> IDLE
-    
-    OPEN -.->|implicit session| IMPLICIT_OPEN: session_start_implicit()
-    note right of IMPLICIT_OPEN
-        Option A: auto-logging mode.
-        All outputs auto-wrapped (no slowave_event needed).
-    end
-    
-    IMPLICIT_OPEN --> IMPLICIT_OPEN: Agent works normally
-    note right of IMPLICIT_OPEN
-        Outputs auto-captured without agent intervention.
-    end
-    
-    IMPLICIT_OPEN --> CONSOLIDATED: session_end_implicit()
-    IMPLICIT_OPEN --> [*]
 ```
+
+**State meanings:**
+
+| State | Description |
+|---|---|
+| `IDLE` | No active session |
+| `OPEN` | Session active; agent calls `event_append` per turn |
+| `EPISODES_READY` | `session_end` returned; micro + macro episodes formed (<1 ms); schemas queued for background worker |
+| `CONSOLIDATED` | Background worker completed replay; prototypes clustered and schemas available for recall |
 
 ### Session Lifecycle: Detailed Steps
 
@@ -1462,147 +1404,3 @@ for turn in infinite_event_stream:
     if turn_count % 100 == 0:
         consolidate()  # trigger one replay cycle
 ```
-
----
-
-## Appendix A: Legacy LLM-Extraction Path (Deprecated)
-
-**Status: DEPRECATED. Not recommended for new projects.**
-
-This appendix documents the original LLM-based schema extraction path for historical reference and comparison studies. **Do not use for production systems.**
-
-### Why Deprecated
-
-- **Benchmark results**: Latent schema building provides +10pp gain over LLM extraction.
-- **Cost**: LLM calls are expensive (~$0.01–0.05 per consolidation cycle)
-- **Latency**: Blocking consolidation; agents wait for LLM responses
-- **Determinism**: Geometry is deterministic; LLM is non-deterministic and probabilistic
-- **Dependency**: Requires external Ollama or OpenRouter API
-- **Flexibility**: LLM prompts are brittle; changing prompts breaks reproducibility
-
-### How to Use (For Research Only)
-
-Enable with config flag:
-```python
-cfg = SlowaveConfig(
-    schema_mode="llm",  # deprecated; use "latent" instead
-    llm=LLMBackendConfig(model="qwen2.5:7b-instruct", base_url="http://localhost:11434"),
-)
-```
-
-### Legacy Data Flow
-
-When `schema_mode="llm"`, consolidation follows this path:
-
-```mermaid
-flowchart TD
-    P[Prototype clustering<br/>fine 0.85 + coarse 0.55]
-    C[Consolidator]
-    ET[Collect up to 8 episode texts]
-    EX["SchemaExtractor LLM<br/>(prompt: extract_schema.txt)"]
-    EMB[Embed canonical schema text]
-    REL{Related existing<br/>schema?}
-    CR[Create schema]
-    JDG["ContradictionJudge LLM<br/>(prompt: judge_contradiction.txt)"]
-    SS[SchemaStore]
-    
-    P --> C
-    C --> ET
-    ET --> EX
-    EX -->|claims, facets, tags| EMB
-    EMB --> REL
-    REL -->|no| CR
-    REL -->|yes| JDG
-    CR --> SS
-    JDG -->|verdict| SS
-```
-
-### LLM Prompts
-
-Two LLM prompts (in `slowave/llm/prompts/`):
-
-1. **`extract_schema.txt`**: Given 8 episode texts, extract:
-   - A concise claim (human-readable)
-   - Facets: class, scope, polarity, stability, positive/negative keywords, entities
-   - Tags for search
-   - Confidence score
-
-2. **`judge_contradiction.txt`**: Given two schemas (new and existing), judge:
-   - Verdict: reinforces / refines / contradicts / supersedes / related_to
-   - Confidence in verdict
-   - Reasoning
-
-### Ablation Flag
-
-To compare LLM vs latent paths:
-
-```bash
-pytest tests/integration/longmemeval_eval.py --schema-mode llm
-```
-
-This runs the full benchmark with LLM extraction enabled, allowing comparison to:
-```bash
-pytest tests/integration/longmemeval_eval.py --schema-mode latent  # default
-```
-
-### Known Issues (Why We Switched)
-
-1. **Prompt brittleness**: Small changes to prompts cause large changes in schema quality
-2. **Hallucination**: LLM sometimes invents facts not present in episodes
-3. **Latency**: 100–500ms per consolidation cycle (vs ~10ms for latent)
-4. **Cost**: ~$1–5 per 1000 sessions (vs $0 for latent)
-5. **Non-determinism**: Same episodes can produce different schemas on different runs
-6. **Model dependency**: Swapping models (qwen → llama) changes behavior unpredictably
-
-### Why Latent Schemas Won
-
-**LongMemEval Benchmark Comparison**:
-```
-LLM extraction (original path):  60.0% (baseline, expensive)
-Latent schemas (current):        70.0% (+10pp, zero cost)
-```
-
-The latent geometry approach:
-- ✓ Deterministic (reproducible)
-- ✓ Cheap (zero LLM cost)
-- ✓ Fast (10ms vs 100ms)
-- ✓ Grounded in neuroscience (SVD, CLS theory)
-- ✓ Interpretable (centroid + principal axes)
-
-Switching was a clear win. LLM path retained only for academic comparison.
-
----
-
-## Appendix B: Scaling Characteristics & Limits
-
-### Performance at Different Scales
-
-Tested up to ~100k episodes. Characteristics:
-
-| Episodes | FAISS rebuild | Query latency | Consolidation/cycle | Notes |
-|---|---|---|---|---|
-| 1k | <10ms | <2ms | <50ms | Comfortable |
-| 10k | 50ms | 3ms | 75ms | Nominal |
-| 100k | 200ms | 5ms | 150ms | Still linear |
-| 500k | ~1s | 10ms | 250ms | WAL contention starts |
-| 1M+ | ~3s | 20ms | 500ms+ | Consider sharding |
-
-### Scaling Recommendations
-
-**Single-agent, single-project**: Up to ~500k episodes fine in a single SQLite file.
-
-**Multi-agent / multi-project**: Use `project=` scoping to separate memory:
-```python
-# Separate schema stores via project scoping:
-slowave.recall("query", project="project-a")  # only agent-a's memories
-slowave.recall("query", project="project-b")  # only agent-b's memories
-```
-
-**Very large scale (>1M episodes)**: Shard across multiple DB files:
-```
-~/.slowave/
-  ├── slowave_alice.db    (agent alice, projects 1–3)
-  ├── slowave_bob.db      (agent bob, projects 4–6)
-```
-
-Or migrate to Postgres (architecture supports any SQLAlchemy dialect; not yet tested).

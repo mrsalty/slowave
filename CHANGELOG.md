@@ -1,5 +1,32 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- `slowave setup` (Claude Desktop): the Skill-upload notice is now a yellow `⚠ REQUIRED` warning
+  instead of a dim `ℹ` info hint, making it clear the upload is mandatory (Claude Desktop has no
+  hooks API; without the Skill the model sees tools but won't reliably call them).
+- `slowave setup` now resolves the installed `slowave.skill` file path from package data
+  (works for `pip`, `pipx`, and Homebrew installs) and prints it in the required-step message.
+  Falls back to the GitHub raw download URL when the file cannot be located locally.
+- `slowave/data/slowave.skill` bundled as package data so the Skill file is always
+  available after `pip install slowave` / `pipx install slowave` / `brew install slowave`.
+- **`slowave setup` now installs the Slowave Skill automatically** into Claude Desktop's
+  skills directory (`local-agent-mode-sessions/skills-plugin/`) — no manual upload
+  required. Falls back to printing manual instructions if Claude Desktop hasn't been
+  opened yet or the directory is not found.
+
+### Changed
+- **Documentation restructure** — eliminated repeated install instructions across 6 files.
+  `docs/install.md` is now the single authoritative install + setup guide covering all clients
+  and all install methods in one place (Step 1: install → Step 2: `slowave setup` → Step 2a:
+  Claude Desktop Skill upload → Step 3: verify → Manual setup section → Troubleshooting).
+  `README.md` install section trimmed to 2 commands + a pointer to `docs/install.md`.
+  `integrations/README.md` reduced to a 30-line index page.
+  `integrations/claude-{code,desktop}/README.md` and `integrations/cline/README.md` each
+  reduced to a ~75-line quick-ref card covering only the client-specific steps.
+  Total: 695 lines removed, 346 added (net −349 lines of duplicated content).
+
 ## [0.1.8] - 2026-05-29
 
 ### Fixed
