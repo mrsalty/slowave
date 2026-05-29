@@ -2,6 +2,24 @@
 
 Goal: configure Cline with Slowave long-term memory quickly.
 
+## Fastest path — one command
+
+```bash
+pipx install slowave   # or: pip install slowave
+slowave setup --client cline
+```
+
+That's it. `slowave setup` automatically:
+- Patches Cline's MCP settings JSON with the `slowave-mcp` server block.
+- Injects the mandatory lifecycle block into `~/.clinerules`.
+- Installs the background worker service (launchd / systemd / Task Scheduler).
+
+Restart/reload Cline, then [verify](#5-verify).
+
+---
+
+## Manual setup
+
 Cline requires **both**:
 
 1. MCP server configuration so the `slowave_*` tools are available.
