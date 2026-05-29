@@ -101,26 +101,19 @@ slowave setup --client [claude-code|claude-desktop|cline|all]  # default: all
               --dry-run         # preview without writing anything
 ```
 
-> **Claude Desktop:** `slowave setup` now installs the Slowave Skill automatically by writing it directly to Claude Desktop's skills directory. Just **restart Claude Desktop** after running `slowave setup` — no manual upload required.
->
-> If automatic install fails (e.g. Claude Desktop has never been opened yet), `slowave setup` will print manual fallback instructions.
+> **Claude Desktop:** after `slowave setup`, you must upload the Slowave Skill once manually via the Claude Desktop UI. Claude Desktop resets its skills directory on each launch so filesystem injection is not persistent.
 
-### Step 2a — Claude Desktop: restart after setup
+### Step 2a — Claude Desktop: upload the Slowave Skill
 
-After `slowave setup` completes, **restart Claude Desktop**. The Slowave Skill is installed automatically into:
-
-```
-~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/
-```
-
-You can verify it appeared by opening **Settings → Connectors → Customize → Skills** — "slowave" should be listed and enabled.
-
-**If the automatic install failed** (printed a warning), install it manually:
+`slowave setup` prints the skill file path. Upload it once in Claude Desktop:
 
 1. Open **Settings** → **Connectors** → **Customize** → **Skills**
 2. Click **Create** → **Upload**
-3. Select the `slowave.skill` file — path printed by `slowave setup`, or download from:
+3. Select the `slowave.skill` file — `slowave setup` prints the exact path, or download from:
    https://github.com/mrsalty/slowave/raw/main/integrations/claude-desktop/slowave.skill
+4. Restart Claude Desktop
+
+This is a one-time step. Claude Desktop persists uploaded skills across restarts.
 
 ---
 
@@ -214,7 +207,7 @@ Anti-patterns to avoid:
 | Client | Location | `agent` value |
 |---|---|---|
 | Claude Code | `~/.claude/CLAUDE.md` (global) or repo `CLAUDE.md` | `claude-code` |
-| Claude Desktop | Installed automatically by `slowave setup`; or upload manually — see [Step 2a](#step-2a--claude-desktop-restart-after-setup) | `claude-desktop` |
+| Claude Desktop | Upload as a Skill — see [Step 2a](#step-2a--claude-desktop-upload-the-slowave-skill) | `claude-desktop` |
 | Cline | `~/.clinerules` (global) or repo `.clinerules` | `cline-tui` |
 
 ### Background worker

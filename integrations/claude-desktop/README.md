@@ -11,7 +11,7 @@ pipx install slowave
 slowave setup --client claude-desktop
 ```
 
-Then **restart Claude Desktop**. That's it — the Slowave Skill is installed automatically.
+Then upload the Slowave Skill once (see below) and restart Claude Desktop.
 
 ---
 
@@ -20,8 +20,21 @@ Then **restart Claude Desktop**. That's it — the Slowave Skill is installed au
 | What | Where |
 |---|---|
 | MCP server | `~/Library/Application Support/Claude/claude_desktop_config.json` (macOS) |
-| Slowave Skill | `~/Library/Application Support/Claude/local-agent-mode-sessions/skills-plugin/` |
 | Background worker | launchd user service (macOS) / systemd (Linux) / Task Scheduler (Windows) |
+
+---
+
+## Upload the Slowave Skill (required, one-time)
+
+Claude Desktop resets its skills directory on each launch, so the Skill must be uploaded via the UI. `slowave setup` prints the file path.
+
+1. Open Claude Desktop → **Settings** → **Connectors** → **Customize** → **Skills**
+2. Click **Create** → **Upload**
+3. Select the `slowave.skill` file — path printed by `slowave setup`, or download:
+   [slowave.skill](https://github.com/mrsalty/slowave/raw/main/integrations/claude-desktop/slowave.skill)
+4. Restart Claude Desktop
+
+This is a one-time step — Claude Desktop persists uploaded skills across restarts.
 
 ---
 
@@ -40,15 +53,6 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 ```
 
 Use the path from `which slowave-mcp`. Restart Claude Desktop after editing.
-
----
-
-## Manual Skill install (if automatic install failed)
-
-1. Open Claude Desktop → **Settings** → **Connectors** → **Customize** → **Skills**
-2. Click **Create** → **Upload**
-3. Download and select: [slowave.skill](https://github.com/mrsalty/slowave/raw/main/integrations/claude-desktop/slowave.skill)
-4. Restart Claude Desktop
 
 ---
 

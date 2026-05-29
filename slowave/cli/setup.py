@@ -628,26 +628,26 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool) -> 
                 _ok(f"MCP server added → {desktop_path}")
             else:
                 _skip("MCP server already present")
-        # Skill install — try automatic first, fall back to manual instructions
+        # Skill install — attempt filesystem injection, but Claude Desktop resets this
+        # directory on launch so the manual upload is the only persistent path.
         skill_file = _find_skill_file()
         if skill_file:
-            ok, msg = _install_claude_desktop_skill(skill_file, dry_run=dry_run)
-            if ok:
-                _ok(msg + " — restart Claude Desktop to activate")
-            else:
-                _warn(f"Automatic skill install failed: {msg}")
-                _warn(
-                    "Manual fallback: Settings → Connectors → Customize → Skills → Create → Upload\n"
-                    f"     File: {skill_file}"
-                )
+            if not dry_run:
+                _install_claude_desktop_skill(skill_file, dry_run=False)
+            skill_hint = f"     File: {skill_file}"
         else:
-            click.echo(click.style(
-                "\n  ⚠  REQUIRED — skill file not found locally. Download and upload manually:\n"
-                f"     {_SKILL_GITHUB_URL}\n"
-                "     Steps: Settings → Connectors → Customize → Skills → Create → Upload\n"
-                "     Then restart Claude Desktop.",
-                fg="yellow",
-            ))
+            skill_hint = f"     Download: {_SKILL_GITHUB_URL}"
+        click.echo(click.style(
+            "\n  ⚠  REQUIRED — upload the Slowave Skill in Claude Desktop.\n"
+            "     Claude Desktop resets its skills directory on each launch,\n"
+            "     so the Skill must be uploaded manually once via the UI.\n"
+            "\n"
+            f"{skill_hint}\n"
+            "\n"
+            "     Steps: Settings → Connectors → Customize → Skills → Create → Upload\n"
+            "     Then restart Claude Desktop.",
+            fg="yellow",
+        ))
 
     # 4. Cline
     if do_cl:

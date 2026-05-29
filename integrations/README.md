@@ -14,7 +14,7 @@ slowave doctor
 
 `slowave setup` auto-configures every client it detects, injects lifecycle instructions, and installs the background worker. It is idempotent — safe to re-run.
 
-> **Claude Desktop:** after `slowave setup`, **restart Claude Desktop** — the Skill is installed automatically. See [docs/install.md → Step 2a](../docs/install.md#step-2a--claude-desktop-restart-after-setup) if the automatic install failed.
+> **Claude Desktop:** after `slowave setup`, upload the Slowave Skill once via the Claude Desktop UI — see [docs/install.md → Step 2a](../docs/install.md#step-2a--claude-desktop-upload-the-slowave-skill).
 
 ---
 
