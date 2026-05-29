@@ -35,6 +35,7 @@ slowave dashboard
 | `slowave consolidate` | Run replay + latent schema consolidation once |
 | `slowave worker --interval 300` | Run periodic background consolidation |
 | `slowave dashboard --port 8765` | Run the local read-only web dashboard |
+| `slowave doctor` | Check Python version, dependencies, embedding backend, SQLite write access, and MCP server availability. Exits 1 on failure. |
 
 ## Event types
 

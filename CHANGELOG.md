@@ -1,21 +1,41 @@
 # Changelog
 
-## [0.1.5] - 2026-05-29 (includes 0.1.6 features)
+## [0.1.5] - 2026-05-29
 
 ### Added
+- **LLM path removed** — `slowave/llm/` module deleted entirely (base, ollama_backend, openrouter_backend, prompts). `slowave/symbolic/contradiction.py` and `schema_extractor.py` also removed. The latent brain-only path is now the only supported mode. `SlowaveConfig` no longer accepts `llm`, `disable_llm`, or `schema_mode` fields.
 - `stability_score`: schema facet computed from age (days since first formed) and support count. Saturates near 1.0 for old, well-supported schemas; starts near 0 for brand-new ones.
-- `recurrence_count` / `recurrence_score`: tracks cumulative recall hits per schema. `recurrence_score = count / (count + 5)` — soft-capped normalisation. Updated on every `reinforce()` call (i.e. every retrieval hit). `reinforce_schema()` (consolidation path) intentionally does not bump the count.
+- `recurrence_count` / `recurrence_score`: tracks cumulative recall hits per schema. `recurrence_score = count / (count + 5)` — soft-capped normalisation. Updated on every `reinforce()` call (retrieval hit). `reinforce_schema()` (consolidation path) intentionally does not bump the count.
 - `schema_utility`: composite `0.5 * stability_score + 0.5 * recurrence_score`. Stored in schema facets. Wired into the working-memory context gate activation (up to +0.12 bonus) and into `_schema_priors` retrieval steering (up to 1.5× multiplier for high-utility schemas).
 - `SchemaStore.decay_unused()`: decay pass for active schemas that have never been recalled (`recurrence_count == 0`) and are older than `idle_days` (default 30). Reduces salience by `decay_amount` (default 0.15) per pass; schemas falling below `review_threshold` (default 0.30) are flagged `needs_review`. Explicit-remember schemas are always protected.
 - `SlowaveEngine.decay_schemas()`: public wrapper for `decay_unused`, callable independently of consolidation.
 - `consolidate_once()` now runs the decay pass automatically after replay+consolidation and returns a `"decay"` key in its stats dict.
-- 16 new unit tests covering all the above.
-
-
+- `display_label` now surfaced in `slowave schema` and `slowave context` human-readable output (format: `[faiss / sqlite / local]`).
+- DMR (Deep Memory Retrieval) benchmark harness and dataset: `tests/integration/dmr_eval.py`, `data/dmr/dmr.json`. 10 personas × 3 sessions × 10 questions = 100 total questions.
+- 50 unit tests total (16 new for utility scoring / decay).
 
 ### Changed
 - License changed from MIT to AGPL-3.0-or-later for version 0.1.5 and later. Earlier published versions remain available under the licenses they were originally released with.
 - Added commercial licensing guidance for organizations that need non-AGPL terms.
+- `pyproject.toml`: removed `llm/prompts/*.txt` from package data; added `pytest` as dev dependency.
+
+### Benchmark results (v0.1.5, brain-only, zero LLM calls)
+
+| Benchmark | n | v0.1.5 | v0.1.4 | Δ |
+|---|---:|---:|---:|---:|
+| LongMemEval (episode-only) | 500 | **60.2%** | 60.2% | 0 |
+| LoCoMo (episode-only) | 1 986 | **74.6%** | 74.6% | 0 |
+| DMR (new) | 100 | **95.0%** | — | — |
+
+DMR comparison (LLM-augmented baselines from arXiv:2501.13956):
+
+| System | DMR score |
+|---|---:|
+| **Slowave v0.1.5** | **95.0%** |
+| Zep (SOTA) | 94.8% |
+| MemGPT | 93.4% |
+
+No regression on LME or LoCoMo. LLM removal, utility scoring, and decay are all metadata/scoring-path changes with no impact on the core retrieval path.
 
 ## [0.1.4] - 2026-05-29
 

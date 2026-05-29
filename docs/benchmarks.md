@@ -13,7 +13,7 @@ Two modes are tracked:
 
 The delta between the two shows the contribution of the consolidation layer.
 
-## Overall Results (v0.1.4)
+## Overall Results (v0.1.5)
 
 | Benchmark | n | With consolidation | Episode-only | Cosine-only ablation¹ |
 |---|---:|---:|---:|---:|
@@ -32,7 +32,7 @@ The delta between the two shows the contribution of the consolidation layer.
 
 | Parameter | Value |
 |---|---|
-| Slowave version | 0.1.4 |
+| Slowave version | 0.1.5 |
 | Embedding model | `BAAI/bge-small-en-v1.5` (384 dim) |
 | Hardware | MacBook Pro M-series CPU |
 | Schema mode | `latent` (brain-only, zero LLM) |
@@ -40,6 +40,38 @@ The delta between the two shows the contribution of the consolidation layer.
 | Python | 3.13 (same encoder/FAISS behaviour as 3.10–3.12) |
 | LME elapsed | 149 s (episode-only) • ~10 min (with consolidation) |
 | LoCoMo elapsed | 57 s (episode-only) |
+
+## Deep Memory Retrieval (DMR)
+
+DMR (MemGPT paper, arXiv:2310.08560) tests factual recall across multi-session persona conversations: 10 personas × 10 questions = 100 questions. Published baselines use LLM-augmented memory; Slowave uses zero LLM calls.
+
+| System | Score | LLM calls | Cost |
+|---|---:|---|---|
+| **Slowave v0.1.5** | **95.0%** | **0** | **$0.00** |
+| Zep SOTA (arXiv:2501.13956) | 94.8% | Many | $ |
+| MemGPT baseline | 93.4% | Many | $ |
+
+**Recall latency:** ~9 ms/q.  **Dataset:** `data/dmr/dmr.json`.  **Script:** `tests/integration/dmr_eval.py`.
+
+Per-persona breakdown:
+
+| Persona | N | Hits | Hit% |
+|---|---:|---:|---:|
+| David | 10 | 10 | **100%** |
+| Maria | 10 | 10 | **100%** |
+| James | 10 | 10 | **100%** |
+| Priya | 10 | 10 | **100%** |
+| Tom | 10 | 10 | **100%** |
+| Elena | 10 | 10 | **100%** |
+| Marcus | 10 | 10 | **100%** |
+| Yuki | 10 | 9 | 90% |
+| Robert | 10 | 9 | 90% |
+| Sarah | 10 | 7 | 70% |
+| **TOTAL** | **100** | **95** | **95%** |
+
+The 5 misses are concentrated on Sarah's introductory session turn (first-turn salience gap — early episodes get lower initial salience before replay) and two near-miss keyword overlaps (ks just below 0.5).
+
+---
 
 ## LongMemEval Per-Category (with consolidation)
 

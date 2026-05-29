@@ -32,7 +32,9 @@ Slowave is built on the observation that existing open-source agent memory syste
 | Schema formation (neocortex) | **Latent schema**: centroid + SVD facet axes + temporal anchor — **zero LLM** |
 | Predictive coding / surprise signal | Transition model predicts next episode embedding; surprise boosts salience |
 | Ebbinghaus forgetting curve | Exponential salience decay between sessions |
-| Memory reinforcement on use | Recall bumps salience of retrieved episodes/schemas |
+| Memory reinforcement on use | Recall bumps salience of retrieved episodes/schemas; `recurrence_count` tracks recall hits |
+| Schema utility scoring | `stability_score` (age + support), `recurrence_score` (recall hits), `schema_utility` (composite 0–1) wired into context gate and retrieval priors |
+| Memory decay | `decay_unused`: idle schemas (never recalled, older than 30 days) lose salience; fall below threshold → `needs_review`; explicit-remember schemas are protected |
 | Contradiction / belief revision | Geometric contradiction: centroid proximity + facet divergence + temporal ordering — **zero LLM** |
 | Pattern completion | Spreading activation over prototype graph |
 | Provenance chain | Every schema traces back through episodes to raw events |
@@ -47,7 +49,7 @@ Slowave is built on the observation that existing open-source agent memory syste
 - Deterministic geometry-based consolidation
 - Benchmarks: LongMemEval 70.0% overall (temporal-reasoning 67.7%), LoCoMo temporal 56.1% (+39 pp vs pre-Stage-10)
 
-The legacy LLM-extraction path (Stages 0–5) is **deprecated** and preserved in code for research comparison only. See Appendix A for historical reference.
+The legacy LLM-extraction path has been removed entirely in v0.1.5. The latent brain-only path is now the only supported mode.
 
 The system is designed to generalise across agent types and benchmarks, not to overfit to any single evaluation.
 

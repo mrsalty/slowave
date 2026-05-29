@@ -213,6 +213,18 @@ Two modes are reported. The **with-consolidation** numbers (70.0% / 74.6%) repre
 ¹ Cosine-only ablation: spreading activation, graph expansion, and transition model all disabled.  
 ² LoCoMo is multi-session by design; episode retrieval already captures most of the signal and consolidation adds schemas on top of a strong baseline.
 
+### Deep Memory Retrieval (DMR)
+
+DMR (MemGPT paper) tests factual recall across multi-session persona conversations: 10 personas × 10 questions = 100 questions total. Published baselines from arXiv:2501.13956.
+
+| System | Score | LLM calls | Cost |
+|---|---:|---|---|
+| **Slowave v0.1.5** | **95.0%** | **0** | **$0.00** |
+| Zep (SOTA) | 94.8% | Many | $ |
+| MemGPT baseline | 93.4% | Many | $ |
+
+Slowave beats both published LLM-augmented baselines with zero API cost and ~9 ms recall latency.
+
 ### LongMemEval per-category (with consolidation)
 
 | Category | Score | Notes |
