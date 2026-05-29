@@ -322,7 +322,7 @@ The dashboard is local and read-only. It shows DB health, Slowave/MCP processes,
 
 ## Setup command reference
 
-`slowave setup` automates steps 3–6 above. It is the fastest path from install to working memory.
+`slowave setup` automates the manual steps in §3–§6 above (MCP config, lifecycle injection, worker service). It is the fastest path from install to working memory.
 
 ```
 Usage: slowave setup [OPTIONS]

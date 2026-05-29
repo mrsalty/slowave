@@ -15,7 +15,7 @@ Slowave is not just a transcript store or a conventional RAG layer. It is inspir
 
 ## Status
 
-**v0.1.6 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.12 is supported and tested; Python 3.13 is not yet supported.
+**v0.1.8 — Alpha.** The core local memory path, MCP server, CLI, and dashboard are functional. Python 3.10–3.13 is supported and tested.
 
 Run `slowave doctor` after installing to verify your environment.
 
@@ -96,17 +96,21 @@ This makes Slowave useful when you want:
 
 ## Install in minutes
 
-Installing Slowave gives you two commands:
+> **TL;DR — two commands and you're done:**
+> ```bash
+> pipx install slowave
+> slowave setup
+> ```
+> `slowave setup` detects your platform, wires every client you have (Claude Code, Cline, Claude Desktop), injects lifecycle instructions, and installs the background worker — all in one shot. It is idempotent: safe to re-run at any time.
 
-| Command | Purpose |
-|---|---|
-| `slowave` | CLI, dashboard, manual recall, debugging, and research workflows. |
-| `slowave-mcp` | MCP server used by Claude Desktop, Claude Code, and Cline. |
+---
 
-Choose one install path:
+### Step 1 — Install
+
+Choose the method that fits your workflow:
 
 ```bash
-# Recommended — isolated, no virtualenv management needed
+# Recommended: pipx (isolated, no venv management)
 pipx install slowave
 
 # pip
@@ -117,7 +121,8 @@ brew tap mrsalty/slowave https://github.com/mrsalty/slowave
 brew install slowave
 ```
 
-Install from source:
+<details>
+<summary>Install from source</summary>
 
 ```bash
 git clone https://github.com/mrsalty/slowave
@@ -127,41 +132,47 @@ source .venv/bin/activate
 pip install -e .
 ```
 
-Verify your environment:
+</details>
+
+Installing gives you two binaries:
+
+| Binary | Purpose |
+|---|---|
+| `slowave` | CLI, dashboard, manual recall, debugging, and research workflows. |
+| `slowave-mcp` | MCP server used by Claude Desktop, Claude Code, and Cline. |
+
+---
+
+### Step 2 — Wire clients and start the worker
 
 ```bash
-slowave doctor           # check Python version, torch, faiss, embedding backend
-slowave --help
-slowave-mcp --help
-slowave stats
+slowave setup
 ```
 
-Default storage is:
+This single command handles everything:
 
-```text
-~/.slowave/slowave.db
-```
-
-No Ollama, OpenRouter, hosted vector database, cloud memory service, or other LLM backend is required for the default local path.
-
-## Connect a client
-
-| Client | Setup guide |
+| What it configures | Details |
 |---|---|
-| Claude Desktop | [integrations/claude-desktop/](integrations/claude-desktop/) |
-| Claude Code | [integrations/claude-code/](integrations/claude-code/) |
-| Cline | [integrations/cline/](integrations/cline/) |
+| MCP config | Patches `~/.claude/settings.json`, Claude Desktop config, and Cline settings with the `slowave-mcp` server block |
+| Lifecycle instructions | Injects the mandatory Slowave block into `~/.claude/CLAUDE.md` and `~/.clinerules` |
+| Enforcement hooks | Adds `UserPromptSubmit` + `Stop` hooks in Claude Code so the model always calls Slowave |
+| Background worker | Installs as a system service (launchd on macOS, systemd on Linux, Task Scheduler on Windows) |
+
+Options: `--client [claude-code|claude-desktop|cline|all]` · `--no-worker` · `--no-hooks` · `--dry-run`
 
 > [!IMPORTANT]
-> MCP setup alone is not enough. Each client needs the MCP configuration, instruction/rules injection, and the background worker.
+> MCP configuration alone is not enough — the client also needs the lifecycle instructions to reliably call Slowave tools. `slowave setup` handles both. See [docs/install.md](docs/install.md) for the full manual walkthrough and per-client integration guides in [integrations/](integrations/).
 
-| Setup layer | Why it matters |
-|---|---|
-| MCP configuration | Makes the `slowave_*` tools visible to the client. |
-| Instruction/rules injection | Makes the client actually call Slowave during the task. |
-| Background worker | Consolidates episodes into durable schemas for better future context. |
+---
 
-Episodes are created immediately when a session ends. The worker turns accumulated episodes into durable latent schemas for better future `slowave_context` injection.
+### Step 3 — Verify
+
+```bash
+slowave doctor   # checks Python, torch, faiss, and the embedding backend
+slowave stats    # shows stored events, episodes, and schemas
+```
+
+Memory is stored locally at `~/.slowave/slowave.db`. No Ollama, OpenRouter, hosted vector database, or cloud service is required.
 
 ## Local dashboard
 
@@ -185,6 +196,7 @@ See [docs/cli.md](docs/cli.md) for the command list and a CLI-only quickstart.
 | Guide | Covers |
 |---|---|
 | [integrations/](integrations/) | Fast client-specific setup guides for Claude Desktop, Claude Code, and Cline |
+| [docs/install.md](docs/install.md) | Full install and setup guide, `slowave setup` reference, manual wiring steps |
 | [docs/architecture.md](docs/architecture.md) | Brain-inspired mechanisms, data flow, storage, recall, consolidation |
 | [docs/design.md](docs/design.md) | Why the LLM path was removed from the memory loop |
 | [docs/dashboard.md](docs/dashboard.md) | Local dashboard guide |
@@ -219,7 +231,7 @@ DMR (MemGPT paper) tests factual recall across multi-session persona conversatio
 
 | System | Score | LLM calls | Cost |
 |---|---:|---|---|
-| **Slowave v0.1.5** | **95.0%** | **0** | **$0.00** |
+| **Slowave v0.1.8** | **95.0%** | **0** | **$0.00** |
 | Zep (SOTA) | 94.8% | Many | $ |
 | MemGPT baseline | 93.4% | Many | $ |
 
