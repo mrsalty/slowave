@@ -365,8 +365,24 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
 def stats_cmd(ctx: click.Context) -> None:
     """Print system stats."""
     eng = _build_engine(ctx.obj["db"])
-    _print(eng.stats(), ctx.obj["json"])
+    data = eng.stats()
     eng.close()
+    if ctx.obj["json"]:
+        _print(data, True)
+        return
+    rows = [
+        ("💬", "episodes",   data.get("episodes",   0)),
+        ("🔵", "prototypes", data.get("prototypes", 0)),
+        ("📖", "schemas",    data.get("schemas",    0)),
+        ("🕸 ", "edges",     data.get("edges",      0)),
+    ]
+    width = max(len(label) for _, label, _ in rows)
+    click.echo()
+    click.echo("  🧠 slowave")
+    click.echo("  " + "─" * (width + 16))
+    for emoji, label, value in rows:
+        click.echo(f"  {emoji}  {label:<{width}}   {value:,}")
+    click.echo()
 
 
 def _slowave_processes() -> list[dict[str, Any]]:
