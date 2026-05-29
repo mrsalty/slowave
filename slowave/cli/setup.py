@@ -722,6 +722,6 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool) -> 
     if not dry_run and do_cc:
         click.echo(
             "\n  Restart Claude Code, then verify:\n"
-            '  "Remember that my temporary Slowave setup test preference is chamomile tea."\n'
-            '  slowave recall "chamomile tea" --top-k 5'
+            '  "Remember that my preferred temporary food is spaghetti."\n'
+            '  slowave recall "what is my favourite food" --top-k 5'
         )

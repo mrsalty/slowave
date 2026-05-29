@@ -57,14 +57,14 @@ Use the path from `which slowave-mcp`. Restart Claude Desktop after editing.
 Ask Claude Desktop:
 
 ```text
-Remember that my temporary Slowave test preference is chamomile tea.
+Remember that my preferred temporary food is spaghetti.
 ```
 
 Then in a terminal:
 
 ```bash
 slowave stats
-slowave recall "chamomile tea" --top-k 5 --evidence
+slowave recall "what is my favourite food" --top-k 5 --evidence
 ```
 
 ---

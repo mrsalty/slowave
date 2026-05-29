@@ -129,19 +129,19 @@ You can verify it appeared by opening **Settings → Connectors → Customize �
 After setup, ask your client:
 
 ```text
-Remember that my temporary Slowave install test preference is chamomile tea.
+Remember that my preferred temporary food is spaghetti.
 ```
 
 Then in a terminal:
 
 ```bash
 slowave stats
-slowave recall "chamomile tea" --top-k 5 --evidence
+slowave recall "what is my favourite food" --top-k 5 --evidence
 ```
 
 A working setup produces:
 1. Non-zero event/episode counts in `slowave stats`
-2. The chamomile tea memory in recall results
+2. The spaghetti memory in recall results
 
 If it doesn't work, see [Troubleshooting](#troubleshooting) below.
 

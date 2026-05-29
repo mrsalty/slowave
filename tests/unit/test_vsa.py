@@ -308,19 +308,19 @@ class TestExtractRolesLexical:
         self._extract = _extract_roles_lexical
 
     def test_returns_three_strings(self):
-        s, p, o = self._extract("Matteo prefers Python", {"python": 0.8, "backend": 0.5})
+        s, p, o = self._extract("Alex prefers Python", {"python": 0.8, "backend": 0.5})
         assert isinstance(s, str) and isinstance(p, str) and isinstance(o, str)
 
     def test_subject_is_capitalised_token(self):
-        s, _, _ = self._extract("Matteo prefers Python", {"python": 0.8})
-        assert s == "Matteo"
+        s, _, _ = self._extract("Alex prefers Python", {"python": 0.8})
+        assert s == "Alex"
 
     def test_predicate_matches_known_verb(self):
-        _, p, _ = self._extract("Matteo prefers Python", {"python": 0.8})
+        _, p, _ = self._extract("Alex prefers Python", {"python": 0.8})
         assert p.lower() == "prefers"
 
     def test_object_from_lexical_sig(self):
-        _, _, o = self._extract("Matteo prefers Python", {"python": 0.8, "backend": 0.5})
+        _, _, o = self._extract("Alex prefers Python", {"python": 0.8, "backend": 0.5})
         assert "python" in o.lower() or "backend" in o.lower()
 
     def test_no_capital_falls_back_to_lexical_sig(self):
@@ -362,19 +362,19 @@ class TestExtractRolesNer:
         self._extract = _extract_roles_ner
 
     def test_returns_three_strings(self):
-        s, p, o = self._extract("Matteo prefers Python for backend development")
+        s, p, o = self._extract("Alex prefers Python for backend development")
         assert isinstance(s, str) and isinstance(p, str) and isinstance(o, str)
 
     def test_all_roles_non_empty_on_clear_sentence(self):
-        s, p, o = self._extract("Matteo prefers Python for backend development")
+        s, p, o = self._extract("Alex prefers Python for backend development")
         assert len(s) > 0 and len(p) > 0 and len(o) > 0
 
-    def test_subject_is_matteo(self):
-        s, _, _ = self._extract("Matteo prefers Python for backend development")
-        assert s == "Matteo"
+    def test_subject_is_alex(self):
+        s, _, _ = self._extract("Alex prefers Python for backend development")
+        assert s == "Alex"
 
     def test_predicate_is_root_verb(self):
-        _, p, _ = self._extract("Matteo prefers Python for backend development")
+        _, p, _ = self._extract("Alex prefers Python for backend development")
         assert "prefers" in p
 
     def test_does_not_raise_on_empty_string(self):

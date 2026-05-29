@@ -55,14 +55,14 @@ Use the path from `which slowave-mcp`. Restart Claude Code after editing.
 Ask Claude Code:
 
 ```text
-Remember that my temporary Slowave test preference is chamomile tea.
+Remember that my preferred temporary food is spaghetti.
 ```
 
 Then in a terminal:
 
 ```bash
 slowave stats
-slowave recall "chamomile tea" --top-k 5 --evidence
+slowave recall "what is my favourite food" --top-k 5 --evidence
 ```
 
 ---
