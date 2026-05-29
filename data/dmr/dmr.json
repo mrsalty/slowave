@@ -1,0 +1,1142 @@
+[
+  {
+    "persona_id": "p01",
+    "name": "Sarah",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hi I'm Sarah. I work as a pediatric nurse at St Marys Hospital in Boston."
+        },
+        {
+          "role": "assistant",
+          "content": "How long have you been nursing?"
+        },
+        {
+          "role": "user",
+          "content": "About 8 years. I specialize in neonatal care. I have two kids Emma 7 and Jake 4."
+        },
+        {
+          "role": "assistant",
+          "content": "Balancing work with two young children sounds busy."
+        },
+        {
+          "role": "user",
+          "content": "My husband Mark is a high school history teacher so our schedules are wild."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I've been training for the Boston Marathon. Goal is to finish under 4 hours."
+        },
+        {
+          "role": "assistant",
+          "content": "How is training going?"
+        },
+        {
+          "role": "user",
+          "content": "Pretty well. I run about 40 miles a week. I drive a blue Honda Odyssey minivan."
+        },
+        {
+          "role": "assistant",
+          "content": "Makes sense with two kids."
+        },
+        {
+          "role": "user",
+          "content": "We live in Newton Massachusetts. I grew up in Portland Oregon."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "Emma started second grade and wants to be a veterinarian."
+        },
+        {
+          "role": "assistant",
+          "content": "Does she have any pets?"
+        },
+        {
+          "role": "user",
+          "content": "Yes we have a golden retriever named Biscuit age 3. Jake loves dinosaurs and Legos."
+        },
+        {
+          "role": "assistant",
+          "content": "Classic 4-year-old interests."
+        },
+        {
+          "role": "user",
+          "content": "I also play violin in a community orchestra on weekends. Favorite food is Thai cuisine."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "Where does Sarah work?",
+        "answer": "St Marys Hospital in Boston"
+      },
+      {
+        "question": "What is Sarah's nursing specialty?",
+        "answer": "neonatal care"
+      },
+      {
+        "question": "How many years has Sarah been nursing?",
+        "answer": "8 years"
+      },
+      {
+        "question": "What are the names of Sarah's children?",
+        "answer": "Emma and Jake"
+      },
+      {
+        "question": "What does Sarah's husband Mark do for work?",
+        "answer": "high school history teacher"
+      },
+      {
+        "question": "What is Sarah's marathon goal time?",
+        "answer": "under 4 hours"
+      },
+      {
+        "question": "What kind of car does Sarah drive?",
+        "answer": "blue Honda Odyssey"
+      },
+      {
+        "question": "What city does Sarah live in?",
+        "answer": "Newton Massachusetts"
+      },
+      {
+        "question": "What is the name of the family dog?",
+        "answer": "Biscuit"
+      },
+      {
+        "question": "What instrument does Sarah play?",
+        "answer": "violin"
+      }
+    ]
+  },
+  {
+    "persona_id": "p02",
+    "name": "David",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hey I'm David Chen a software engineer at Google in Seattle Im 32."
+        },
+        {
+          "role": "assistant",
+          "content": "What do you work on at Google?"
+        },
+        {
+          "role": "user",
+          "content": "I work on the Maps team. Been there 5 years before that Amazon for 2 years."
+        },
+        {
+          "role": "assistant",
+          "content": "Did you study computer science?"
+        },
+        {
+          "role": "user",
+          "content": "Yes at UC Berkeley graduated in 2014. I'm originally from San Francisco."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I moved to Seattle for Google. I live in Capitol Hill neighborhood and I'm single."
+        },
+        {
+          "role": "assistant",
+          "content": "Capitol Hill is a great area."
+        },
+        {
+          "role": "user",
+          "content": "Love it. I hike in the Cascades almost every weekend and drive a Tesla Model 3."
+        },
+        {
+          "role": "assistant",
+          "content": "Perfect for the Pacific Northwest."
+        },
+        {
+          "role": "user",
+          "content": "I also play basketball twice a week. I have a cat named Pixel who is 2 years old."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "My mom is a doctor in San Francisco and my dad is a retired professor of mathematics at Stanford."
+        },
+        {
+          "role": "assistant",
+          "content": "Quite an academic family."
+        },
+        {
+          "role": "user",
+          "content": "I'm learning Japanese right now. I want to travel to Japan next spring."
+        },
+        {
+          "role": "assistant",
+          "content": "That sounds wonderful."
+        },
+        {
+          "role": "user",
+          "content": "My favorite programming language is Python. I contribute to open source projects."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "Where does David work?",
+        "answer": "Google in Seattle"
+      },
+      {
+        "question": "What team does David work on at Google?",
+        "answer": "Maps team"
+      },
+      {
+        "question": "Where did David go to university?",
+        "answer": "UC Berkeley"
+      },
+      {
+        "question": "What neighborhood does David live in?",
+        "answer": "Capitol Hill"
+      },
+      {
+        "question": "What type of car does David drive?",
+        "answer": "Tesla Model 3"
+      },
+      {
+        "question": "What is the name of David's cat?",
+        "answer": "Pixel"
+      },
+      {
+        "question": "What language is David currently learning?",
+        "answer": "Japanese"
+      },
+      {
+        "question": "What is David's favorite programming language?",
+        "answer": "Python"
+      },
+      {
+        "question": "What does David's father do?",
+        "answer": "retired professor of mathematics at Stanford"
+      },
+      {
+        "question": "How long has David worked at Google?",
+        "answer": "5 years"
+      }
+    ]
+  },
+  {
+    "persona_id": "p03",
+    "name": "Maria",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hi I'm Maria Rodriguez a high school Spanish teacher in Austin Texas. I'm 45."
+        },
+        {
+          "role": "assistant",
+          "content": "How long have you been teaching?"
+        },
+        {
+          "role": "user",
+          "content": "18 years. I teach at Westlake High School and coach the soccer team."
+        },
+        {
+          "role": "assistant",
+          "content": "Full schedule!"
+        },
+        {
+          "role": "user",
+          "content": "I'm married to Carlos who owns a Mexican restaurant called El Jardin downtown."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "We have three kids Sofia 16 Miguel 13 and Lucia 9. Sofia is applying to colleges."
+        },
+        {
+          "role": "assistant",
+          "content": "Where is Sofia hoping to go?"
+        },
+        {
+          "role": "user",
+          "content": "UT Austin is her top choice. She wants to study biology. We have a tabby cat named Mango."
+        },
+        {
+          "role": "assistant",
+          "content": "Cute name."
+        },
+        {
+          "role": "user",
+          "content": "I drive a red Toyota RAV4. We own our home in Tarrytown neighborhood of Austin."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I grew up in San Antonio and got my teaching degree from UT Austin."
+        },
+        {
+          "role": "assistant",
+          "content": "So Austin has special meaning for you."
+        },
+        {
+          "role": "user",
+          "content": "My hobby is salsa dancing. Carlos and I go every Friday night."
+        },
+        {
+          "role": "assistant",
+          "content": "Sounds wonderful."
+        },
+        {
+          "role": "user",
+          "content": "I'm also learning Italian. Dream to take family to Italy next summer."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "What subject does Maria teach?",
+        "answer": "Spanish"
+      },
+      {
+        "question": "What school does Maria teach at?",
+        "answer": "Westlake High School"
+      },
+      {
+        "question": "What is the name of Carlos's restaurant?",
+        "answer": "El Jardin"
+      },
+      {
+        "question": "How many children does Maria have?",
+        "answer": "three"
+      },
+      {
+        "question": "What does Sofia want to study at university?",
+        "answer": "biology"
+      },
+      {
+        "question": "What is the name of Maria's cat?",
+        "answer": "Mango"
+      },
+      {
+        "question": "What car does Maria drive?",
+        "answer": "red Toyota RAV4"
+      },
+      {
+        "question": "What neighborhood does Maria live in?",
+        "answer": "Tarrytown"
+      },
+      {
+        "question": "What hobby do Maria and Carlos do on Friday nights?",
+        "answer": "salsa dancing"
+      },
+      {
+        "question": "What language is Maria currently learning?",
+        "answer": "Italian"
+      }
+    ]
+  },
+  {
+    "persona_id": "p04",
+    "name": "James",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "I'm James Walker a retired Marine Corps colonel 58 years old. I live in San Diego."
+        },
+        {
+          "role": "assistant",
+          "content": "Thank you for your service. What did you do after retiring?"
+        },
+        {
+          "role": "user",
+          "content": "I consult for defense contractors and teach military history at community college part-time."
+        },
+        {
+          "role": "assistant",
+          "content": "What branch did you serve in?"
+        },
+        {
+          "role": "user",
+          "content": "Infantry. I served for 30 years. Last posting at Camp Pendleton so I stayed in San Diego."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I'm widowed. My wife Patricia passed away four years ago from cancer."
+        },
+        {
+          "role": "assistant",
+          "content": "I'm so sorry for your loss."
+        },
+        {
+          "role": "user",
+          "content": "Thank you. My son Robert is a lawyer in Chicago. My daughter Karen is an ER doctor in Phoenix."
+        },
+        {
+          "role": "assistant",
+          "content": "They've done very well."
+        },
+        {
+          "role": "user",
+          "content": "I have a German Shepherd named Ranger. I drive a black Ford F-150 truck."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I love woodworking in my garage making furniture. I also fish on weekends off the coast."
+        },
+        {
+          "role": "assistant",
+          "content": "Sounds relaxing."
+        },
+        {
+          "role": "user",
+          "content": "I grew up in rural Tennessee. Still have family there. I visit every Thanksgiving."
+        },
+        {
+          "role": "assistant",
+          "content": "Family traditions are important."
+        },
+        {
+          "role": "user",
+          "content": "I'm a huge San Diego Padres fan. Season tickets for the last 10 years."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "What was James's rank when he retired?",
+        "answer": "colonel"
+      },
+      {
+        "question": "How many years did James serve in the military?",
+        "answer": "30 years"
+      },
+      {
+        "question": "What does James teach part-time?",
+        "answer": "military history"
+      },
+      {
+        "question": "What is the name of James's dog?",
+        "answer": "Ranger"
+      },
+      {
+        "question": "What kind of truck does James drive?",
+        "answer": "black Ford F-150"
+      },
+      {
+        "question": "What is James's son Robert's profession?",
+        "answer": "lawyer"
+      },
+      {
+        "question": "What city does James's daughter Karen work in?",
+        "answer": "Phoenix"
+      },
+      {
+        "question": "What is James's main hobby in his garage?",
+        "answer": "woodworking"
+      },
+      {
+        "question": "Where did James grow up?",
+        "answer": "rural Tennessee"
+      },
+      {
+        "question": "Which baseball team is James a fan of?",
+        "answer": "San Diego Padres"
+      }
+    ]
+  },
+  {
+    "persona_id": "p05",
+    "name": "Priya",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hi I'm Priya Sharma a data scientist at Netflix in Los Gatos California. I'm 29."
+        },
+        {
+          "role": "assistant",
+          "content": "What do you work on at Netflix?"
+        },
+        {
+          "role": "user",
+          "content": "Recommendation algorithms. Been there 3 years. Before that I did my PhD at MIT in statistics."
+        },
+        {
+          "role": "assistant",
+          "content": "Impressive!"
+        },
+        {
+          "role": "user",
+          "content": "My undergrad was at IIT Bombay in India where I'm originally from."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I live in San Jose in Willow Glen neighborhood with roommate Aisha who is a nurse."
+        },
+        {
+          "role": "assistant",
+          "content": "Nice area."
+        },
+        {
+          "role": "user",
+          "content": "I don't own a car and commute by train. I cycle weekends and do yoga every morning."
+        },
+        {
+          "role": "assistant",
+          "content": "Very healthy lifestyle."
+        },
+        {
+          "role": "user",
+          "content": "My parents still live in Mumbai. I visit them every December for about three weeks."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I love photography and cooking Indian food. I have a food Instagram with 12000 followers."
+        },
+        {
+          "role": "assistant",
+          "content": "Quite a following."
+        },
+        {
+          "role": "user",
+          "content": "I also volunteer at a coding bootcamp for underprivileged youth on Saturdays."
+        },
+        {
+          "role": "assistant",
+          "content": "Admirable work."
+        },
+        {
+          "role": "user",
+          "content": "My favorite travel destination is Japan. I went last year and absolutely loved it."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "Where does Priya work?",
+        "answer": "Netflix in Los Gatos"
+      },
+      {
+        "question": "What did Priya study for her PhD?",
+        "answer": "statistics"
+      },
+      {
+        "question": "Where did Priya do her undergraduate degree?",
+        "answer": "IIT Bombay"
+      },
+      {
+        "question": "What neighborhood does Priya live in?",
+        "answer": "Willow Glen"
+      },
+      {
+        "question": "How does Priya commute to work?",
+        "answer": "by train"
+      },
+      {
+        "question": "What does Priya do every morning?",
+        "answer": "yoga"
+      },
+      {
+        "question": "Where do Priya's parents live?",
+        "answer": "Mumbai"
+      },
+      {
+        "question": "What is Priya's social media about?",
+        "answer": "food"
+      },
+      {
+        "question": "What does Priya do on Saturdays as a volunteer?",
+        "answer": "coding bootcamp"
+      },
+      {
+        "question": "What is Priya's favorite travel destination?",
+        "answer": "Japan"
+      }
+    ]
+  },
+  {
+    "persona_id": "p06",
+    "name": "Tom",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hey I'm Tom Kowalski a plumber running my own business in Cleveland Ohio. I'm 41."
+        },
+        {
+          "role": "assistant",
+          "content": "How long have you been running your own business?"
+        },
+        {
+          "role": "user",
+          "content": "12 years. I employ 4 other plumbers now. My wife Linda is an accountant who does the books."
+        },
+        {
+          "role": "assistant",
+          "content": "Entrepreneurship suits you."
+        },
+        {
+          "role": "user",
+          "content": "I started after working for a larger company for 5 years. Best decision I ever made."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "We live in Lakewood suburb of Cleveland. We have a rescue pit bull named Bruno age 4."
+        },
+        {
+          "role": "assistant",
+          "content": "Rescue dogs are the best."
+        },
+        {
+          "role": "user",
+          "content": "We have two daughters Ashley 14 and Brooke 11. No sons."
+        },
+        {
+          "role": "assistant",
+          "content": "A full house!"
+        },
+        {
+          "role": "user",
+          "content": "I drive a white Chevy Silverado. Linda drives a Subaru Forester."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I'm a massive Cleveland Browns fan. Season tickets for 15 years. Love ice fishing too."
+        },
+        {
+          "role": "assistant",
+          "content": "Ice fishing on Lake Erie?"
+        },
+        {
+          "role": "user",
+          "content": "Exactly. I go almost every winter weekend. I also coach Ashley's softball team."
+        },
+        {
+          "role": "assistant",
+          "content": "You stay busy."
+        },
+        {
+          "role": "user",
+          "content": "Always. I grew up in Pittsburgh which is funny given I'm a Browns fan."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "What is Tom's profession?",
+        "answer": "plumber"
+      },
+      {
+        "question": "How many employees does Tom have?",
+        "answer": "4"
+      },
+      {
+        "question": "What does Tom's wife Linda do?",
+        "answer": "accountant"
+      },
+      {
+        "question": "What suburb of Cleveland does Tom live in?",
+        "answer": "Lakewood"
+      },
+      {
+        "question": "What is the name of Tom's dog?",
+        "answer": "Bruno"
+      },
+      {
+        "question": "How many daughters does Tom have?",
+        "answer": "two"
+      },
+      {
+        "question": "What truck does Tom drive?",
+        "answer": "white Chevy Silverado"
+      },
+      {
+        "question": "Which NFL team is Tom a fan of?",
+        "answer": "Cleveland Browns"
+      },
+      {
+        "question": "What winter sport does Tom enjoy?",
+        "answer": "ice fishing"
+      },
+      {
+        "question": "Where did Tom grow up?",
+        "answer": "Pittsburgh"
+      }
+    ]
+  },
+  {
+    "persona_id": "p07",
+    "name": "Elena",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "I'm Elena Petrov a violinist with the Chicago Symphony Orchestra. I'm 36 from Russia."
+        },
+        {
+          "role": "assistant",
+          "content": "How long have you been with the CSO?"
+        },
+        {
+          "role": "user",
+          "content": "8 years. I moved from St Petersburg when I got the position."
+        },
+        {
+          "role": "assistant",
+          "content": "What a journey!"
+        },
+        {
+          "role": "user",
+          "content": "I started violin at age 4. I studied at St Petersburg Conservatory then Juilliard in New York."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I live in Lincoln Park neighborhood of Chicago. I'm with Antoine a French chef."
+        },
+        {
+          "role": "assistant",
+          "content": "A musician and a chef!"
+        },
+        {
+          "role": "user",
+          "content": "Antoine owns a French restaurant called Maison in Wicker Park. The food is incredible."
+        },
+        {
+          "role": "assistant",
+          "content": "Delightful."
+        },
+        {
+          "role": "user",
+          "content": "I take the CTA everywhere. We have two cats Chopin and Liszt. I don't own a car."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "Outside music I love reading mostly Russian literature. I run 5K most mornings."
+        },
+        {
+          "role": "assistant",
+          "content": "Running keeps you energized for performances?"
+        },
+        {
+          "role": "user",
+          "content": "Exactly. I teach private violin lessons Monday and Wednesday evenings. Six students."
+        },
+        {
+          "role": "assistant",
+          "content": "Giving back to the next generation."
+        },
+        {
+          "role": "user",
+          "content": "Very fulfilling. I go back to Russia every summer to visit my mother in St Petersburg."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "What instrument does Elena play?",
+        "answer": "violin"
+      },
+      {
+        "question": "Which orchestra does Elena perform with?",
+        "answer": "Chicago Symphony Orchestra"
+      },
+      {
+        "question": "Where did Elena grow up?",
+        "answer": "St Petersburg Russia"
+      },
+      {
+        "question": "What conservatory did Elena study at before Juilliard?",
+        "answer": "St Petersburg Conservatory"
+      },
+      {
+        "question": "What neighborhood of Chicago does Elena live in?",
+        "answer": "Lincoln Park"
+      },
+      {
+        "question": "What is the name of Antoine's restaurant?",
+        "answer": "Maison"
+      },
+      {
+        "question": "What are the names of Elena's cats?",
+        "answer": "Chopin and Liszt"
+      },
+      {
+        "question": "How many violin students does Elena teach?",
+        "answer": "six"
+      },
+      {
+        "question": "What does Elena mostly read?",
+        "answer": "Russian literature"
+      },
+      {
+        "question": "When does Elena visit her mother in Russia?",
+        "answer": "every summer"
+      }
+    ]
+  },
+  {
+    "persona_id": "p08",
+    "name": "Marcus",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hi I'm Marcus Johnson a high school football coach and PE teacher in Atlanta. I'm 48."
+        },
+        {
+          "role": "assistant",
+          "content": "Have you always been in education?"
+        },
+        {
+          "role": "user",
+          "content": "Yes 22 years. I coach at Grady High School. We won the state championship two years ago."
+        },
+        {
+          "role": "assistant",
+          "content": "State champions!"
+        },
+        {
+          "role": "user",
+          "content": "Proudest moment of my career. I played college ball at Georgia Tech before an injury ended it."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I'm divorced. My son Marcus Jr. is 19 and plays college football."
+        },
+        {
+          "role": "assistant",
+          "content": "Like father like son."
+        },
+        {
+          "role": "user",
+          "content": "He plays for Clemson. I live alone in East Atlanta Village neighborhood."
+        },
+        {
+          "role": "assistant",
+          "content": "Vibrant area."
+        },
+        {
+          "role": "user",
+          "content": "I drive a silver Dodge RAM. I have a Labrador named Tackle. He's 5 years old."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I'm a huge Atlanta Falcons fan. Also love grilling. Known for my BBQ ribs."
+        },
+        {
+          "role": "assistant",
+          "content": "Sounds delicious."
+        },
+        {
+          "role": "user",
+          "content": "I do a cookout every Fourth of July for about 50 people. I lift weights every morning at 5am."
+        },
+        {
+          "role": "assistant",
+          "content": "Serious dedication."
+        },
+        {
+          "role": "user",
+          "content": "Gotta model what I teach. I grew up in Savannah Georgia. My mom still lives there."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "What school does Marcus coach at?",
+        "answer": "Grady High School"
+      },
+      {
+        "question": "How many years has Marcus been teaching?",
+        "answer": "22 years"
+      },
+      {
+        "question": "Where did Marcus play college football?",
+        "answer": "Georgia Tech"
+      },
+      {
+        "question": "What university does Marcus Jr. play football for?",
+        "answer": "Clemson"
+      },
+      {
+        "question": "What neighborhood does Marcus live in?",
+        "answer": "East Atlanta Village"
+      },
+      {
+        "question": "What is the name of Marcus's dog?",
+        "answer": "Tackle"
+      },
+      {
+        "question": "What car does Marcus drive?",
+        "answer": "silver Dodge RAM"
+      },
+      {
+        "question": "What did Marcus's team accomplish two years ago?",
+        "answer": "won the state championship"
+      },
+      {
+        "question": "What NFL team does Marcus support?",
+        "answer": "Atlanta Falcons"
+      },
+      {
+        "question": "Where did Marcus grow up?",
+        "answer": "Savannah Georgia"
+      }
+    ]
+  },
+  {
+    "persona_id": "p09",
+    "name": "Yuki",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "Hello I'm Yuki Tanaka a UX designer at Airbnb in San Francisco. I'm 27 Japanese-American."
+        },
+        {
+          "role": "assistant",
+          "content": "How long have you been at Airbnb?"
+        },
+        {
+          "role": "user",
+          "content": "Almost 2 years. Before that a startup for a year after my design degree from RISD."
+        },
+        {
+          "role": "assistant",
+          "content": "Excellent school."
+        },
+        {
+          "role": "user",
+          "content": "I loved it. From San Jose originally. My parents moved from Osaka Japan before I was born."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "I live in the Mission District with two roommates. I take BART and bike to work."
+        },
+        {
+          "role": "assistant",
+          "content": "Very SF!"
+        },
+        {
+          "role": "user",
+          "content": "I love it. I'm vegetarian and cook Japanese food at home. No car."
+        },
+        {
+          "role": "assistant",
+          "content": "Very walkable city."
+        },
+        {
+          "role": "user",
+          "content": "I have a pet rabbit named Mochi. He's very spoiled. I'm single and loving it."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "My hobbies are ceramics and rock climbing. I go to a climbing gym three times a week."
+        },
+        {
+          "role": "assistant",
+          "content": "Both very creative activities."
+        },
+        {
+          "role": "user",
+          "content": "I also do watercolor painting. I sell prints on Etsy."
+        },
+        {
+          "role": "assistant",
+          "content": "A side business!"
+        },
+        {
+          "role": "user",
+          "content": "A small one. I visit my grandparents in Osaka every other year. Going this December."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "Where does Yuki work?",
+        "answer": "Airbnb in San Francisco"
+      },
+      {
+        "question": "What is Yuki's job title?",
+        "answer": "UX designer"
+      },
+      {
+        "question": "What school did Yuki get her design degree from?",
+        "answer": "RISD"
+      },
+      {
+        "question": "What neighborhood does Yuki live in?",
+        "answer": "Mission District"
+      },
+      {
+        "question": "What is the name of Yuki's pet?",
+        "answer": "Mochi"
+      },
+      {
+        "question": "What kind of animal is Mochi?",
+        "answer": "rabbit"
+      },
+      {
+        "question": "What sport does Yuki do three times a week?",
+        "answer": "rock climbing"
+      },
+      {
+        "question": "What does Yuki sell on Etsy?",
+        "answer": "watercolor prints"
+      },
+      {
+        "question": "Where do Yuki's grandparents live?",
+        "answer": "Osaka"
+      },
+      {
+        "question": "What dietary choice does Yuki follow?",
+        "answer": "vegetarian"
+      }
+    ]
+  },
+  {
+    "persona_id": "p10",
+    "name": "Robert",
+    "sessions": [
+      [
+        {
+          "role": "user",
+          "content": "I'm Robert Hayes a retired professor of economics from University of Michigan. I'm 67."
+        },
+        {
+          "role": "assistant",
+          "content": "How long were you at Michigan?"
+        },
+        {
+          "role": "user",
+          "content": "34 years. I retired two years ago. I specialized in macroeconomics and monetary policy."
+        },
+        {
+          "role": "assistant",
+          "content": "Distinguished career. What are you doing in retirement?"
+        },
+        {
+          "role": "user",
+          "content": "Writing a book on Federal Reserve policy history. I also consult for the IMF."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "My wife Dorothy is a retired federal judge. We've been married 41 years. We live in Ann Arbor."
+        },
+        {
+          "role": "assistant",
+          "content": "Ann Arbor is wonderful."
+        },
+        {
+          "role": "user",
+          "content": "We love it. Eldest son William is a cardiologist in Boston."
+        },
+        {
+          "role": "assistant",
+          "content": "Accomplished family!"
+        },
+        {
+          "role": "user",
+          "content": "Second is Claire a professor of literature at Duke. Third is Daniel a tech entrepreneur in Austin."
+        }
+      ],
+      [
+        {
+          "role": "user",
+          "content": "We have four grandchildren and I absolutely dote on them. I drive a navy blue Volvo XC90."
+        },
+        {
+          "role": "assistant",
+          "content": "Safe choice for a grandfather."
+        },
+        {
+          "role": "user",
+          "content": "I play golf twice a week and I'm in a book club that meets monthly. I also garden extensively."
+        },
+        {
+          "role": "assistant",
+          "content": "A full and lovely retirement."
+        },
+        {
+          "role": "user",
+          "content": "I grew up in rural Kentucky. Still have the accent. My parents were tobacco farmers."
+        }
+      ]
+    ],
+    "questions": [
+      {
+        "question": "What university was Robert a professor at?",
+        "answer": "University of Michigan"
+      },
+      {
+        "question": "What did Robert specialize in as an economist?",
+        "answer": "macroeconomics and monetary policy"
+      },
+      {
+        "question": "What is Robert currently writing?",
+        "answer": "a book on Federal Reserve policy history"
+      },
+      {
+        "question": "What was Dorothy's profession before retiring?",
+        "answer": "federal judge"
+      },
+      {
+        "question": "How many years have Robert and Dorothy been married?",
+        "answer": "41 years"
+      },
+      {
+        "question": "What is Robert's son William's profession?",
+        "answer": "cardiologist"
+      },
+      {
+        "question": "Where does Claire work as a professor?",
+        "answer": "Duke"
+      },
+      {
+        "question": "What car does Robert drive?",
+        "answer": "navy blue Volvo XC90"
+      },
+      {
+        "question": "What sport does Robert play twice a week?",
+        "answer": "golf"
+      },
+      {
+        "question": "Where did Robert grow up?",
+        "answer": "rural Kentucky"
+      }
+    ]
+  }
+]
