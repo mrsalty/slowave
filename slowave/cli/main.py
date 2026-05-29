@@ -178,34 +178,85 @@ def recall(ctx: click.Context, query: str, top_k: int, evidence: bool) -> None:
     eng.close()
 
 
+def _sal_bar(sal: float, width: int = 8, scale: float = 80.0) -> str:
+    """Render a compact salience bar.  sal is unbounded; normalise to [0,1] with a soft cap."""
+    import math
+    norm = 1.0 - math.exp(-sal / scale)
+    filled = round(norm * width)
+    return "█" * filled + "░" * (width - filled)
+
+
+def _status_icon(status: str) -> str:
+    return {"active": "🟢", "needs_review": "🟡", "superseded": "⚫", "contradicted": "🔴"}.get(
+        status, "⚪"
+    )
+
+
 def _format_recall_human(payload: dict[str, Any]) -> None:
     schemas = payload.get("schemas", [])
     episodes = payload.get("episodes", [])
     raw_events = payload.get("raw_events", [])
-    click.echo("=== Schemas ===")
+    divider = "  " + "─" * 54
+
+    # ── Schemas ────────────────────────────────────────────
+    click.echo()
+    click.echo("  📖  schemas")
     if not schemas:
-        click.echo("  (none yet)")
+        click.echo("  (none)")
     for s in schemas:
+        sal = float(s.get("salience", 0.0))
+        status = s.get("status", "active")
+        n_ep = len(s.get("supporting_episode_ids", []))
+        tags = s.get("tags") or []
+        tag_str = "  #" + " #".join(tags) if tags else ""
+        text = (s.get("content_text") or "").replace("\n", " ").strip()
+        if len(text) > 120:
+            text = text[:120] + "…"
+        nr = "  🔔 needs review" if s.get("needs_review") else ""
+        click.echo(divider)
         click.echo(
-            f"  [sch_{s['id']}] {s['content_text']}"
-            f"  status={s.get('status', 'active')} sal={float(s.get('salience', 0.0)):.3f}"
-            f" tags={','.join(s.get('tags', []))}"
-            f" supports={len(s.get('supporting_episode_ids', []))}"
-            + ("  needs_review" if s.get("needs_review") else "")
+            f"  {_status_icon(status)}  sch_{s['id']}"
+            f"  {_sal_bar(sal)}  sal={sal:.0f}"
+            f"  {n_ep} ep{'' if n_ep == 1 else 's'}"
+            f"{tag_str}{nr}"
         )
-    click.echo("\n=== Episodes ===")
-    for ep in episodes:
-        text = (ep.get("content_text") or "").replace("\n", " ")
-        if len(text) > 160:
-            text = text[:160] + "..."
-        click.echo(f"  [epi_{ep['id']}] (sal={ep['salience']:.3f}) {text}")
+        click.echo(f"  {text}")
+
+    # ── Episodes ───────────────────────────────────────────
+    if episodes:
+        click.echo()
+        click.echo("  💬  episodes")
+        click.echo(divider)
+        for ep in episodes:
+            sal = float(ep.get("salience", 0.0))
+            ts = ep.get("ts") or ep.get("created_at") or 0
+            # ts is a unix timestamp (seconds); convert to YYYY-MM-DD
+            try:
+                import datetime
+                date = datetime.datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d")
+            except Exception:
+                date = str(ts)[:10] if ts else "—"
+            text = (ep.get("content_text") or "").replace("\n", " ").strip()
+            # Strip leading [YYYY-MM-DD] date prefix already shown in the date column
+            import re as _re
+            text = _re.sub(r"^\[\d{4}-\d{2}-\d{2}\]\s*", "", text)
+            if len(text) > 100:
+                text = text[:100] + "…"
+            # Episodes have salience ~0–1 typically; use a tighter scale
+            click.echo(f"  epi_{ep['id']}  {date}  {_sal_bar(sal, 6, scale=0.5)}  {text}")
+
+    # ── Raw events ─────────────────────────────────────────
     if raw_events:
-        click.echo("\n=== Raw events (evidence) ===")
+        click.echo()
+        click.echo("  🗒   evidence")
+        click.echo(divider)
         for r in raw_events:
-            text = (r.get("content") or "").replace("\n", " ")
-            if len(text) > 160:
-                text = text[:160] + "..."
-            click.echo(f"  [evt_{r['id']}] {r['type']}: {text}")
+            text = (r.get("content") or "").replace("\n", " ").strip()
+            if len(text) > 100:
+                text = text[:100] + "…"
+            click.echo(f"  evt_{r['id']}  {r.get('type', '')}  {text}")
+
+    click.echo()
 
 
 @cli.command("context")
