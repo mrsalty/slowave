@@ -10,7 +10,7 @@ from slowave.core.engine import SlowaveEngine
 def _tmp_engine() -> tuple[SlowaveEngine, str]:
     tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     tmp.close()
-    cfg = SlowaveConfig(db_path=tmp.name, dim=8, disable_encoder=True, disable_llm=True)
+    cfg = SlowaveConfig(db_path=tmp.name, dim=8, disable_encoder=True)
     return SlowaveEngine(cfg), tmp.name
 
 

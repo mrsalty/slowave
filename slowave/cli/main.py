@@ -5,8 +5,7 @@ Provides the agent-facing surface: session/event/remember/recall/context/show.
 Design goals:
 - Every command prints either JSON or a compact human-readable form.
 - JSON mode is selected with --json (recommended for agent integrations).
-- The CLI is fast on the hot paths (event_append, recall): no LLM call here.
-- LLM is only invoked on `session end` (consolidation) or `consolidate`.
+- The CLI never calls an LLM: ingest, consolidation, and recall are local.
 """
 
 from __future__ import annotations
@@ -30,12 +29,9 @@ import click
 from slowave.core.config import SlowaveConfig
 from slowave.core.paths import default_db_path
 from slowave.core.engine import SlowaveEngine
-from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig
 
 DEFAULT_DB = "__DEFAULT_DB__"
-DEFAULT_MODEL = os.environ.get("SLOWAVE_MODEL", "qwen2.5:7b-instruct")
-DEFAULT_OLLAMA_URL = os.environ.get("SLOWAVE_OLLAMA_URL", "http://localhost:11434")
 
 
 def _ensure_db_dir(path: str) -> None:
@@ -50,18 +46,14 @@ def _resolve_db_path(db: str) -> str:
     return os.path.expanduser(db)
 
 
-def _build_engine(
-    db: str, *, disable_llm: bool = True, schema_mode: str = "latent"
-) -> SlowaveEngine:
+def _build_engine(db: str, *, disable_encoder: bool = False) -> SlowaveEngine:
     db = _resolve_db_path(db)
     _ensure_db_dir(db)
     cfg = SlowaveConfig(
         db_path=db,
         dim=384,
         encoder=EncoderConfig(),
-        llm=LLMBackendConfig(model=DEFAULT_MODEL, base_url=DEFAULT_OLLAMA_URL),
-        disable_llm=disable_llm,
-        schema_mode=schema_mode,
+        disable_encoder=disable_encoder,
     )
     return SlowaveEngine(cfg)
 
@@ -84,14 +76,12 @@ def _print(obj: Any, as_json: bool) -> None:
     show_default="SLOWAVE_DB or ~/.slowave/slowave.db",
     help="SQLite db path override.",
 )
-@click.option("--no-llm", is_flag=True, help="Disable LLM (no schema extraction).")
 @click.option("--json", "as_json", is_flag=True, help="JSON output.")
 @click.pass_context
-def cli(ctx: click.Context, db: str, no_llm: bool, as_json: bool) -> None:
+def cli(ctx: click.Context, db: str, as_json: bool) -> None:
     """Slowave: brain-inspired memory for AI agents."""
     ctx.ensure_object(dict)
     ctx.obj["db"] = _resolve_db_path(db)
-    ctx.obj["no_llm"] = no_llm
     ctx.obj["json"] = as_json
 
 
@@ -105,7 +95,7 @@ def session() -> None:
 @click.option("--project", default=None)
 @click.pass_context
 def session_start(ctx: click.Context, agent: str, project: str | None) -> None:
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)  # no LLM needed at start
+    eng = _build_engine(ctx.obj["db"])  # no LLM needed at start
     sid = eng.session_start(agent=agent, project=project)
     _print({"session_id": sid}, ctx.obj["json"])
     eng.close()
@@ -116,18 +106,18 @@ def session_start(ctx: click.Context, agent: str, project: str | None) -> None:
 @click.option(
     "--consolidate",
     is_flag=True,
-    help="Also run replay+LLM consolidation synchronously (slow). "
+    help="Also run replay + latent consolidation synchronously. "
     "Default: encode only; run 'slowave consolidate' separately.",
 )
 @click.pass_context
 def session_end(ctx: click.Context, session_id: str, consolidate: bool) -> None:
     """End a session and encode events into episodic memories.
 
-    Fast by default: no LLM, no blocking. Use --consolidate only in scripts
+    Fast by default: no blocking. Use --consolidate only in scripts
     or tests. In production let the background worker handle consolidation.
     """
-    eng = _build_engine(ctx.obj["db"], disable_llm=not consolidate or ctx.obj["no_llm"])
-    stats = eng.session_end(session_id, consolidate=consolidate and not ctx.obj["no_llm"])
+    eng = _build_engine(ctx.obj["db"])
+    stats = eng.session_end(session_id, consolidate=consolidate)
     _print(stats, ctx.obj["json"])
     eng.close()
 
@@ -139,7 +129,7 @@ def session_end(ctx: click.Context, session_id: str, consolidate: bool) -> None:
 @click.pass_context
 def event_append(ctx: click.Context, session_id: str, type_: str, content: str) -> None:
     """Append an event to a session."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     rid = eng.event_append(session_id=session_id, type=type_, content=content)
     _print({"event_id": rid}, ctx.obj["json"])
     eng.close()
@@ -152,7 +142,7 @@ def event_append(ctx: click.Context, session_id: str, type_: str, content: str) 
 @click.pass_context
 def remember(ctx: click.Context, content: str, type_: str, project: str | None) -> None:
     """Explicitly remember a typed claim."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     rid = eng.remember(content=content, type=type_, project=project)
     _print({"event_id": rid, "type": type_}, ctx.obj["json"])
     eng.close()
@@ -165,7 +155,7 @@ def remember(ctx: click.Context, content: str, type_: str, project: str | None) 
 @click.pass_context
 def recall(ctx: click.Context, query: str, top_k: int, evidence: bool) -> None:
     """Recall memories relevant to a query."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     result = eng.recall(query, top_k=top_k, evidence=evidence)
     payload = {
         "schemas": [asdict(s) for s in result.schemas],
@@ -239,7 +229,7 @@ def context_cmd(
     limit: int,
 ) -> None:
     """Return a gated working-memory brief for an agent/chatbot prompt."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     brief = eng.context_brief(
         query=query,
         project=project,
@@ -283,8 +273,10 @@ def context_cmd(
             click.echo("  (no memories yet)")
         for item in brief.items:
             s = item.schema
+            label = s.facets.get("display_label", "") if isinstance(s.facets, dict) else ""
+            label_str = f" [{label}]" if label else ""
             click.echo(
-                f"  [sch_{s.id}] {item.text}"
+                f"  [sch_{s.id}]{label_str} {item.text}"
                 f"  act={item.activation:.3f} status={s.status} sal={s.salience:.3f}"
                 f" supports={len(s.supporting_episode_ids)}"
                 f" tags={','.join(s.tags)}"
@@ -301,7 +293,7 @@ def context_cmd(
 @click.pass_context
 def show(ctx: click.Context, ref: str) -> None:
     """Show a schema/episode/event by ref (sch_NN, epi_NN, evt_NN)."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     if ref.startswith("sch_"):
         sid = int(ref[4:])
         try:
@@ -341,7 +333,7 @@ def show(ctx: click.Context, ref: str) -> None:
 @click.pass_context
 def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
     """List schemas (optionally filtered)."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     kwargs: dict[str, Any] = {"limit": limit}
     if needs_review:
         kwargs["needs_review"] = True
@@ -350,8 +342,10 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
         _print([asdict(s) for s in items], True)
     else:
         for s in items:
+            label = s.facets.get("display_label", "") if isinstance(s.facets, dict) else ""
+            label_str = f" [{label}]" if label else ""
             click.echo(
-                f"  [sch_{s.id}] {s.content_text}"
+                f"  [sch_{s.id}]{label_str} {s.content_text}"
                 f"  status={s.status} sal={s.salience:.3f} supports={len(s.supporting_episode_ids)}"
                 f" tags={','.join(s.tags)}" + ("  needs_review" if s.needs_review else "")
             )
@@ -362,7 +356,7 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
 @click.pass_context
 def stats_cmd(ctx: click.Context) -> None:
     """Print system stats."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     _print(eng.stats(), ctx.obj["json"])
     eng.close()
 
@@ -406,7 +400,7 @@ def _slowave_processes() -> list[dict[str, Any]]:
 def status_cmd(ctx: click.Context) -> None:
     """Print DB, memory-health, and local process status."""
     db = ctx.obj["db"]
-    eng = _build_engine(db, disable_llm=True)
+    eng = _build_engine(db)
     payload = {
         "db_path": os.path.abspath(os.path.expanduser(db)),
         "db_exists": os.path.exists(os.path.expanduser(db)),
@@ -469,7 +463,7 @@ def dashboard_cmd(
 @click.pass_context
 def dedup_schemas_cmd(ctx: click.Context, apply_changes: bool) -> None:
     """Merge exact duplicate active schemas within each project namespace."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True)
+    eng = _build_engine(ctx.obj["db"])
     before = eng.schema_health()
     result = eng.dedup_schemas_exact(dry_run=not apply_changes)
     after = eng.schema_health()
@@ -494,7 +488,7 @@ def dedup_schemas_cmd(ctx: click.Context, apply_changes: bool) -> None:
 @click.pass_context
 def consolidate_cmd(ctx: click.Context) -> None:
     """Manually trigger a replay + latent consolidation pass."""
-    eng = _build_engine(ctx.obj["db"], disable_llm=True, schema_mode="latent")
+    eng = _build_engine(ctx.obj["db"])
     result = eng.consolidate_once()
     _print(result, ctx.obj["json"])
     eng.close()
@@ -531,7 +525,7 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
     import time as _time
     import signal
 
-    eng = _build_engine(ctx.obj["db"], disable_llm=True, schema_mode="latent")
+    eng = _build_engine(ctx.obj["db"])
     stop = False
 
     def _handle_signal(sig: int, frame: Any) -> None:

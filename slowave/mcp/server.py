@@ -42,25 +42,18 @@ from mcp.server.fastmcp import FastMCP
 from slowave.core.config import SlowaveConfig
 from slowave.core.paths import default_db_path
 from slowave.core.engine import SlowaveEngine
-from slowave.llm.base import LLMBackendConfig
 from slowave.symbolic.encoder import EncoderConfig
 
 log = logging.getLogger(__name__)
 
 DEFAULT_DB = default_db_path()
-DEFAULT_MODEL = os.environ.get("SLOWAVE_MODEL", "qwen2.5:7b-instruct")
-DEFAULT_OLLAMA_URL = os.environ.get("SLOWAVE_OLLAMA_URL", "http://localhost:11434")
 DEFAULT_PROJECT = os.environ.get("SLOWAVE_PROJECT")  # may be None
 
 
-_ENGINES: dict[tuple[bool, bool, str], SlowaveEngine] = {}
+_ENGINES: dict[tuple[bool], SlowaveEngine] = {}
 
 
-def _build_engine(
-    disable_llm: bool = True,
-    disable_encoder: bool = False,
-    schema_mode: str = "latent",
-) -> SlowaveEngine:
+def _build_engine(disable_encoder: bool = False) -> SlowaveEngine:
     """Return a cached engine for this configuration.
 
     Engines are expensive to construct (sentence-transformers model load,
@@ -72,7 +65,7 @@ def _build_engine(
     encoder-free engine (e.g. for stats) and sometimes a full latent engine.
     All engines share the same SQLite DB so writes are visible across them.
     """
-    key = (disable_llm, disable_encoder, schema_mode)
+    key = (disable_encoder,)
     eng = _ENGINES.get(key)
     if eng is not None:
         return eng
@@ -83,10 +76,7 @@ def _build_engine(
         db_path=DEFAULT_DB,
         dim=384,
         encoder=EncoderConfig(),
-        llm=LLMBackendConfig(model=DEFAULT_MODEL, base_url=DEFAULT_OLLAMA_URL),
-        disable_llm=disable_llm,
         disable_encoder=disable_encoder,
-        schema_mode=schema_mode,
     )
     eng = SlowaveEngine(cfg)
     _ENGINES[key] = eng
@@ -121,9 +111,7 @@ def slowave_context(
         entities: optional salient entity cues.
         mode: default, broad, or debug. Debug includes activation traces.
     """
-    eng = _build_engine(
-        disable_llm=True,
-        disable_encoder=not bool(query or topics or entities),
+    eng = _build_engine(disable_encoder=not bool(query or topics or entities),
     )
     proj = project or DEFAULT_PROJECT
     brief = eng.context_brief(
@@ -178,7 +166,7 @@ def slowave_recall(query: str, top_k: int = 5, evidence: bool = False) -> dict[s
         top_k: max episodes returned.
         evidence: if true, include source raw events for provenance.
     """
-    eng = _build_engine(disable_llm=True)
+    eng = _build_engine()
     r = eng.recall(query, top_k=top_k, evidence=evidence)
     return {
         "schemas": [
@@ -228,7 +216,7 @@ def slowave_remember(
               open_question|warning|lesson|artifact.
         project: project scope.
     """
-    eng = _build_engine(disable_llm=True)
+    eng = _build_engine()
     proj = project or DEFAULT_PROJECT
     rid = eng.remember(content=content, type=type, project=proj)
     return {"event_id": f"evt_{rid}", "type": type, "project": proj}
@@ -260,7 +248,7 @@ def slowave_event(session_id: str, type: str, content: str) -> dict[str, Any]:
         type: event type tag (use the common ones above).
         content: textual content of the event.
     """
-    eng = _build_engine(disable_llm=True)
+    eng = _build_engine()
     rid = eng.event_append(session_id=session_id, type=type, content=content)
     return {"event_id": f"evt_{rid}"}
 
@@ -277,7 +265,7 @@ def slowave_session_start(agent: str = "cline-tui", project: str | None = None) 
         agent: identifier for this agent (e.g. "cline-tui", "claude-code").
         project: project name to scope memories (e.g. "my-repo").
     """
-    eng = _build_engine(disable_llm=True, disable_encoder=True)
+    eng = _build_engine(disable_encoder=True)
     proj = project or DEFAULT_PROJECT
     sid = eng.session_start(agent=agent, project=proj)
     return {"session_id": sid, "agent": agent, "project": proj}
@@ -287,13 +275,13 @@ def slowave_session_start(agent: str = "cline-tui", project: str | None = None) 
 def slowave_session_end(session_id: str) -> dict[str, Any]:
     """End a session: encode events into episodic memories.
 
-    Fast path — never blocks on LLM. Episodes are formed immediately and
+    Fast path — never blocks. Episodes are formed immediately and
     are available for recall. Schema consolidation happens asynchronously
     via the background worker or an explicit slowave_consolidate call.
 
     Returns counts of episodes formed.
     """
-    eng = _build_engine(disable_llm=True)
+    eng = _build_engine()
     return eng.session_end(session_id, consolidate=False)
 
 
@@ -304,26 +292,14 @@ def slowave_consolidate() -> dict[str, Any]:
     Useful between long sessions to surface schemas without waiting for
     session end.
     """
-    eng = _build_engine(disable_llm=True, schema_mode="latent")
-    stats = eng.replay_engine.replay_once()
-    if eng.consolidator is not None:
-        protos = eng._prototypes_for_episodes([])
-        cs = eng.consolidator.consolidate(prototype_ids=protos)
-        return {
-            "replay": stats,
-            "prototypes_processed": cs.prototypes_processed,
-            "schemas_created": cs.schemas_created,
-            "schemas_reinforced": cs.schemas_reinforced,
-            "schemas_contradicted": cs.schemas_contradicted,
-            "schemas_skipped": cs.schemas_skipped,
-        }
-    return {"replay": stats}
+    eng = _build_engine()
+    return eng.consolidate_once()
 
 
 @mcp.tool()
 def slowave_stats() -> dict[str, Any]:
     """Return system counts: episodes, prototypes, schemas, edges."""
-    eng = _build_engine(disable_llm=True, disable_encoder=True)
+    eng = _build_engine(disable_encoder=True)
     return eng.stats()
 
 

@@ -602,7 +602,6 @@ def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
 
     from slowave.core.config import SlowaveConfig
     from slowave.core.engine import SlowaveEngine
-    from slowave.llm.base import LLMBackendConfig
     from slowave.symbolic.encoder import EncoderConfig
 
     eng = SlowaveEngine(
@@ -610,9 +609,6 @@ def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
             db_path=db_path,
             dim=384,
             encoder=EncoderConfig(),
-            llm=LLMBackendConfig(),
-            disable_llm=True,
-            schema_mode="latent",
         )
     )
     try:

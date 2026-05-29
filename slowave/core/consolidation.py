@@ -2,19 +2,15 @@
 from __future__ import annotations
 
 import logging
-import os
 import time
-from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 
 import numpy as np
 
 from slowave.latent.semantic_store import SemanticStore
 from slowave.storage.sqlite_db import SQLiteDB
-from slowave.symbolic.contradiction import ContradictionJudge
 from slowave.symbolic.encoder import TextEncoder
 from slowave.symbolic.episode_text import EpisodeText, EpisodeTextStore
-from slowave.symbolic.schema_extractor import ExtractedSchema, SchemaExtractor
 from slowave.symbolic.schema_store import Schema, SchemaStore, canonical_schema_text
 from slowave.utils.vec import dumps_json
 
@@ -40,14 +36,10 @@ class Consolidator:
         semantic: SemanticStore,
         episode_text: EpisodeTextStore,
         schemas: SchemaStore,
-        extractor: SchemaExtractor | None,
-        judge: ContradictionJudge | None,
         encoder: TextEncoder | None,
         max_episodes_per_prototype: int = 8,
-        # Stage 6: brain-only path. When set, the consolidator runs in
-        # latent mode and never calls an LLM. ``extractor`` and ``judge``
-        # may both be None in that case. ``episodic_store`` is required
-        # in latent mode (we need the episode embeddings for SVD).
+        # Brain-only path. Schemas are built from prototype geometry and
+        # lexical signatures. Zero LLM calls.
         latent_builder=None,
         geometric_judge=None,
         episodic_store=None,
@@ -56,8 +48,6 @@ class Consolidator:
         self.semantic = semantic
         self.episode_text = episode_text
         self.schemas = schemas
-        self.extractor = extractor
-        self.judge = judge
         self.encoder = encoder
         self.max_episodes_per_prototype = max_episodes_per_prototype
         self.latent_builder = latent_builder
@@ -69,113 +59,8 @@ class Consolidator:
             )
 
     def consolidate(self, *, prototype_ids: list[int]) -> ConsolidationStats:
-        # Stage 6: brain-only path. Schemas are built geometrically from
-        # the prototype centroid + member episode embeddings. Zero LLM
-        # calls. See `_consolidate_latent` below.
-        if self._latent_mode:
-            return self._consolidate_latent(prototype_ids=prototype_ids)
-
-        created = 0
-        reinforced = 0
-        contradicted = 0
-        skipped = 0
-
-        # Phase 1: gather per-prototype episode payloads (cheap, serial).
-        payloads: list[tuple[int, list[int], list[EpisodeText]]] = []
-        for pid in prototype_ids:
-            supporting_episode_ids = self._episodes_for_prototype(pid)
-            if not supporting_episode_ids:
-                skipped += 1
-                continue
-            sample_ids = supporting_episode_ids[: self.max_episodes_per_prototype]
-            episode_texts = self.episode_text.get_many(sample_ids)
-            if not episode_texts:
-                skipped += 1
-                continue
-            payloads.append((pid, sample_ids, episode_texts))
-
-        # Phase 2: run schema extraction in parallel. These are independent
-        # LLM calls; parallelising them is the single biggest speedup when
-        # using a network-latency-bound backend (OpenRouter, etc.). For the
-        # local Ollama backend the speedup is smaller (it serialises at the
-        # model anyway) but never harmful. Workers default to 8 and can be
-        # overridden via SLOWAVE_LLM_WORKERS.
-        max_workers = int(os.environ.get("SLOWAVE_LLM_WORKERS", "8"))
-        extracted_by_pid: dict[int, list[ExtractedSchema]] = {}
-        debug_by_pid: dict[int, dict] = {}
-
-        def _extract_for_pid(item):
-            pid, _sample_ids, eps = item
-            try:
-                items = self.extractor.extract(
-                    episode_texts=[ep.content_text for ep in eps]
-                )
-                # SchemaExtractor stores last_debug on itself which doesn't
-                # survive concurrent calls; capture it explicitly here is not
-                # straightforward without changing SchemaExtractor's API.
-                # Per-prototype debug is best-effort under parallelism.
-                return pid, items, dict(getattr(self.extractor, "last_debug", {}) or {})
-            except Exception as e:
-                log.warning("schema extraction failed for prototype %s: %s", pid, e)
-                return pid, [], {"error": str(e)}
-
-        if payloads and max_workers > 1:
-            with ThreadPoolExecutor(max_workers=min(max_workers, len(payloads))) as ex:
-                for pid, items, dbg in ex.map(_extract_for_pid, payloads):
-                    extracted_by_pid[pid] = items
-                    debug_by_pid[pid] = dbg
-        else:
-            for item in payloads:
-                pid, items, dbg = _extract_for_pid(item)
-                extracted_by_pid[pid] = items
-                debug_by_pid[pid] = dbg
-
-        # Phase 3: write-back to DB. SQLite + contradiction judging stay
-        # serial to keep the write path simple. Contradiction judging is
-        # also one LLM call per (new, related) pair; future work could
-        # parallelise judging too if a benchmark requires it.
-        for pid, sample_ids, episode_texts in payloads:
-            extracted_items = extracted_by_pid.get(pid, [])
-            if not extracted_items:
-                self._record_debug(
-                    prototype_id=pid,
-                    episode_ids=sample_ids,
-                    created_schema_ids=[],
-                )
-                skipped += 1
-                continue
-
-            by_prompt_index = {i + 1: ep for i, ep in enumerate(episode_texts)}
-            created_schema_ids: list[int] = []
-            for extracted in extracted_items:
-                outcome, schema_id = self._create_and_relate_schema(
-                    prototype_id=pid,
-                    extracted=extracted,
-                    by_prompt_index=by_prompt_index,
-                )
-                if schema_id is not None:
-                    created_schema_ids.append(schema_id)
-                if outcome == "created":
-                    created += 1
-                elif outcome == "reinforced":
-                    reinforced += 1
-                elif outcome == "contradicted":
-                    contradicted += 1
-                else:
-                    skipped += 1
-            self._record_debug(
-                prototype_id=pid,
-                episode_ids=sample_ids,
-                created_schema_ids=created_schema_ids,
-            )
-
-        return ConsolidationStats(
-            prototypes_processed=len(prototype_ids),
-            schemas_created=created,
-            schemas_reinforced=reinforced,
-            schemas_contradicted=contradicted,
-            schemas_skipped=skipped,
-        )
+        """Consolidate prototypes into latent schemas. Zero LLM calls."""
+        return self._consolidate_latent(prototype_ids=prototype_ids)
 
     # ------------------------------------------------------------------
     # Stage 6: brain-only consolidation path
@@ -346,109 +231,7 @@ class Consolidator:
         # unrelated
         return "created", new_schema_id
 
-    # ------------------------------------------------------------------
-    # LLM consolidation path (Stage 0-5 default, kept for A/B comparison)
-    # ------------------------------------------------------------------
-
-    def _create_and_relate_schema(
-        self,
-        *,
-        prototype_id: int,
-        extracted: ExtractedSchema,
-        by_prompt_index: dict[int, EpisodeText],
-    ) -> tuple[str, int | None]:
-        schema_text_for_matching = canonical_schema_text(
-            claim=extracted.claim,
-            facets=extracted.facets,
-            tags=extracted.tags,
-        )
-        claim_embedding = self._embed(schema_text_for_matching)
-        related = self._best_related_schema(claim=schema_text_for_matching, embedding=claim_embedding)
-
-        evidence_episode_ids: list[int] = []
-        evidence_rows: list[tuple[int | None, int | None, str | None, float]] = []
-        for idx in extracted.evidence_indices:
-            ep = by_prompt_index.get(idx)
-            if ep is None:
-                continue
-            evidence_episode_ids.append(ep.episode_id)
-            # Link episode evidence; raw-event drill-through is expanded at recall.
-            evidence_rows.append((ep.episode_id, None, extracted.evidence_quote, 1.0))
-        if not evidence_episode_ids:
-            for ep in by_prompt_index.values():
-                evidence_episode_ids.append(ep.episode_id)
-                evidence_rows.append((ep.episode_id, None, extracted.evidence_quote, 1.0))
-
-        project = self._project_for_episodes(evidence_episode_ids)
-        new_schema_id = self.schemas.create(
-            prototype_ids=[prototype_id],
-            content_text=extracted.claim,
-            facets=extracted.facets,
-            tags=extracted.tags,
-            confidence=extracted.confidence,
-            salience=0.5 + extracted.confidence,
-            embedding=claim_embedding,
-            project=project,
-            supporting_episode_ids=evidence_episode_ids,
-            evidence=evidence_rows,
-        )
-
-        dedup_existing_id = self.schemas.last_create_reinforced_existing_id
-        if dedup_existing_id is not None:
-            return "reinforced", dedup_existing_id
-
-        if related is None:
-            return "created", new_schema_id
-
-        verdict = self.judge.judge(
-            existing_type=str(related.facets.get("schema_class", "schema")),
-            existing_text=canonical_schema_text(
-                claim=related.content_text,
-                facets=related.facets,
-                tags=related.tags,
-            ),
-            new_type=str(extracted.facets.get("schema_class", "schema")),
-            new_text=schema_text_for_matching,
-        )
-        if verdict.verdict == "reinforces":
-            self.schemas.add_relation(
-                src_schema_id=new_schema_id,
-                dst_schema_id=related.id,
-                relation="reinforces",
-                confidence=extracted.confidence,
-                reason=verdict.reasoning,
-            )
-            self.schemas.reinforce(related.id, amount=0.2)
-            return "reinforced", new_schema_id
-        if verdict.verdict == "refines":
-            self.schemas.add_relation(
-                src_schema_id=new_schema_id,
-                dst_schema_id=related.id,
-                relation="refines",
-                confidence=extracted.confidence,
-                reason=verdict.reasoning,
-            )
-            self.schemas.reinforce(related.id, amount=0.1)
-            return "created", new_schema_id
-        if verdict.verdict == "contradicts":
-            relation = "supersedes" if self._looks_like_update(extracted.claim) else "contradicts"
-            self.schemas.add_relation(
-                src_schema_id=new_schema_id,
-                dst_schema_id=related.id,
-                relation=relation,
-                confidence=extracted.confidence,
-                reason=verdict.reasoning,
-            )
-            if relation == "supersedes":
-                self.schemas.update_status(related.id, status="superseded", salience=0.05)
-            else:
-                self.schemas.update_status(related.id, status="contradicted", needs_review=True)
-                self.schemas.update_status(new_schema_id, status="needs_review", needs_review=True)
-            return "contradicted", new_schema_id
-        return "created", new_schema_id
-
     def _record_debug(self, *, prototype_id: int, episode_ids: list[int], created_schema_ids: list[int]) -> None:
-        dbg = getattr(self.extractor, "last_debug", {}) or {}
         conn = self.db.connect()
         conn.execute(
             "INSERT INTO consolidation_debug "
@@ -457,9 +240,9 @@ class Consolidator:
             (
                 int(prototype_id),
                 dumps_json({"ids": [int(e) for e in episode_ids]}),
-                str(dbg.get("prompt_text", "")),
-                dumps_json(dbg.get("response_json", {}) if isinstance(dbg.get("response_json", {}), dict) else {"raw": str(dbg.get("response_json"))}),
-                dumps_json({"claims": dbg.get("extracted_claims", [])}),
+                "",
+                dumps_json({}),
+                dumps_json({"claims": []}),
                 dumps_json({"ids": [int(s) for s in created_schema_ids]}),
                 int(time.time()),
             ),

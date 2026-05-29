@@ -1,7 +1,6 @@
 """Smoke test: import everything, build the engine, run a trivial end-to-end pass.
 
-Uses synthetic numpy embeddings (no sentence-transformers download) and
-disables the LLM (no Ollama). Verifies the latent substrate + schema tables
+Uses synthetic numpy embeddings (no sentence-transformers download). Verifies the latent substrate + schema tables
 are wired correctly even without external services.
 """
 from __future__ import annotations
@@ -29,9 +28,6 @@ def test_imports() -> None:
     import slowave.core.consolidation  # noqa
     import slowave.latent.episodic_store  # noqa
     import slowave.latent.replay_engine  # noqa
-    import slowave.symbolic.schema_extractor  # noqa
-    import slowave.symbolic.contradiction  # noqa
-    import slowave.llm.ollama_backend  # noqa
 
 
 def test_cli_uses_default_db_from_env_without_db_arg(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
@@ -47,7 +43,7 @@ def test_cli_uses_default_db_from_env_without_db_arg(monkeypatch: pytest.MonkeyP
 
 
 def test_engine_latent_only_synthetic() -> None:
-    """Build engine without encoder/LLM; ingest via the original latent path.
+    """Build engine without encoder; ingest via the original latent path.
 
     This validates SlowWave's substrate still works under the new package name.
     """
@@ -58,8 +54,7 @@ def test_engine_latent_only_synthetic() -> None:
             db_path=tmp.name,
             dim=64,
             disable_encoder=True,
-            disable_llm=True,
-        )
+                    )
         eng = SlowaveEngine(cfg)
 
         # Generate synthetic events and feed them directly into the latent store.
@@ -89,7 +84,7 @@ def test_engine_latent_only_synthetic() -> None:
         q = q / (np.linalg.norm(q) + 1e-12)
         retrieved = eng.retrieval.retrieve(q)
         assert len(retrieved.episodic) > 0
-        # No schemas yet (LLM disabled).
+        # No schemas until consolidation runs.
         assert eng.schemas.count() == 0
 
         eng.close()
@@ -101,7 +96,7 @@ def test_engine_latent_only_synthetic() -> None:
 
 
 def test_engine_symbolic_no_llm() -> None:
-    """Engine + raw_events + episode_text path without LLM.
+    """Engine + raw_events + episode_text path with latent schemas.
 
     Feeds synthetic embeddings directly via the engine's symbolic surface to
     confirm raw_log + episode_text + session lifecycle all behave.
@@ -113,8 +108,7 @@ def test_engine_symbolic_no_llm() -> None:
             db_path=tmp.name,
             dim=64,
             disable_encoder=True,
-            disable_llm=True,
-        )
+                    )
         eng = SlowaveEngine(cfg)
 
         sid = eng.session_start(agent="test", project="smoke")

@@ -1,8 +1,8 @@
 """Slowave engine: top-level facade.
 
 Wires SlowWave's latent CLS substrate (episodic+semantic+graph+transition+replay)
-to Slowave's symbolic layer (raw events + episode text + typed schemas + LLM
-extraction). Public API for CLI and MCP integrations.
+to Slowave's symbolic layer (raw events + episode text + typed schemas).
+Public API for CLI and MCP integrations.
 """
 
 from __future__ import annotations
@@ -28,13 +28,10 @@ from slowave.latent.semantic_store import SemanticStore, SemanticStoreConfig
 from slowave.latent.temporal import TemporalProbe
 from slowave.latent.transition_model import TransitionModel, TransitionModelConfig
 from slowave.latent.types import RetrievedMemorySet
-from slowave.llm import make_backend
 from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
-from slowave.symbolic.contradiction import ContradictionJudge
 from slowave.symbolic.encoder import TextEncoder
 from slowave.symbolic.episode_text import EpisodeTextStore
 from slowave.symbolic.raw_log import RawLog
-from slowave.symbolic.schema_extractor import SchemaExtractor
 from slowave.symbolic.schema_store import Schema, SchemaStore
 
 log = logging.getLogger(__name__)
@@ -47,8 +44,8 @@ def _prefix_date(text: str, ts: int) -> str:
 
     Brain analogue: episodic memories are always bound to their temporal
     context — recalling an event recalls *when* it happened as part of
-    the same trace.  Surfacing the date in the text lets the downstream
-    LLM (and keyword scorers) answer "when" and "how long ago" questions
+    the same trace.  Surfacing the date in the text lets a downstream
+    answer layer (and keyword scorers) answer "when" and "how long ago" questions
     without needing a separate lookup.
 
     Falls back silently on any conversion error so a bad timestamp never
@@ -141,49 +138,24 @@ class SlowaveEngine:
         else:
             self.encoder = TextEncoder(self.cfg.encoder)
 
-        # consolidator (optional). Two paths:
-        #   schema_mode == "llm"    — original path, LLM extracts schemas
-        #   schema_mode == "latent" — Stage 6, schemas are prototype geometry
-        # The "latent" path does NOT need an LLM and can run even when
-        # disable_llm is True (the disable_llm flag becomes irrelevant
-        # for brain-only mode — there is no LLM to disable).
-        self.consolidator: Consolidator | None = None
-        if self.cfg.schema_mode == "latent":
-            from slowave.latent.schema import (
-                GeometricContradictionJudge,
-                LatentSchemaBuilder,
-            )
+        # Latent consolidator: schemas are prototype geometry + lexical signatures.
+        # Zero LLM calls in ingest, consolidation, and retrieval.
+        from slowave.latent.schema import (
+            GeometricContradictionJudge,
+            LatentSchemaBuilder,
+        )
 
-            self.consolidator = Consolidator(
-                db=self.db,
-                semantic=self.semantic,
-                episode_text=self.episode_text,
-                schemas=self.schemas,
-                extractor=None,
-                judge=None,
-                encoder=self.encoder,
-                latent_builder=LatentSchemaBuilder(),
-                geometric_judge=GeometricContradictionJudge(),
-            )
-            # The latent consolidator needs episode embeddings + ts. Pass
-            # the episodic store via attribute (kept off __init__ so the
-            # LLM-mode constructor signature is unchanged for callers).
-            self.consolidator._episodic_store_ref = self.episodic
-        elif not self.cfg.disable_llm:
-            raw_llm = make_backend(self.cfg.llm)
-            llm = _CountingLLM(raw_llm)
-            self._counting_llm = llm  # exposed for harness instrumentation
-            extractor = SchemaExtractor(llm, min_confidence=self.cfg.schema_min_confidence)
-            judge = ContradictionJudge(llm)
-            self.consolidator = Consolidator(
-                db=self.db,
-                semantic=self.semantic,
-                episode_text=self.episode_text,
-                schemas=self.schemas,
-                extractor=extractor,
-                judge=judge,
-                encoder=self.encoder,
-            )
+        self.consolidator: Consolidator | None = Consolidator(
+            db=self.db,
+            semantic=self.semantic,
+            episode_text=self.episode_text,
+            schemas=self.schemas,
+            encoder=self.encoder,
+            latent_builder=LatentSchemaBuilder(),
+            geometric_judge=GeometricContradictionJudge(),
+        )
+        # The latent consolidator needs episode embeddings + ts.
+        self.consolidator._episodic_store_ref = self.episodic
 
         # Stage 10 — temporal probe (embedding-space temporal compass).
         # Built once if an encoder is available; None otherwise (no-op at
@@ -213,7 +185,7 @@ class SlowaveEngine:
         episodic memories. No LLM call, no replay, no blocking. The agent is
         never made to wait for consolidation.
 
-        consolidate=True: additionally runs replay + LLM schema extraction
+        consolidate=True: additionally runs replay + latent schema consolidation
         synchronously. Use only for tests, scripts, or explicit one-shot
         invocations. In production, leave consolidate=False and run the
         background worker (slowave worker start) or call
@@ -285,7 +257,7 @@ class SlowaveEngine:
             content=content,
             metadata={"explicit": True, "declared_type": type},
         )
-        # Explicit memory bypasses LLM/replay: the user already provided the
+        # Explicit memory bypasses replay: the user already provided the
         # durable typed claim. Create an immediate schema and episode.
         if session_id is not None:
             self.raw_log.end_session(session_id)
@@ -429,7 +401,7 @@ class SlowaveEngine:
             ep = ep_by_id.get(m.id)
             raw_text = ep.content_text if ep else ""
             # Stage 10 — prepend the episode's calendar date so the
-            # downstream LLM (or keyword scorer) can reason about *when*
+            # downstream answer layer (or keyword scorer) can reason about *when*
             # an event happened.  Format: "[YYYY-MM-DD] <text>".
             # m.ts is a Unix timestamp stored at ingest time; when the
             # session timestamp was patched (e.g. LoCoMo backfill) the
@@ -793,52 +765,3 @@ class SlowaveEngine:
             tuple(int(e) for e in episode_ids),
         ).fetchall()
         return [int(r["prototype_id"]) for r in rows]
-
-
-# --------------------------------------------------------------------------
-# Token-usage counter wrapper
-# --------------------------------------------------------------------------
-
-
-class _CountingLLM:
-    """Thin wrapper around an ``LLMBackend`` that accumulates token usage
-    across all ``complete_json`` calls.
-
-    Exposed via ``SlowaveEngine._counting_llm`` so test harnesses can
-    read totals per-question and report them alongside accuracy/latency.
-
-    The wrapper is transparent: it forwards every call to the underlying
-    backend and adds the per-call usage to its own running counters. The
-    underlying backend's ``last_usage`` is preserved on it as well.
-    """
-
-    def __init__(self, backend) -> None:
-        self._backend = backend
-        self.n_calls = 0
-        self.total_prompt_tokens = 0
-        self.total_completion_tokens = 0
-
-    def complete_json(self, *, prompt: str, system: str | None = None):
-        result = self._backend.complete_json(prompt=prompt, system=system)
-        usage = getattr(self._backend, "last_usage", None) or {}
-        self.n_calls += 1
-        self.total_prompt_tokens += int(usage.get("prompt_tokens", 0) or 0)
-        self.total_completion_tokens += int(usage.get("completion_tokens", 0) or 0)
-        return result
-
-    def reset_counters(self) -> None:
-        self.n_calls = 0
-        self.total_prompt_tokens = 0
-        self.total_completion_tokens = 0
-
-    def snapshot(self) -> dict:
-        return {
-            "n_calls": int(self.n_calls),
-            "prompt_tokens": int(self.total_prompt_tokens),
-            "completion_tokens": int(self.total_completion_tokens),
-            "total_tokens": int(self.total_prompt_tokens + self.total_completion_tokens),
-        }
-
-    # Pass through any attribute we don't override (e.g. ``last_usage``).
-    def __getattr__(self, name):
-        return getattr(self._backend, name)
