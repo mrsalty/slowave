@@ -43,6 +43,12 @@ class TextEncoder:
                 "sentence-transformers is required for text encoding. "
                 "Install it with: pip install sentence-transformers"
             ) from e
+        # Silence HF hub advisory warning and progress bars.
+        # Must run after the import because sentence_transformers imports
+        # huggingface_hub which resets the logger level to WARNING.
+        import logging as _logging
+        _logging.getLogger("huggingface_hub").setLevel(_logging.ERROR)
+        _logging.getLogger("huggingface_hub.utils._http").setLevel(_logging.ERROR)
         try:
             self._model = SentenceTransformer(self.cfg.model_name, device=self.cfg.device)
         except (RuntimeError, ModuleNotFoundError, OSError) as e:
