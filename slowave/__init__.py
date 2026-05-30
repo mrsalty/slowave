@@ -7,4 +7,4 @@ from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 
 __all__ = ["SlowaveEngine", "SlowaveConfig"]
-__version__ = "0.1.5"
+__version__ = "0.1.11"

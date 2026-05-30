@@ -1,5 +1,79 @@
 # Changelog
 
+## [0.1.11](https://github.com/mrsalty/slowave/compare/slowave-v0.1.10...slowave-v0.1.11) (2026-05-30)
+
+
+### Features
+
+* 0.1.4 — doctor, consolidate_once, lexical signatures, Python bound ([e17a35b](https://github.com/mrsalty/slowave/commit/e17a35b1dbac2990c0cdfaa1f1941d93cf66189d))
+* 0.1.5 — remove legacy LLM path, expose display_label in CLI schema/context ([cc2549e](https://github.com/mrsalty/slowave/commit/cc2549eb60a10c2dec7e2aecd5b7ab6bb8a9ea64))
+* 0.1.5+0.1.6 — stability_score, recurrence_score, schema_utility, decay_unused ([8b8a5d4](https://github.com/mrsalty/slowave/commit/8b8a5d4465ea969c61fac190087e3c88bf2b9da8))
+* add DMR (Deep Memory Retrieval) benchmark harness and dataset ([0ce57da](https://github.com/mrsalty/slowave/commit/0ce57dac500c4ec4b3f8d340c599023cd342fd93))
+* add slowave setup command for one-command cross-platform wiring ([190efba](https://github.com/mrsalty/slowave/commit/190efba3f6928667b2c4afb1ed0a36b30ae75525))
+* add working-memory context gate ([fd1b8d9](https://github.com/mrsalty/slowave/commit/fd1b8d9874dd548631c7ca2762f7b32e7785bc68))
+* brain spinner on model load, sleep spinner on worker idle ([ee8dc6e](https://github.com/mrsalty/slowave/commit/ee8dc6e4607b6f7ffc7562d3da90291272ba25df))
+* emoji output for slowave doctor ([dd1581c](https://github.com/mrsalty/slowave/commit/dd1581c404c8d852d870af47d9cd43c26267a919))
+* fancy recall output — schema cards, sal bars, episode dates ([74bed02](https://github.com/mrsalty/slowave/commit/74bed02cf14d7e4ad574416dcd875735c27128ee))
+* fancy stats output with emoji and thousand separators ([f74178f](https://github.com/mrsalty/slowave/commit/f74178fb040b4a2897534637fa6f05541fac0ded))
+* **temporal:** Stage 10 — embedding-space temporal anchor estimation ([ad6906e](https://github.com/mrsalty/slowave/commit/ad6906e4a8c6382ace8313a269c3ddde11e1ee68))
+
+
+### Bug Fixes
+
+* bail out on invalid JSON in _read_json instead of silently returning {} ([1f74afa](https://github.com/mrsalty/slowave/commit/1f74afade2878b2e7ae554720b402ad6c6cfd41e))
+* Claude Desktop skill must be uploaded manually via UI (filesystem injection not persistent) ([30f3b6f](https://github.com/mrsalty/slowave/commit/30f3b6ff52984d07215795e0e3cf0209ff9a483a))
+* Claude Desktop uses Custom Instructions not Skills; setup prints the text to paste ([79a3539](https://github.com/mrsalty/slowave/commit/79a35394a1091af3eb7ca657b5332af7bd0c791a))
+* document Claude Desktop turn-1 limitation and Custom Instructions workaround ([8b39777](https://github.com/mrsalty/slowave/commit/8b39777c8ac7a707c662bedb7fec78741cbc8a6c))
+* lift Python 3.13 restriction — all deps ship cp313 wheels ([d63f0cc](https://github.com/mrsalty/slowave/commit/d63f0cc955dbcb30bdf1de3d98be04c93df728f0))
+* replace Claude Desktop Skill with Custom Instructions; remove dead skill injection code ([2e15735](https://github.com/mrsalty/slowave/commit/2e15735a127bfffb503effad98b2c6f94c7eaf59))
+* setup, docs, ci, and test improvements ([e403668](https://github.com/mrsalty/slowave/commit/e403668b08ec081ee763406d99b3b674446d7963))
+* silence HF warning and Loading weights bar on cold model download ([94b4d3e](https://github.com/mrsalty/slowave/commit/94b4d3ed46c83a776959c31d76e28f7844c8c754))
+* simplify Claude Desktop setup warning to one-liner with link ([e75c371](https://github.com/mrsalty/slowave/commit/e75c371d59d131d42e53d46bb4637ab4beed1c77))
+* strengthen Skill description to trigger automatically on every conversation start ([a910088](https://github.com/mrsalty/slowave/commit/a9100887e4f46d23e7d57185f992cb01330fbf79))
+* suppress HF hub warning and model loading progress bar on CLI/MCP startup ([3421f90](https://github.com/mrsalty/slowave/commit/3421f90979123aa7852e4268575f0715209c33e1))
+* suppress License-File metadata field that breaks older PyPI upload ([32ba8b1](https://github.com/mrsalty/slowave/commit/32ba8b1e1eda33dfe8d9bd67ae92c3fecb1ecee7))
+* use stable symlink path for slowave-mcp, not resolved versioned Cellar path ([e93bba5](https://github.com/mrsalty/slowave/commit/e93bba51c97ecfd83615ba1a313e4a321a304ca6))
+* use table-form license in pyproject.toml to fix twine metadata error ([d3b2e18](https://github.com/mrsalty/slowave/commit/d3b2e18fe76737884a0ec7ce98b8b707a2c7f27b))
+
+
+### Performance Improvements
+
+* apply grid search best params (Phase 1-3, 2026-05-28) ([7201d7f](https://github.com/mrsalty/slowave/commit/7201d7f18a30e0b3ddcea5c951995ce25fe9e460))
+
+
+### Documentation
+
+* add brain emoji to title ([0d462a2](https://github.com/mrsalty/slowave/commit/0d462a29b924d710b4a60710c7acb1c6891ef422))
+* add cross-tool shared memory row to comparison table ([5146083](https://github.com/mrsalty/slowave/commit/5146083319b40e23f2eaa42cbbc4de01a96a5c00))
+* add emoji to main section headings ([c1daa54](https://github.com/mrsalty/slowave/commit/c1daa54f78564c21c775e0bab858601ac33d934c))
+* add Fastest path section to cline integration README ([331aca2](https://github.com/mrsalty/slowave/commit/331aca2c029601ba73595731eeb71869ecb4d571))
+* add gentle dig at MD/RAG memory systems before At a glance ([8b0c341](https://github.com/mrsalty/slowave/commit/8b0c341a865c7bfe1a7ff4f7d91427da70407d47))
+* agent enforcement ([767faeb](https://github.com/mrsalty/slowave/commit/767faeb622f7699e33e50b5e719b951730e3f927))
+* agent enforcement ([330031c](https://github.com/mrsalty/slowave/commit/330031ceaa4379428c5b3efdb7f5b1b2b35d4bbf))
+* clarify cosine ablation, drop parameter tuning + comparison notes sections ([d8694c2](https://github.com/mrsalty/slowave/commit/d8694c224eba615f81f2d6d28964484d8d875070))
+* clarify integration setup requirements ([a36a8c0](https://github.com/mrsalty/slowave/commit/a36a8c0b055dab133f03691a0053192c8eb05777))
+* clarify public setup and integration guides ([9f7a03d](https://github.com/mrsalty/slowave/commit/9f7a03d53ff66aff56173b2bd2a0497760d326f3))
+* convert overview ASCII pipeline to mermaid flowchart ([793bb05](https://github.com/mrsalty/slowave/commit/793bb050842b89c829e53161a6e195c20ad04e0c))
+* correct install path before PyPI release ([084d66f](https://github.com/mrsalty/slowave/commit/084d66fbfef48991d7220496a242821f3a697e98))
+* document background worker setup ([57e6f29](https://github.com/mrsalty/slowave/commit/57e6f290ac8be231f946ea8bc297ab1ed384dde9))
+* make overview flowchart vertical (TD) ([513a42c](https://github.com/mrsalty/slowave/commit/513a42cae7a212365856e7a2270353649247f5d8))
+* mark temporal scores as solid ([4bc5b54](https://github.com/mrsalty/slowave/commit/4bc5b546fb0bb840c96c42e86994b6c828b736e1))
+* prune public documentation surface ([3e21865](https://github.com/mrsalty/slowave/commit/3e21865b58ac38d5672cb19cab8210589c9b0a87))
+* refresh README presentation ([68b2536](https://github.com/mrsalty/slowave/commit/68b25368a8d05b7f4e213acd1ea6cbdee7841bff))
+* remove emoji from title ([f62bbd2](https://github.com/mrsalty/slowave/commit/f62bbd2e7ae8f42a508f957d036dd0eb3c250676))
+* remove redundant env vars from MCP config snippets ([116702d](https://github.com/mrsalty/slowave/commit/116702d869be5565435499702ebd9308d082e5e6))
+* remove stage annotations from benchmark table, use absolute scores only ([78f00c7](https://github.com/mrsalty/slowave/commit/78f00c74fd0b2c7a3ff1d0d0d22458b2ff179da6))
+* rename "Install in minutes" to "Install" ([2c3d72f](https://github.com/mrsalty/slowave/commit/2c3d72f2d85d8ecb02d38ea6fd34842c9623687f))
+* rewrite benchmark section — highlight achievements, honest gaps ([4e05693](https://github.com/mrsalty/slowave/commit/4e05693e87f708a8121f4f37d51e4f8961c87f74))
+* simplify overview flowchart node labels ([9e5e6ed](https://github.com/mrsalty/slowave/commit/9e5e6edfbfefcae13e6a35fa3c1c03726a4e98c6))
+* simplify README install path ([5b1b42e](https://github.com/mrsalty/slowave/commit/5b1b42e51d83f23502587f6c6dc717e2dd3f6b5a))
+* trim How it works, drop What Slowave is for + Why Slowave is different, signal more clients coming ([8885b3c](https://github.com/mrsalty/slowave/commit/8885b3c79f77c73833849201a654a481bc653aaa))
+* update benchmark numbers to Stage 10 actuals ([39791f5](https://github.com/mrsalty/slowave/commit/39791f5cf8db5af495bbe2452fc649a9f475d2e9))
+* update benchmark section with grid search tuned results ([d834485](https://github.com/mrsalty/slowave/commit/d8344850d989bd7fc61ffc62dde4d76a597b0475))
+* update for 0.1.5 release ([fe2460e](https://github.com/mrsalty/slowave/commit/fe2460ec4b3fe357d4f47f24006ef7781eb162e3))
+* update PyPI install instructions ([e88bfd0](https://github.com/mrsalty/slowave/commit/e88bfd05b941451e09677c9fb2a9ad4db054478a))
+* update README and install.md for v0.1.8 ([f5e8619](https://github.com/mrsalty/slowave/commit/f5e8619a3a169d3e768fd073a04f67c6f303df0e))
+
 ## [0.1.10] - 2026-05-30
 
 ### Fixed
