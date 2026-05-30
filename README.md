@@ -195,10 +195,25 @@ For full per-category results, run conditions, and known gaps see [docs/benchmar
 For evaluation scripts and reproduction steps see [docs/reproducibility.md](docs/reproducibility.md).  
 For known limitations see [docs/limitations.md](docs/limitations.md).
 
-## ⚖️ License
+## Contributing, licensing, and commercial use
 
-Slowave is licensed under the **GNU Affero General Public License v3.0 or later** starting with version **0.1.5**.
+Slowave is open source and released under the GNU Affero General Public License v3.0 or later.
 
-Versions published before 0.1.5 were released under the MIT License; those earlier releases remain available under the terms they were originally published with.
+The AGPL license is intentional: Slowave is designed as a memory engine that may be embedded in agents, tools, and networked systems, and the license helps ensure that improvements to the open core remain available to the community.
 
-This license keeps Slowave open for research, experimentation, and community use while ensuring that modified versions offered over a network make their source available under the same terms. Commercial licenses may be available for organizations that want to use Slowave in proprietary products, hosted services, or other contexts where AGPL compliance is not suitable. See [COMMERCIAL.md](COMMERCIAL.md).
+Commercial licensing may be offered in the future for organizations that want to embed, distribute, or operate Slowave under different terms.
+
+Contributions are welcome, especially:
+
+- bug reports;
+- installation feedback;
+- documentation improvements;
+- tests and evaluation scripts;
+- integration examples;
+- recall and retrieval quality reports;
+- small, focused code improvements.
+
+Before opening a pull request, please read [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+Substantial code contributions may require acceptance of a Contributor License Agreement, or CLA, before merging. This helps keep Slowave open source while preserving the option for future commercial licensing.
+
