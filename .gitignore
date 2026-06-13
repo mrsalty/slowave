@@ -51,6 +51,7 @@ data/*/runs/
 data/runs/
 data/benchmark_regression_test/
 data/longmemeval/debug_dbs/
+data/dmr_original/
 data/longmemeval/logs/
 data/longmemeval/RESULTS_SUMMARY.md
 data/temporal_eval_*.json
