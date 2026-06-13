@@ -1,0 +1,80 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "slowave"
+version = "0.5.0"
+description = "Brain-inspired long-term memory for AI agents — zero LLM during ingest or retrieval"
+requires-python = ">=3.10"
+license = {text = "AGPL-3.0-or-later"}
+readme = "README.md"
+authors = [{ name = "mrsalty" }]
+keywords = ["memory", "agent", "ai", "mcp", "neuroscience", "rag", "llm"]
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Science/Research",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering :: Artificial Intelligence",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+  "numpy>=1.26",
+  "faiss-cpu>=1.7",
+  "click>=8.1,<9",
+  "onnxruntime>=1.16,<2.0",
+  "transformers>=4.30",
+  "huggingface-hub>=0.16",
+  "mcp[cli]>=1.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/mrsalty/slowave"
+Repository = "https://github.com/mrsalty/slowave"
+Issues = "https://github.com/mrsalty/slowave/issues"
+Changelog = "https://github.com/mrsalty/slowave/releases"
+
+[project.optional-dependencies]
+test = ["pytest>=9.0.3", "faiss-cpu>=1.7"]
+dev = ["pytest>=9.0.3", "black", "isort", "build", "twine", "faiss-cpu>=1.7"]
+
+[project.scripts]
+slowave = "slowave.cli.main:main"
+slowave-mcp = "slowave.mcp.server:main"
+
+[tool.setuptools.packages.find]
+include = ["slowave*"]
+exclude = ["tests*", "migrations*", "scripts*"]
+
+[tool.setuptools]
+license-files = []
+
+[tool.setuptools.package-data]
+slowave = ["storage/schema.sql"]
+
+[tool.black]
+line-length = 100
+
+[tool.isort]
+profile = "black"
+line_length = 100
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+markers = [
+    "requires_faiss: test requires faiss library",
+    "requires_model: test requires downloaded model files (spacy/transformers models)",
+    "slow: slow integration test",
+    "benchmark: benchmark test (long-running)",
+]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.3",
+]
