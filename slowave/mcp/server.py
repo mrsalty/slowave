@@ -149,7 +149,7 @@ async def _bg_record_retrieval(eng, **kwargs):
     except Exception as e:
         log.warning("_bg_record_retrieval failed: %s", e)
 
-@mcp.tool(name="activate")
+@mcp.tool(name="slowave_activate")
 async def slowave_activate(
     query: str,
     scope: str | None = None,
@@ -322,7 +322,7 @@ async def _bg_log_event(eng: SlowaveEngine, session_id: str, event_type: str, co
         log.warning("_bg_log_event failed: %s", e)
 
 
-@mcp.tool(name="recall")
+@mcp.tool(name="slowave_recall")
 async def slowave_recall(
     query: str,
     top_k: int = 5,
@@ -375,7 +375,7 @@ async def slowave_recall(
         return {"retrieval_id": None, "memories": [], "error": str(e)}
 
 
-@mcp.tool(name="remember")
+@mcp.tool(name="slowave_remember")
 async def slowave_remember(
     content: str,
     type: str = "decision",
@@ -412,7 +412,7 @@ async def slowave_remember(
         return {"stored": False, "error": str(e), "type": type, "scope": scope}
 
 
-@mcp.tool(name="remember_procedure")
+@mcp.tool(name="slowave_remember_procedure")
 async def slowave_remember_procedure(
     procedure_steps: list[str],
     goal: str | None = None,
@@ -448,7 +448,7 @@ async def slowave_remember_procedure(
         return {"procedure_id": None, "error": str(e), "goal": goal, "task_type": task_type, "scope": scope}
 
 
-@mcp.tool(name="reinforce")
+@mcp.tool(name="slowave_reinforce")
 async def slowave_reinforce(
     retrieval_id: str,
     feedback: str,
@@ -499,7 +499,7 @@ async def slowave_reinforce(
         return {"error": str(e), "retrieval_id": retrieval_id}
 
 
-@mcp.tool(name="commit")
+@mcp.tool(name="slowave_commit")
 async def slowave_commit(
     outcome: str | None = None,
     scope: str | None = None,
@@ -535,7 +535,7 @@ async def slowave_commit(
         return {"session_id": session_id, "episodes_formed": 0, "error": str(e)}
 
 
-@mcp.tool(name="stats")
+@mcp.tool(name="slowave_stats")
 async def slowave_stats() -> dict[str, Any]:
     """Return system counts: episodes, prototypes, schemas, edges."""
     try:
