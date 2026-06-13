@@ -1,6 +1,36 @@
 import json
+import os
 
-from slowave.core.engine import RememberResult
+import numpy as np
+import pytest
+
+from slowave.core.config import SlowaveConfig
+from slowave.core.engine import RememberResult, SlowaveEngine
+
+
+class _StubEncoder:
+    def __init__(self, dim: int = 32):
+        self._dim = dim
+
+    def encode(self, text: str) -> np.ndarray:
+        seed = int(abs(hash(text)) % (2**31))
+        v = np.random.default_rng(seed).standard_normal(self._dim).astype(np.float32)
+        return v / (np.linalg.norm(v) + 1e-12)
+
+
+def _make_engine(tmp_path, dim: int = 32) -> SlowaveEngine:
+    eng = SlowaveEngine(
+        SlowaveConfig(db_path=str(tmp_path / "test.db"), dim=dim, disable_encoder=True)
+    )
+    eng.encoder = _StubEncoder(dim)
+    return eng
+
+
+@pytest.fixture()
+def eng(tmp_path):
+    engine = _make_engine(tmp_path)
+    yield engine
+    engine.close()
 
 
 def test_remember_result_is_backward_compatible_int(eng):
