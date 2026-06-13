@@ -532,7 +532,15 @@ def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
 
 
 def _slowave_processes() -> list[dict[str, Any]]:
-    """Best-effort local process snapshot for operational hygiene."""
+    """Best-effort local process snapshot for operational hygiene.
+
+    On Windows ``ps`` is not available; delegates to a PowerShell WMI query.
+    On macOS / Linux uses ``ps -axo``.
+    """
+    import platform as _platform
+    if _platform.system() == "Windows":
+        return _slowave_processes_windows()
+
     try:
         out = subprocess.check_output(
             ["ps", "-axo", "pid,ppid,stat,rss,command"],
@@ -562,6 +570,57 @@ def _slowave_processes() -> list[dict[str, Any]]:
                 "command": command,
             }
         )
+    return rows
+
+
+def _slowave_processes_windows() -> list[dict[str, Any]]:
+    """Windows-specific process detection using PowerShell WMI.
+
+    Queries Win32_Process for Python processes whose CommandLine contains
+    slowave-related keywords.  Returns an empty list on any error — health
+    checks are best-effort only.
+    """
+    ps_cmd = (
+        "Get-WmiObject Win32_Process -Filter \"Name LIKE '%python%'\" | "
+        "Select-Object ProcessId,ParentProcessId,WorkingSetSize,CommandLine | "
+        "ConvertTo-Json -Compress"
+    )
+    try:
+        result = subprocess.run(
+            ["powershell", "-NonInteractive", "-Command", ps_cmd],
+            capture_output=True, text=True, check=False, timeout=10,
+        )
+    except Exception:
+        return []
+
+    if result.returncode != 0 or not result.stdout.strip():
+        return []
+
+    try:
+        import json as _json
+        procs = _json.loads(result.stdout.strip())
+        if isinstance(procs, dict):  # single result → normalise to list
+            procs = [procs]
+    except Exception:
+        return []
+
+    rows: list[dict[str, Any]] = []
+    for proc in procs:
+        cmd = str(proc.get("CommandLine") or "")
+        if (
+            "slowave-mcp" not in cmd
+            and "slowave worker" not in cmd
+            and "slowave.mcp.server" not in cmd
+            and "slowave.cli.main" not in cmd
+        ):
+            continue
+        try:
+            pid = int(proc.get("ProcessId", 0))
+            ppid = int(proc.get("ParentProcessId", 0))
+            rss_kb = int(proc.get("WorkingSetSize", 0)) // 1024
+        except (TypeError, ValueError):
+            pid = ppid = rss_kb = 0
+        rows.append({"pid": pid, "ppid": ppid, "stat": "running", "rss_kb": rss_kb, "command": cmd})
     return rows
 
 

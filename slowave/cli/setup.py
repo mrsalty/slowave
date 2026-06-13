@@ -375,7 +375,7 @@ def _clients() -> list[ClientSpec]:
             mcp_path=_cline_mcp_settings_path,
             lifecycle_path=_clinerules_path,
             lifecycle_agent="cline-tui",
-            require_dir_exists=True,
+            require_dir_exists=False,  # create dir if absent — Cline TUI picks it up on first start
             # No enforcement hooks yet — lifecycle relies on .clinerules instructions.
             # When Cline adds a hook/trigger surface, add hooks_config_path + hooks_patch_fn here.
             restart_note="Reload Cline (or restart VS Code / Cursor) to apply changes.",
@@ -860,20 +860,59 @@ def _install_worker_linux(slowave_bin: str) -> tuple[str, bool]:
     return str(svc_path), True
 
 
+def _find_pythonw() -> str | None:
+    """Return the path to pythonw.exe (no-console Python launcher) on Windows.
+
+    pythonw.exe lives in the same directory as python.exe and is shipped with
+    every Python Windows installer.  Using it instead of slowave.EXE for the
+    Task Scheduler action prevents a visible console window from opening.
+    """
+    import os as _os
+    py_dir = _os.path.dirname(sys.executable)
+    candidate = _os.path.join(py_dir, "pythonw.exe")
+    if Path(candidate).exists():
+        return candidate
+    return None
+
+
 def _install_worker_windows(slowave_bin: str) -> tuple[str, bool]:
+    """Register SlowaveWorker in Task Scheduler.
+
+    Uses ``pythonw.exe -m slowave worker`` so the worker runs without opening a
+    visible console window.  Falls back to ``slowave_bin`` if pythonw.exe is not
+    found (rare custom installs without the no-console launcher).
+    """
     task_name = "SlowaveWorker"
-    # Check if the task already exists with the same executable
+
+    # Prefer pythonw.exe to avoid a visible console window on logon/start.
+    pythonw = _find_pythonw()
+    if pythonw:
+        execute = pythonw
+        argument = "-m slowave worker --interval 300"
+    else:
+        execute = slowave_bin
+        argument = "worker --interval 300"
+
+    # Check if a compatible task already exists (idempotency).
+    # Accept either the new pythonw form or the old slowave.EXE form so that
+    # re-runs on machines with an existing registration don't re-register.
     already_registered = False
     try:
         check = subprocess.run(
             ["powershell", "-NonInteractive", "-Command",
              f"$t = Get-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
-             f"if ($t) {{ $t.Actions[0].Execute }}"],
+             f"if ($t) {{ $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}"],
             capture_output=True, text=True, check=False,
         )
-        existing_exe = check.stdout.strip()
-        if existing_exe and existing_exe.lower() == slowave_bin.lower():
-            already_registered = True
+        existing = check.stdout.strip()
+        if existing:
+            existing_exe, _, existing_args = existing.partition("|")
+            existing_exe = existing_exe.strip().lower()
+            existing_args = existing_args.strip().lower()
+            # Up-to-date if already using pythonw (new) or the same old slowave.EXE
+            new_form = pythonw and existing_exe == pythonw.lower() and "slowave worker" in existing_args
+            old_form = existing_exe == slowave_bin.lower()
+            already_registered = bool(new_form or old_form)
     except FileNotFoundError:
         pass
 
@@ -881,7 +920,7 @@ def _install_worker_windows(slowave_bin: str) -> tuple[str, bool]:
         return task_name, False
 
     ps = (
-        f"$a=New-ScheduledTaskAction -Execute '{slowave_bin}' -Argument 'worker --interval 300';"
+        f"$a=New-ScheduledTaskAction -Execute '{execute}' -Argument '{argument}';"
         f"$t=New-ScheduledTaskTrigger -AtLogOn;"
         f"$s=New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 "
         f"-RestartInterval (New-TimeSpan -Minutes 1);"
