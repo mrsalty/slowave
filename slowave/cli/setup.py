@@ -197,7 +197,21 @@ def _claude_md_path() -> Path:
 
 
 def _clinerules_path() -> Path:
-    return _home() / ".clinerules"
+    """Global lifecycle rules file for Cline TUI.
+
+    Cline TUI reads rules from:
+      1. <cwd>/.clinerules           (project-local)
+      2. ~/.cline/rules/             (global rules directory — .md files)
+      3. ~/Documents/Cline/Rules/    (global rules directory — .md files)
+
+    ~/.clinerules is only read when it happens to be inside the cwd
+    (i.e. when the user runs cline from their home directory).  It is NOT
+    a globally-read path for Cline TUI.
+
+    We write to ~/.cline/rules/slowave.md so the lifecycle block is picked
+    up regardless of which project directory the user is in.
+    """
+    return _home() / ".cline" / "rules" / "slowave.md"
 
 
 def _claude_desktop_config_path() -> Path:
