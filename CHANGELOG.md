@@ -1,5 +1,30 @@
 # Changelog
 
+## [0.5.6](https://github.com/mrsalty/slowave/compare/slowave-v0.5.5...slowave-v0.5.6) (2026-06-13)
+
+
+### Features
+
+* prepare 0.5.0 public release ([18b414f](https://github.com/mrsalty/slowave/commit/18b414f3c970b5556990c6f2449b1e58a8d074a7))
+
+
+### Bug Fixes
+
+* Add missing pytest fixture to test_remember_result.py ([ccf69f3](https://github.com/mrsalty/slowave/commit/ccf69f396eecc9c5e7c42be647284ebef1022038))
+* Cline TUI lifecycle — write to ~/.cline/rules/slowave.md not ~/.clinerules ([62b842c](https://github.com/mrsalty/slowave/commit/62b842cdee366b575deb1ae0dfa678bea4693407))
+* dashboard — clean error on port conflict, O(1) parent-command lookup ([7753cfd](https://github.com/mrsalty/slowave/commit/7753cfd97dfc91e1f29161f33af8f2f482448a5c))
+* MCP tool name mismatch — prefix all tools with slowave_ so Cline TUI can invoke them ([1279c7e](https://github.com/mrsalty/slowave/commit/1279c7eefeb619979100c0c3b8e2d888c20a6ca9))
+* MCP tool name mismatch — prefix all tools with slowave_ so Cline… ([66b3a01](https://github.com/mrsalty/slowave/commit/66b3a01f21099965743abc7bca1f34c56e423780))
+* update cline lifecycle test paths to match new ~/.cline/rules/slowave.md location ([06a5e47](https://github.com/mrsalty/slowave/commit/06a5e4729c2f3a0454602e8146e68fc3b6a13cd4))
+* Windows compatibility — worker window, cleanup traceback, proces… ([72c0157](https://github.com/mrsalty/slowave/commit/72c0157fcf3e53d9c33af2f9d5cd063cf931ae46))
+* Windows compatibility — worker window, cleanup traceback, process detection, Cline MCP, marker corruption ([951f9ee](https://github.com/mrsalty/slowave/commit/951f9eea558096cb2bdfcd6aaceb70d77e6fcfde))
+
+
+### Documentation
+
+* add PR [#7](https://github.com/mrsalty/slowave/issues/7) merge analysis and iteration log ([c745516](https://github.com/mrsalty/slowave/commit/c74551618c2e1117d3628c8c028b457de3838a8b))
+* refine core messaging and architecture documentation ([c32f4ec](https://github.com/mrsalty/slowave/commit/c32f4ecaa8031a72da1ef6b365e2fcbc0683e5a6))
+
 ## [0.5.5](https://github.com/mrsalty/slowave/compare/slowave-v0.5.4...slowave-v0.5.5) (2026-06-13)
 
 
