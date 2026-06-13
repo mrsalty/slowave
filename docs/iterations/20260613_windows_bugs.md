@@ -167,3 +167,34 @@ This mirrors exactly the logic already used in `_inject_block` and ensures the f
 
 All 312 unit tests pass after changes.
 
+---
+
+## Release tracking
+
+### 0.5.3 — 2026-06-13
+
+**Status:** Released to PyPI ✅ · Installed on Windows ✅
+
+| Artefact | Value |
+|---|---|
+| PyPI release | https://pypi.org/project/slowave/0.5.3/ |
+| Upload timestamp | 2026-06-13T15:05:06Z |
+| sdist sha256 | `4b78c2e0cb2fbdb57e8a4c07a20c00f9a374bf6ecce8172bf9689969bd3f30c3` |
+| wheel sha256 | `4dfef6fb97fd52e5c33601e7f5975fda2fec094c4ecf0e1bb43bc262abf280eb` |
+| Source commit | `951f9ee` |
+
+**Bugs shipped in this release (all from this document):**
+
+| # | Bug | Fix |
+|---|-----|-----|
+| 1 | Worker process detection always returns `False` on Windows | `_slowave_processes_windows()` via PowerShell WMI |
+| 2 | Worker opens visible console window on Windows | `pythonw.exe -m slowave worker` in Task Scheduler |
+| 3 | `slowave cleanup` crashes with `PermissionError [WinError 32]` when DB locked | Kill lingering processes first; `try/except OSError` with clean message |
+| 4a | Cline MCP config silently skipped on fresh TUI install | `require_dir_exists=False` for Cline `ClientSpec` |
+| 5 | `_strip_file` leaves stray ` v2 -->` fragment after cleanup | Advance past full end-marker line (same logic as `_inject_block`) |
+
+**Local artefacts updated:**
+- `pyproject.toml` → `version = "0.5.3"`
+- `CHANGELOG.md` → 0.5.3 entry added at top
+- `Formula/slowave.rb` → URL and sha256 updated to 0.5.3 sdist
+
