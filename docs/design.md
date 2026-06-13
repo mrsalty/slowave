@@ -2,47 +2,100 @@
 
 ![Brain-inspired memory architecture](../img/brain.png)
 
-Slowave is a local, adaptive memory substrate for AI tools.
+
+Slowave is a centralized, adaptive memory substrate shared across AI tools.
+
+It gives different assistants, coding agents, chat clients, and MCP-compatible tools access to the same persistent memory layer instead of each tool keeping its own isolated memory.
 
 It is built around one core idea:
 
 > **Memory is a latent process before it is a language process.**
 
-In practical terms, Slowave stores and updates memory through local embeddings, timestamps, scopes, salience, reinforcement, decay, supersession, and graph relationships before rendering anything as natural language.
-
-Language is treated as a boundary format: a way to expose retrieved memory to humans, agents, coding assistants, chatbots, and language models.
+Slowave stores and updates memory through local embeddings, timestamps, scopes, salience, reinforcement, decay, supersession, and graph relationships. Only after retrieval does it render selected memory as natural language for a human, agent, chatbot, coding assistant, or language model.
 
 The architectural separation is simple:
 
 > Use language models for language.  
 > Use memory mechanisms for memory.
+> Use one shared memory layer across tools, not one fragmented memory per tool.
+
+Slowave is not a replacement for a language model, a reasoning engine, or an autonomous agent framework. It is the persistent memory layer those systems can use. The downstream client remains responsible for reasoning, planning, answer construction, tool execution, and final user-facing behavior.
 
 ---
 
-## What This Means
+## Problem Statement
 
-Slowave does not treat memory as an append-only transcript, a static note file, or a set of LLM-generated summaries.
+Most AI tools still treat memory as one of three things:
 
-Instead, it treats memory as an evolving local system:
+- a transcript of previous messages;
+- a static note store;
+- an LLM-generated summary of past interactions;
+- a tool-specific memory silo that disappears when the user switches clients.
 
-- events become memories;
-- repeated memories can consolidate into more stable patterns;
-- useful memories gain influence;
-- stale memories lose priority;
-- outdated memories can be superseded;
-- current tasks retrieve only the most relevant context.
+Those approaches can work, but they have drawbacks. They often depend on remote model calls, grow with conversation length, are difficult to inspect, and are tied to one assistant or vendor.
 
-Slowave is brain-inspired, not a biological simulation.
+Slowave takes a different path.
 
-The goal is not to reproduce the brain. The goal is to translate useful memory principles — consolidation, salience, decay, reinforcement, pattern completion, pattern separation, and forgetting — into a practical memory layer for AI tools.
+It treats memory as a local adaptive system. Events are encoded, associated, reinforced, weakened, revised, consolidated, and retrieved before they are verbalized.
+
+This is the central product idea behind Slowave: memory should live outside any single tool.
+
+A coding assistant, chat client, terminal agent, desktop assistant, or future model should be able to connect to the same memory substrate. The user should not lose continuity just because they switch from one tool to another.
+
+The design target is not to maximize every benchmark score. The design target is to provide a private, local, inspectable, reusable memory substrate that improves continuity over repeated use.
+
+---
+
+## What Slowave Is
+
+Slowave is a shared memory substrate for repeated AI use across multiple tools.
+
+It is designed to help AI tools remember context that remains useful across sessions, such as:
+
+- project decisions;
+- user preferences;
+- recurring workflows;
+- tool conventions;
+- architectural choices;
+- prior debugging context;
+- long-running task history.
+
+The important point is that these memories are not locked inside one assistant. A decision remembered through one client can later be recalled by another client, as long as both use the same Slowave memory store.
+
+Instead of replaying entire histories into every prompt, Slowave retrieves a compact working-memory brief for the current task.
+
+The goal is not to remember everything with equal priority.
+
+The goal is to remember what remains useful.
+
+---
+
+## Boundaries
+
+Slowave intentionally keeps memory separate from reasoning.
+
+It is not:
+
+- a language model;
+- a general reasoning engine;
+- a full autonomous agent framework;
+- a cloud-hosted managed memory service;
+- a natural-language summarization engine;
+- a replacement for application-specific business logic;
+- a guarantee of maximum benchmark accuracy;
+- a system that can decide by itself whether a remembered fact is true in the outside world.
+
+Higher-order reasoning, planning, synthesis, and final answer construction still belong to the downstream model or application.
+
+Slowave provides persistent context. The client decides how to use it.
 
 ---
 
 ## Why Not LLM-Driven Memory?
 
-Many AI memory systems treat memory as a language-processing problem.
+Many modern memory systems use language models as memory operators.
 
-They may use language models to:
+A language model may be asked to:
 
 - extract facts;
 - summarize conversations;
@@ -51,15 +104,13 @@ They may use language models to:
 - rewrite stored knowledge;
 - rerank retrieved context.
 
-Slowave takes a different path.
+Slowave avoids making that the default memory loop.
 
-The default memory loop is LLM-free: Slowave does not require LLM calls to ingest, consolidate, retrieve, rank, decay, supersede, or render memory briefs.
+The core memory path does not require LLM calls to ingest, consolidate, retrieve, rank, decay, supersede, or render working-memory briefs.
 
-This does not mean Slowave avoids language models.
+This does not mean Slowave avoids language models. Slowave is built to support language-model-powered tools. The difference is that the memory layer itself does not depend on an LLM provider, API key, hosted model, or cloud memory service.
 
-Slowave is designed to support language-model-powered tools. The difference is that the memory core itself does not depend on an LLM provider, API key, hosted model, or cloud memory service.
-
-This makes the memory layer easier to keep:
+This keeps the default memory layer:
 
 - local-first;
 - low-latency;
@@ -73,25 +124,22 @@ This makes the memory layer easier to keep:
 
 ## Memory Before Language
 
-Human memory is not best understood as an append-only transcript of sentences.
+Human memory is not an append-only transcript of sentences.
 
 Experiences are encoded, associated, reinforced, reorganized, weakened, and recalled before they are verbalized.
 
-Slowave follows this principle at the system level.
+Slowave follows that principle at the system level.
 
-Events are stored as local memory representations and later shaped by consolidation, salience, reinforcement, decay, supersession, and retrieval feedback.
-
-Only after recall does Slowave render selected memory into language, usually as a compact working-memory brief.
+Incoming events are converted into local memory representations. Retrieval is shaped by semantic similarity, time, scope, salience, reinforcement, decay, supersession, and graph relationships. Only after recall does Slowave render selected memory into language, usually as a compact working-memory brief.
 
 This keeps the memory layer independent from the reasoning layer.
 
 The same memory store can support different clients, models, and tools without being tied to one assistant or one LLM provider.
 
 ---
-
 ## System Architecture
 
-Slowave has one persistent memory store and two interacting loops:
+Slowave is organized around one persistent memory store shared by many possible clients, and two interacting loops:
 
 1. **Consolidation loop** — past activity is encoded and consolidated into memory.
 2. **Recall loop** — the current task retrieves compact working context.
@@ -110,7 +158,7 @@ flowchart LR
     Q([current task / query])
     RC([recall])
     WM([working-memory brief])
-    AG([agent / assistant / chatbot])
+    AG([agents / assistants / chatbots / coding tools])
     FB([retrieval feedback])
 
     RE -->|capture| EP
@@ -127,6 +175,8 @@ flowchart LR
     AG -->|optional feedback| FB
     FB -.->|reinforce / suppress / supersede| MEM
 ```
+
+Multiple clients can read from and write to the same memory store. Slowave is therefore not only local memory, but centralized memory at the user or workspace level.
 
 The left side shows consolidation: raw events become episodes, related episodes can form prototypes, and stable repeated patterns can become latent schemas.
 
@@ -164,7 +214,7 @@ Unused, stale, or low-salience memories gradually lose retrieval priority.
 
 Decay affects ranking and activation. It does not necessarily mean immediate physical deletion.
 
-The goal is to keep old information available when needed, but prevent stale context from dominating new tasks.
+The goal is to keep old information available when needed, while preventing stale context from dominating new tasks.
 
 ### Supersession
 
@@ -190,7 +240,7 @@ Scopes bias activation toward the current context, for example:
 - `domain:y`
 - `workflow:z`
 - `relationship:a`
-- unscoped/general memory
+- unscoped or general memory
 
 Scopes are soft boundaries, not hard walls.
 
@@ -206,19 +256,21 @@ A memory stored under `project:alpha` should usually be more relevant inside `pr
 
 However, useful memory is not always confined to one scope.
 
-A coding preference, repeated workflow, architectural lesson, or tool-specific convention may start inside one project but become useful across many projects.
+A coding preference, repeated workflow, architectural lesson, or tool convention may start inside one project but become useful across many projects.
 
 Slowave supports this with soft cross-scope generalization:
 
 - project-specific facts remain mostly local;
 - reusable preferences can become broader;
 - repeated workflows can consolidate into procedures;
-- memories recalled successfully across scopes can gain broader activation;
-- stale or irrelevant cross-scope matches can be suppressed through feedback.
+- memories successfully recalled across scopes can gain broader activation;
+- irrelevant cross-scope matches can be suppressed through feedback.
 
 The goal is to reduce accidental leakage without preventing useful transfer.
 
-In other words, scopes protect context, but they do not prevent learning.
+Scopes protect context, but they do not prevent learning.
+
+This is a soft mechanism, not a perfect isolation guarantee. Applications that need strict separation between users, tenants, clients, or confidential projects should use separate storage, separate profiles, or additional access-control boundaries outside Slowave.
 
 ---
 
@@ -239,9 +291,11 @@ The brief is designed to be:
 
 This is the bridge between memory and language.
 
-Slowave performs memory retrieval locally, then renders only the selected context as language at the boundary of the system.
+Slowave performs retrieval locally, then renders only selected context as language at the system boundary.
 
 This avoids replaying entire histories into every prompt.
+
+The brief should be treated as retrieved context, not as ground truth. The downstream model or application should still decide how much of the recalled context is relevant to the task.
 
 ---
 
@@ -251,7 +305,7 @@ Not all useful memory is factual.
 
 Some useful memory is procedural: repeated ways of doing things.
 
-Examples:
+Examples include:
 
 - how a project is usually tested;
 - how a release checklist is performed;
@@ -263,9 +317,19 @@ Slowave treats repeated workflows as candidates for procedural memory.
 
 The long-term goal is for successful repeated behavior to become easier to reuse, without requiring the user to restate the same process every time.
 
+Procedural memory should be understood as learned workflow context, not autonomous execution. Slowave can help recall how a workflow is usually performed; the downstream client still performs or approves the actions.
+
 ---
 
 ## Benefits of the Approach
+
+### Cross-Tool Continuity
+
+The main benefit of Slowave is that memory is centralized outside individual tools.
+
+A user can remember something from one assistant, retrieve it from another, and continue work without rebuilding context from scratch.
+
+This is especially useful for workflows that move between chat clients, coding agents, terminal tools, desktop assistants, and future MCP-compatible applications.
 
 ### Predictable Cost
 
@@ -278,6 +342,8 @@ Memory cost is not tied to model pricing, remote inference, or context-window re
 Memory can stay entirely in the local environment.
 
 Slowave does not require sending stored memories to a hosted memory provider.
+
+Local-first does not mean encrypted-by-default. Users should protect the local database, backups, logs, and exported artifacts according to their security needs.
 
 ### Low Latency
 
@@ -293,9 +359,11 @@ The same memory state and query path can produce stable retrieval behavior.
 
 ### Portability
 
-The memory store can be reused across coding agents, chatbots, desktop assistants, and other MCP-compatible tools.
+The same memory store can be reused across coding agents, chatbots, desktop assistants, terminal agents, and other MCP-compatible tools.
 
-Slowave is not a memory feature embedded inside one assistant. It is a shared memory layer that different clients can use.
+Slowave is not a memory feature embedded inside one assistant. It is a centralized memory layer that different clients can use.
+
+This makes the memory portable across interfaces and resilient to model or tool changes.
 
 ### Vendor Independence
 
@@ -317,18 +385,11 @@ Slowave intentionally prioritizes:
 - long-term adaptation;
 - cross-tool portability.
 
-It does not optimize for everything.
+Those choices create trade-offs.
 
-Slowave is not:
+Slowave does not use an LLM to reinterpret every memory operation. It does not automatically synthesize final answers from memory. It does not guarantee that every recalled item is useful. It can still retrieve stale, irrelevant, outdated, overly broad, or overly local context when the available signals are ambiguous.
 
-- a replacement for a language model;
-- a general reasoning engine;
-- a full autonomous agent framework;
-- a cloud-hosted managed memory service;
-- a natural-language summarization engine;
-- a guarantee of maximum benchmark accuracy.
-
-Some higher-order reasoning tasks are still better handled by language models or other reasoning systems.
+This is why feedback, scopes, decay, supersession, and client-side reasoning remain important.
 
 Slowave focuses on the adaptive memory substrate that supports cognition: persistent context, temporal continuity, recall, forgetting, reinforcement, supersession, and cross-session adaptation.
 
@@ -336,7 +397,9 @@ Slowave focuses on the adaptive memory substrate that supports cognition: persis
 
 ## What Slowave Optimizes For
 
-Slowave is optimized for repeated AI use where context must persist across sessions and tools.
+Slowave is optimized for repeated AI use where context must persist across sessions, models, and tools.
+
+The most important use case is cross-tool continuity: the same memory should support different AI clients instead of being trapped inside one of them.
 
 It is a generic memory substrate. Context is organized by flexible scopes, not hardcoded to one domain such as coding.
 
@@ -363,10 +426,6 @@ The main target use cases are:
 
 Instead of replaying entire histories into every prompt, Slowave retrieves a compact working-memory brief containing the most relevant context for the current task.
 
-The goal is not to preserve everything with equal priority.
-
-The goal is to remember what remains useful.
-
 ---
 
 ## Design Principles
@@ -388,15 +447,17 @@ Slowave is guided by a small set of principles:
 
 ## Positioning
 
-Slowave is not a replacement for language models.
+Slowave is not trying to become the reasoning layer.
 
-It is not trying to become the reasoning layer.
-
-It is a reusable memory layer for systems that need persistent context across sessions, tools, and models.
+It is a centralized, reusable memory layer for systems that need persistent context across sessions, tools, and models.
 
 The reasoning layer remains interchangeable.
 
 The memory layer remains persistent.
+
+The client can change. The model can change. The interface can change. The memory remains available.
+
+This also means Slowave should be evaluated as a memory substrate: by continuity, retrieval quality, suppression of stale context, scope behavior, feedback adaptation, portability, and operational reliability.
 
 This separation is deliberate.
 
