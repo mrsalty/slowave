@@ -5,6 +5,14 @@
 
 ### Bug Fixes
 
+* MCP tool name mismatch — prefix all tools with slowave_ so Cline TUI can invoke them ([1279c7e](https://github.com/mrsalty/slowave/commit/1279c7eefeb619979100c0c3b8e2d888c20a6ca9))
+* MCP tool name mismatch — prefix all tools with slowave_ so Cline… ([66b3a01](https://github.com/mrsalty/slowave/commit/66b3a01f21099965743abc7bca1f34c56e423780))
+
+## [0.5.4](https://github.com/mrsalty/slowave/compare/slowave-v0.5.3...slowave-v0.5.4) (2026-06-13)
+
+
+### Bug Fixes
+
 * **MCP:** all tool names registered without `slowave_` prefix — LLM instructed to call `slowave_activate` but wire name was `activate`; all tool invocations failed silently on Cline TUI and any client that does not apply a server-name prefix; renamed all 7 tools to `slowave_activate`, `slowave_remember`, `slowave_recall`, `slowave_reinforce`, `slowave_commit`, `slowave_stats`, `slowave_remember_procedure` ([20260613_cline_mcp_tool_name_mismatch](docs/iterations/20260613_cline_mcp_tool_name_mismatch.md))
 
 
