@@ -1,12 +1,13 @@
 # Changelog
 
-## [0.5.4](https://github.com/mrsalty/slowave/compare/slowave-v0.5.3...slowave-v0.5.4) (2026-06-13)
+## [0.5.5](https://github.com/mrsalty/slowave/compare/slowave-v0.5.4...slowave-v0.5.5) (2026-06-13)
 
 
 ### Bug Fixes
 
-* MCP tool name mismatch — prefix all tools with slowave_ so Cline TUI can invoke them ([1279c7e](https://github.com/mrsalty/slowave/commit/1279c7eefeb619979100c0c3b8e2d888c20a6ca9))
-* MCP tool name mismatch — prefix all tools with slowave_ so Cline… ([66b3a01](https://github.com/mrsalty/slowave/commit/66b3a01f21099965743abc7bca1f34c56e423780))
+* **Cline TUI lifecycle:** `~/.clinerules` is not a globally-read path for Cline TUI — only `.clinerules` inside cwd is read; global rules live in `~/.cline/rules/`; change `_clinerules_path()` to write `~/.cline/rules/slowave.md` so lifecycle instructions are injected into every session regardless of working directory ([20260613_cline_clinerules_global_path](docs/iterations/20260613_cline_clinerules_global_path.md))
+* **dashboard:** port-conflict error surfaced as raw Python traceback; wrap `ThreadingHTTPServer` bind in `try/except OSError`, detect `EADDRINUSE` by errno, print actionable message and exit cleanly ([7753cfd](https://github.com/mrsalty/slowave/commit/7753cfd))
+* **dashboard:** `_slowave_processes()` spawned one `ps -p <ppid>` subprocess per process found, making `/api/status` O(N) subprocesses per poll; fix: build pid→command dict in a single `ps -axo` pass — O(1) lookup ([7753cfd](https://github.com/mrsalty/slowave/commit/7753cfd))
 
 ## [0.5.4](https://github.com/mrsalty/slowave/compare/slowave-v0.5.3...slowave-v0.5.4) (2026-06-13)
 
