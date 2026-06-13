@@ -1,27 +1,32 @@
 # Slowave
 
-**A second brain for your AI, shared across every tool.**
+**One memory for every AI tool you use.**
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/badge/python-3.10%2B-4c6f91)](https://pypi.org/project/slowave/)
 [![PyPI Status](https://img.shields.io/pypi/status/slowave?color=orange)](https://pypi.org/project/slowave/)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 
-Slowave gives your AI tools a central, private, local second-brain that:
+Slowave gives Claude Code, Cline, Cursor, Claude Desktop, Windsurf, and other MCP-compatible tools access to the same persistent memory.
+
+Instead of each tool forgetting in isolation, Slowave gives them one shared memory layer that:
 
 👉 persists across sessions  
-👉 persists across tools  
+👉 follows you across tools  
+👉 keeps project context outside any single assistant  
 👉 reduces your token usage  
 👉 evolves over time  
 👉 costs $0 — no LLM in the loop  
-👉 runs on your CPU  
+👉 runs locally on your CPU  
 
 
 ## Why try Slowave?
 
-Most AI tools forget everything when the session ends.
+Most AI tools have isolated memory.
 
-That means you keep repeating the same context:
+One assistant may know what happened yesterday, while another starts from zero. Even when a tool remembers something, that memory usually stays trapped inside that tool.
+
+That means you keep repeating the same context every time you switch client, model, workspace, or session:
 
 - how your project is structured;
 - how tests and releases work;
@@ -30,14 +35,15 @@ That means you keep repeating the same context:
 - what previous debugging sessions discovered;
 - what should no longer be suggested.
 
-Slowave gives AI tools a shared local memory layer.
+Slowave gives AI tools a centralized memory layer.
 
-It lets coding assistants, agents, chat clients, and MCP-compatible tools retrieve relevant context from previous sessions without replaying full history into every prompt.
+The memory is local-first, but the product idea is broader: one memory substrate shared by all your AI tools.
 
 Slowave is useful if you want:
 
+- one memory shared across multiple AI tools;
 - persistent memory across sessions;
-- shared memory across multiple AI tools;
+- context that survives switching clients or models;
 - local-first storage;
 - no LLM calls in the memory loop;
 - scoped project memory;
@@ -46,7 +52,7 @@ Slowave is useful if you want:
 
 In short:
 
-> Slowave helps AI tools stop starting from zero.
+> Slowave helps every AI tool start from the same memory.
 
 
 ## The big picture
@@ -100,8 +106,9 @@ Memory is stored at `~/.slowave/slowave.db`. No Ollama, no vector database, no c
 
 ## What makes Slowave different?
 
-**👊 One memory, every AI tool.**  
-Claude Code, Cline, Claude Desktop, Cursor, Windsurf, and any MCP-compatible client share the same local memory store. Fix a bug in Claude Code tonight — Cline knows the lesson tomorrow. Decide on an architecture in Claude Desktop — it surfaces in your next coding session. Context follows you across tools instead of dying when you close a chat.
+**👊 Central memory across every AI tool.**  
+
+Claude Code, Cline, Claude Desktop, Cursor, Windsurf, and any MCP-compatible client can read from and write to the same memory store. Fix a bug in Claude Code tonight — Cline can recall the lesson tomorrow. Decide on an architecture in Claude Desktop — it can surface in your next coding session. Context follows you across tools instead of dying inside one chat.
 
 **🧠 Adaptive memory, not just notes or a vector index.**  
 Slowave memory changes with use: useful memories are reinforced, stale ones decay, and outdated ones can be superseded. Recall is shaped by salience, time, scope, and feedback — not just raw vector similarity.
@@ -117,7 +124,7 @@ Slowave injects a small working-memory brief instead of replaying full chat hist
 
 ## What Slowave remembers
 
-Anything that should survive across sessions: preferences, decisions, constraints, lessons learned, open questions, and reusable workflows — for work, research, or personal use. Each memory carries a timestamp, decays if never recalled, and strengthens when it proves useful. Contradictions are detected geometrically and old facts are superseded automatically — no LLM required.
+Anything that should survive across sessions and tools: preferences, decisions, constraints, lessons learned, open questions, and reusable workflows — for work, research, or personal use. Each memory carries a timestamp, decays if never recalled, and strengthens when it proves useful. Contradictions are detected geometrically and old facts are superseded automatically — no LLM required.
 
 Memory is scoped flexibly: `project:my-app`, `domain:cooking`, `relationship:alex` — or unscoped for universal context.
 
@@ -139,7 +146,7 @@ On **fact-recall benchmarks**, Slowave reaches scores competitive with LLM-based
 
 ## How Slowave compares
 
-Most agent-memory systems focus on extracting and retrieving memories for an LLM-based agent. Slowave takes a different path: it is a local, MCP-native memory substrate where the memory lifecycle itself — recall, reinforcement, decay, supersession, feedback, and procedural reuse — runs without an LLM in the loop.
+Most agent-memory systems focus on extracting and retrieving memories for one LLM-based agent or application. Slowave takes a different path: it is a centralized, MCP-native memory substrate shared across tools, where the memory lifecycle itself — recall, reinforcement, decay, supersession, feedback, and procedural reuse — runs without an LLM in the loop.
 
 |  | MEMORY.md | Plain RAG | Mem0 / Zep / Graphiti | Letta / LangMem | **Slowave** |
 |---|:---:|:---:|:---:|:---:|:---:|
