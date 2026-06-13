@@ -1,0 +1,294 @@
+"""slowave cleanup — remove all configuration and data."""
+
+from __future__ import annotations
+
+import platform
+import shutil
+import subprocess
+from pathlib import Path
+
+import click
+
+# Import helpers from setup
+from slowave.cli.setup import (
+    _home,
+    _clients,
+    _read_json,
+    _write_json,
+    _section,
+    _ok,
+    _skip,
+    _warn,
+    _MARKER_START,
+    _MARKER_END,
+    _strip_legacy_slowave_section,
+)
+
+SYSTEM = platform.system()
+
+
+def _remove_worker_service(dry_run: bool) -> int:
+    """Remove background worker service. Returns 1 if removed, 0 otherwise."""
+    if SYSTEM == "Darwin":
+        plist_path = _home() / "Library" / "LaunchAgents" / "com.slowave.worker.plist"
+        if plist_path.exists():
+            if dry_run:
+                _ok(f"Would stop and remove: {plist_path}")
+                return 0
+            try:
+                subprocess.run(["launchctl", "unload", str(plist_path)], 
+                             check=False, capture_output=True)
+                plist_path.unlink()
+                _ok(f"Removed launchd service: {plist_path}")
+                return 1
+            except Exception as e:
+                _warn(f"Could not remove launchd service: {e}")
+        else:
+            _skip("No launchd service found")
+            
+    elif SYSTEM == "Linux":
+        service_path = _home() / ".config" / "systemd" / "user" / "slowave-worker.service"
+        if service_path.exists():
+            if dry_run:
+                _ok(f"Would stop and remove: {service_path}")
+                return 0
+            try:
+                subprocess.run(["systemctl", "--user", "stop", "slowave-worker"], 
+                             check=False, capture_output=True)
+                subprocess.run(["systemctl", "--user", "disable", "slowave-worker"],
+                             check=False, capture_output=True)
+                service_path.unlink()
+                subprocess.run(["systemctl", "--user", "daemon-reload"],
+                             check=False, capture_output=True)
+                _ok(f"Removed systemd service: {service_path}")
+                return 1
+            except Exception as e:
+                _warn(f"Could not remove systemd service: {e}")
+        else:
+            _skip("No systemd service found")
+            
+    elif SYSTEM == "Windows":
+        if dry_run:
+            _ok("Would remove Task Scheduler task: SlowaveWorker")
+            return 0
+        try:
+            subprocess.run(
+                ["schtasks", "/Delete", "/TN", "SlowaveWorker", "/F"],
+                check=False, capture_output=True
+            )
+            _ok("Removed Task Scheduler task: SlowaveWorker")
+            return 1
+        except Exception as e:
+            _warn(f"Could not remove scheduled task: {e}")
+    else:
+        _skip(f"Unknown platform: {SYSTEM}")
+    return 0
+
+
+
+
+def _remove_lifecycle_blocks(dry_run: bool) -> int:
+    """Remove lifecycle instruction blocks from all clients that support auto-injection.
+
+    Iterates ``_clients()`` and processes every client whose ``lifecycle_path``
+    is not None.  Removes both the marker-bounded block (all versions) and any
+    legacy un-markered '## Slowave memory' section.  User content outside those
+    sections is never touched.  Returns the count of files changed.
+    """
+    count = 0
+
+    def _strip_file(path: Path) -> int:
+        if not path.exists():
+            return 0
+        content = path.read_text(encoding="utf-8")
+        new_content = content
+        if _MARKER_START in new_content and _MARKER_END in new_content:
+            start = new_content.index(_MARKER_START)
+            end = new_content.index(_MARKER_END) + len(_MARKER_END)
+            new_content = new_content[:start] + new_content[end:]
+        new_content = _strip_legacy_slowave_section(new_content).lstrip("\n")
+        if new_content == content:
+            return 0
+        if not new_content.strip():
+            path.unlink()
+            _ok(f"Removed (now empty): {path}")
+        else:
+            path.write_text(new_content, encoding="utf-8")
+            _ok(f"Removed slowave block from: {path}")
+        return 1
+
+    for spec in _clients():
+        if spec.lifecycle_path is None:
+            continue
+        lc_file = spec.lifecycle_path()
+        if not lc_file.exists():
+            _skip(f"{spec.label}: {lc_file} not found")
+            continue
+        content = lc_file.read_text(encoding="utf-8")
+        has_marker = _MARKER_START in content and _MARKER_END in content
+        has_legacy = "## Slowave memory" in content
+        if has_marker or has_legacy:
+            if dry_run:
+                _ok(f"Would remove slowave block from: {lc_file}")
+            else:
+                count += _strip_file(lc_file)
+        else:
+            _skip(f"{spec.label}: no slowave content in {lc_file}")
+
+    return count
+
+
+
+def _remove_mcp_configs(dry_run: bool) -> int:
+    """Remove MCP server entries and enforcement hooks from all client configs.
+
+    Iterates ``_clients()`` — adding a new client in setup.py automatically
+    includes it here.  Enforcement hook removal is also data-driven via
+    ``spec.hooks_cleanup_fn``: no per-client special-cases needed.
+    Returns the count of config files modified.
+    """
+    count = 0
+
+    for spec in _clients():
+        # MCP entry
+        mcp_file = spec.mcp_path()
+        if not mcp_file.exists():
+            _skip(f"{spec.label}: {mcp_file} not found")
+        else:
+            cfg = _read_json(mcp_file)
+            if "mcpServers" not in cfg or "slowave" not in cfg["mcpServers"]:
+                _skip(f"{spec.label}: no slowave entry in {mcp_file}")
+            else:
+                if dry_run:
+                    _ok(f"Would remove slowave MCP entry from: {mcp_file}")
+                else:
+                    del cfg["mcpServers"]["slowave"]
+                    _write_json(mcp_file, cfg)
+                    _ok(f"Removed slowave MCP entry from: {mcp_file}")
+                    count += 1
+
+        # Enforcement hooks — data-driven via spec.hooks_cleanup_fn
+        if spec.hooks_config_path is not None and spec.hooks_cleanup_fn is not None:
+            hooks_file = spec.hooks_config_path()
+            if not hooks_file.exists():
+                _skip(f"{spec.label}: hooks file not found ({hooks_file})")
+            else:
+                hcfg = _read_json(hooks_file)
+                hcfg, hooks_changed = spec.hooks_cleanup_fn(hcfg)
+                if hooks_changed:
+                    if dry_run:
+                        _ok(f"Would remove slowave enforcement hooks from: {hooks_file}")
+                    else:
+                        _write_json(hooks_file, hcfg)
+                        _ok(f"Removed slowave enforcement hooks from: {hooks_file}")
+                else:
+                    _skip(f"{spec.label}: no slowave enforcement hooks in {hooks_file}")
+
+    return count
+
+
+
+def _remove_setup_backups(dry_run: bool) -> int:
+    """Remove ``*.bak.*`` files left by _backup_file() next to config files.
+
+    The directory list is derived directly from the same path-helper functions
+    used during setup, so it is always complete regardless of platform.
+
+    Returns the number of backup files removed.
+    """
+    count = 0
+    # Build the set of directories that may contain .bak.* files directly
+    # from the ClientSpec fields — no manual list to maintain.
+    dirs: set[Path] = set()
+    for spec in _clients():
+        dirs.add(spec.mcp_path().parent)
+        if spec.lifecycle_path is not None:
+            dirs.add(spec.lifecycle_path().parent)
+        if spec.hooks_config_path is not None:
+            dirs.add(spec.hooks_config_path().parent)
+    candidates: list[Path] = sorted(dirs)
+    for directory in candidates:
+        if not directory.is_dir():
+            continue
+        for bak in sorted(directory.glob("*.bak.*")):
+            if dry_run:
+                _ok(f"Would remove backup: {bak}")
+            else:
+                try:
+                    bak.unlink()
+                    _ok(f"Removed backup: {bak}")
+                    count += 1
+                except OSError as exc:
+                    _warn(f"Could not remove {bak}: {exc}")
+    if count == 0 and not dry_run:
+        _skip("No setup backup files found")
+    return count
+
+
+@click.command("cleanup")
+@click.option("--dry-run", is_flag=True, help="Preview what would be cleaned without removing.")
+@click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
+@click.confirmation_option(prompt="This will remove all slowave configuration and data. Continue?")
+def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
+    """Remove all slowave configuration and data from this system.
+    
+    This command cleans up everything that 'slowave setup' installed:
+    - MCP server configs (Claude Code, Claude Desktop, Cline, Cursor)
+    - Lifecycle blocks (.clinerules, CLAUDE.md)
+    - Background worker service
+    - Local database and data (~/.slowave)
+    
+    Use this before uninstalling slowave or when you want a fresh start.
+    
+    \\b
+    Example:
+      slowave cleanup              # interactive confirmation
+      slowave cleanup --dry-run    # preview without removing
+    """
+    click.echo(click.style("\nSlowave cleanup", bold=True))
+    if dry_run:
+        click.echo(click.style("  [DRY RUN — no files will be removed]\n", fg="yellow"))
+    
+    removed_count = 0
+    
+    # 1. Stop and remove worker service
+    _section("1. Background worker service")
+    removed_count += _remove_worker_service(dry_run)
+    
+    # 2. Remove lifecycle blocks
+    _section("2. Lifecycle instruction blocks")
+    removed_count += _remove_lifecycle_blocks(dry_run)
+    
+    # 3. Remove MCP server configs
+    _section("3. MCP server configurations")
+    removed_count += _remove_mcp_configs(dry_run)
+    
+    # 4. Remove data directory
+    _section("4. Local data and database")
+    slowave_dir = _home() / ".slowave"
+    if slowave_dir.exists():
+        if dry_run:
+            _ok(f"Would remove: {slowave_dir}")
+        else:
+            shutil.rmtree(slowave_dir)
+            _ok(f"Removed: {slowave_dir}")
+            removed_count += 1
+    else:
+        _skip("No ~/.slowave directory found")
+
+    # 5. Remove setup backup files
+    _section("5. Setup backup files")
+    removed_count += _remove_setup_backups(dry_run)
+
+    # Summary
+    click.echo()
+    if dry_run:
+        click.echo(click.style("Dry run complete. No files were removed.", bold=True))
+    else:
+        click.echo(click.style(f"Cleanup complete. {removed_count} items removed.", bold=True))
+        click.echo("\nManual cleanup still needed:")
+        click.echo("  • Claude Desktop → Settings → General → Instructions for Claude")
+        click.echo("    (Remove any slowave lifecycle instructions)")
+        click.echo("\nYou can now safely run: pipx uninstall slowave")
+
+
