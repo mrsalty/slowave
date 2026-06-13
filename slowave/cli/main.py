@@ -565,6 +565,265 @@ def _slowave_processes() -> list[dict[str, Any]]:
     return rows
 
 
+def _worker_health() -> dict[str, Any]:
+    """Best-effort health for the background consolidation worker.
+
+    Worker health is independent from feedback/reinforcement health. A running
+    worker means Slowave can perform background consolidation. It does not imply
+    that MCP clients are sending post-recall feedback.
+    """
+    processes = _slowave_processes()
+    worker_processes = [
+        p for p in processes
+        if "slowave worker" in p.get("command", "")
+    ]
+    return {
+        "process_detected": bool(worker_processes),
+        "process_count": len(worker_processes),
+        "processes": worker_processes,
+        "warnings": [] if worker_processes else [
+            "no background worker process detected; run 'slowave worker' or configure the worker service if you want automatic consolidation"
+        ],
+    }
+
+
+def _feedback_health(db_path: str) -> dict[str, Any]:
+    """Best-effort feedback/reinforcement health from the local SQLite DB.
+
+    This answers a different question from worker health: whether clients appear
+    to send post-recall feedback/reinforcement events after retrieving context.
+    """
+    import sqlite3
+    import time
+
+    path = os.path.abspath(os.path.expanduser(db_path))
+    result: dict[str, Any] = {
+        "db_path": path,
+        "available": False,
+        "recall_or_context_calls": 0,
+        "remember_calls": 0,
+        "feedback_or_reinforcement_calls": 0,
+        "last_feedback_ts": None,
+        "last_feedback_age_days": None,
+        "warnings": [],
+    }
+
+    if not os.path.exists(path):
+        result["warnings"].append("database does not exist yet")
+        return result
+
+    def _has_table(cur: Any, name: str) -> bool:
+        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,))
+        return cur.fetchone() is not None
+
+    def _columns(cur: Any, table: str) -> set[str]:
+        try:
+            cur.execute(f"PRAGMA table_info({table})")
+            return {str(row[1]) for row in cur.fetchall()}
+        except Exception:
+            return set()
+
+    def _count(cur: Any, sql: str) -> int:
+        try:
+            cur.execute(sql)
+            row = cur.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception:
+            return 0
+
+    def _max_ts(cur: Any, table: str, candidates: tuple[str, ...]) -> float | None:
+        cols = _columns(cur, table)
+        for col in candidates:
+            if col not in cols:
+                continue
+            try:
+                cur.execute(f"SELECT MAX({col}) FROM {table}")
+                value = cur.fetchone()[0]
+                if value is None:
+                    continue
+                if isinstance(value, (int, float)):
+                    return float(value)
+                return float(value)
+            except Exception:
+                continue
+        return None
+
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.cursor()
+        # Best-effort introspection only. Some legacy/broken SQLite schemas can
+        # raise "malformed database schema" while reading sqlite_master. This
+        # pragma lets diagnostics continue instead of surfacing unreadable schema
+        # text in `slowave doctor`.
+        try:
+            cur.execute("PRAGMA writable_schema=ON")
+        except Exception:
+            pass
+        result["available"] = True
+
+        event_tables = [
+            table for table in (
+                "raw_events",
+                "events",
+                "event_log",
+                "turn_events",
+                "memory_events",
+            )
+            if _has_table(cur, table)
+        ]
+
+        for table in event_tables:
+            cols = _columns(cur, table)
+            type_col = next((c for c in ("type", "event_type", "kind", "name") if c in cols), None)
+            content_col = next((c for c in ("content", "payload", "text") if c in cols), None)
+            searchable_col = type_col or content_col
+            if not searchable_col:
+                continue
+
+            result["recall_or_context_calls"] += _count(
+                cur,
+                f"SELECT COUNT(*) FROM {table} WHERE lower({searchable_col}) LIKE '%recall%' OR lower({searchable_col}) LIKE '%context%'",
+            )
+            result["remember_calls"] += _count(
+                cur,
+                f"SELECT COUNT(*) FROM {table} WHERE lower({searchable_col}) LIKE '%remember%'",
+            )
+            result["feedback_or_reinforcement_calls"] += _count(
+                cur,
+                f"SELECT COUNT(*) FROM {table} WHERE lower({searchable_col}) LIKE '%feedback%' OR lower({searchable_col}) LIKE '%reinforce%' OR lower({searchable_col}) LIKE '%suppress%'",
+            )
+
+        for table in (
+            "feedback",
+            "memory_feedback",
+            "retrieval_feedback",
+            "turn_feedbacks",
+        ):
+            if not _has_table(cur, table):
+                continue
+            count = _count(cur, f"SELECT COUNT(*) FROM {table}")
+            result["feedback_or_reinforcement_calls"] += count
+            ts = _max_ts(cur, table, ("ts", "created_at", "timestamp", "updated_at"))
+            if ts is not None:
+                current = result["last_feedback_ts"]
+                result["last_feedback_ts"] = ts if current is None else max(float(current), ts)
+
+        conn.close()
+    except Exception as exc:
+        msg = str(exc)
+        if "malformed database schema" in msg.lower():
+            result["warnings"].append(
+                "feedback health could not inspect legacy/malformed SQLite schema; counters unavailable"
+            )
+        else:
+            result["warnings"].append(f"could not inspect feedback health: {msg}")
+        return result
+
+    last_ts = result.get("last_feedback_ts")
+    if isinstance(last_ts, (int, float)) and last_ts > 0:
+        ts = float(last_ts) / 1000.0 if float(last_ts) > 10_000_000_000 else float(last_ts)
+        result["last_feedback_age_days"] = round((time.time() - ts) / 86400.0, 2)
+
+    if result["recall_or_context_calls"] > 0 and result["feedback_or_reinforcement_calls"] == 0:
+        result["warnings"].append(
+            "recall/context activity detected, but no post-recall feedback or reinforcement events were found; this is a client integration issue, not a worker issue"
+        )
+
+    return result
+
+
+def _session_lifecycle_health(db_path: str) -> dict[str, Any]:
+    """Best-effort session start/end health from the local SQLite DB."""
+    import sqlite3
+
+    path = os.path.abspath(os.path.expanduser(db_path))
+    result: dict[str, Any] = {
+        "db_path": path,
+        "available": False,
+        "sessions_started": 0,
+        "sessions_committed": 0,
+        "warnings": [],
+    }
+
+    if not os.path.exists(path):
+        result["warnings"].append("database does not exist yet")
+        return result
+
+    def _has_table(cur: Any, name: str) -> bool:
+        cur.execute("SELECT 1 FROM sqlite_master WHERE type='table' AND name=?", (name,))
+        return cur.fetchone() is not None
+
+    def _columns(cur: Any, table: str) -> set[str]:
+        try:
+            cur.execute(f"PRAGMA table_info({table})")
+            return {str(row[1]) for row in cur.fetchall()}
+        except Exception:
+            return set()
+
+    def _count(cur: Any, sql: str) -> int:
+        try:
+            cur.execute(sql)
+            row = cur.fetchone()
+            return int(row[0] or 0) if row else 0
+        except Exception:
+            return 0
+
+    try:
+        conn = sqlite3.connect(path)
+        cur = conn.cursor()
+        # Best-effort introspection only. Some legacy/broken SQLite schemas can
+        # raise "malformed database schema" while reading sqlite_master. This
+        # pragma lets diagnostics continue instead of surfacing unreadable schema
+        # text in `slowave doctor`.
+        try:
+            cur.execute("PRAGMA writable_schema=ON")
+        except Exception:
+            pass
+        result["available"] = True
+
+        for table in ("sessions", "agent_sessions", "memory_sessions"):
+            if not _has_table(cur, table):
+                continue
+            cols = _columns(cur, table)
+            result["sessions_started"] = max(
+                result["sessions_started"],
+                _count(cur, f"SELECT COUNT(*) FROM {table}"),
+            )
+            if "ended_at" in cols:
+                result["sessions_committed"] = max(
+                    result["sessions_committed"],
+                    _count(cur, f"SELECT COUNT(*) FROM {table} WHERE ended_at IS NOT NULL"),
+                )
+            elif "closed_at" in cols:
+                result["sessions_committed"] = max(
+                    result["sessions_committed"],
+                    _count(cur, f"SELECT COUNT(*) FROM {table} WHERE closed_at IS NOT NULL"),
+                )
+            elif "status" in cols:
+                result["sessions_committed"] = max(
+                    result["sessions_committed"],
+                    _count(cur, f"SELECT COUNT(*) FROM {table} WHERE status IN ('ended', 'closed', 'committed')"),
+                )
+
+        conn.close()
+    except Exception as exc:
+        msg = str(exc)
+        if "malformed database schema" in msg.lower():
+            result["warnings"].append(
+                "session lifecycle health could not inspect legacy/malformed SQLite schema; counters unavailable"
+            )
+        else:
+            result["warnings"].append(f"could not inspect session lifecycle health: {msg}")
+        return result
+
+    if result["sessions_started"] > 0 and result["sessions_committed"] == 0:
+        result["warnings"].append("sessions are started but never ended/committed")
+    elif result["sessions_started"] >= 3 and result["sessions_committed"] / max(result["sessions_started"], 1) < 0.5:
+        result["warnings"].append("many sessions are started but fewer than half are ended/committed")
+
+    return result
+
+
 @cli.command("status")
 @click.pass_context
 def status_cmd(ctx: click.Context) -> None:
@@ -577,6 +836,9 @@ def status_cmd(ctx: click.Context) -> None:
         "stats": eng.stats(),
         "schema_health": eng.schema_health(),
         "processes": _slowave_processes(),
+        "worker_health": _worker_health(),
+        "session_lifecycle_health": _session_lifecycle_health(db),
+        "feedback_health": _feedback_health(db),
     }
     eng.close()
     if ctx.obj["json"]:
@@ -598,6 +860,24 @@ def status_cmd(ctx: click.Context) -> None:
             f"  pid={p['pid']} ppid={p['ppid']} rss={p['rss_kb']}KB "
             f"stat={p['stat']} {p['command']}"
         )
+
+    wh = payload["worker_health"]
+    click.echo(
+        "Worker health: "
+        f"detected={wh['process_detected']} count={wh['process_count']}"
+    )
+    sh = payload["session_lifecycle_health"]
+    click.echo(
+        "Session lifecycle health: "
+        f"started={sh['sessions_started']} committed={sh['sessions_committed']}"
+    )
+    fh = payload["feedback_health"]
+    click.echo(
+        "Feedback health: "
+        f"recall_or_context={fh['recall_or_context_calls']} "
+        f"remember={fh['remember_calls']} "
+        f"feedback_or_reinforcement={fh['feedback_or_reinforcement_calls']}"
+    )
 
 
 @cli.command("dashboard")
@@ -757,7 +1037,7 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
 @click.pass_context
 def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
     """Check the local Slowave environment and report any issues.
-    
+
     Verifies Python version, core dependencies, the embedding backend,
     SQLite write access, and MCP server availability.
     Exits with code 1 if any check fails (FAIL status).
@@ -774,10 +1054,10 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
     )
     from slowave.cli.clients import get_client_statuses, summarize_client_status
     from slowave import __version__
-    
+
     as_json = as_json or ctx.obj["json"]
     renderer = get_renderer(use_emoji=False)
-    
+
     if as_json:
         # JSON mode
         result = {
@@ -785,7 +1065,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             "version": __version__,
             "runtime": {}
         }
-        
+
         runtime = get_runtime_info(__version__)
         result["runtime_info"] = {
             "python_version": runtime.python_version,
@@ -794,7 +1074,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             "config_path": runtime.config_path,
             "slowave_dir": runtime.slowave_dir,
         }
-        
+
         # Run checks
         checks = {
             "python": check_python(),
@@ -804,7 +1084,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             "sqlite_write": check_sqlite_write(),
             "mcp_server": check_mcp_server(),
         }
-        
+
         result["runtime"] = {
             name: {
                 "status": check.status.value,
@@ -813,12 +1093,30 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             }
             for name, check in checks.items()
         }
-        
+
+        # Operational checks
+        worker = _worker_health()
+        session_lifecycle = _session_lifecycle_health(ctx.obj["db"])
+        feedback = _feedback_health(ctx.obj["db"])
+        result["worker_health"] = worker
+        result["session_lifecycle_health"] = session_lifecycle
+        result["feedback_health"] = feedback
+
         # Client checks
         clients = get_client_statuses()
         result["clients"] = {}
         warnings = []
-        
+        for source, health in (
+            ("WORKER_HEALTH", worker),
+            ("SESSION_LIFECYCLE_HEALTH", session_lifecycle),
+            ("FEEDBACK_HEALTH", feedback),
+        ):
+            for warning in health.get("warnings", []):
+                warnings.append({
+                    "code": source,
+                    "message": str(warning),
+                })
+
         for key, client in clients.items():
             status, detail = summarize_client_status(client)
             result["clients"][key] = {
@@ -831,31 +1129,31 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
                     "code": f"{key.upper()}_INCOMPLETE",
                     "message": f"{client.name}: {detail}",
                 })
-        
+
         # Determine overall status
         has_fail = any(c.status == Status.FAIL for c in checks.values())
         has_warn = any(c.status == Status.WARN for c in checks.values()) or bool(warnings)
-        
+
         if has_fail:
             result["status"] = "fail"
         elif has_warn:
             result["status"] = "warn"
-        
+
         result["warnings"] = warnings
         renderer.json(result)
-        
+
         if has_fail:
             sys.exit(1)
     else:
         # Human-readable mode
         runtime = get_runtime_info(__version__)
         renderer.title("Slowave Doctor", f"v{__version__}")
-        
+
         renderer.section("Environment")
         renderer.item("Python", runtime.python_version)
         renderer.item("Data dir", runtime.slowave_dir, dim=True)
         renderer.item("Config", runtime.config_path, dim=True)
-        
+
         # Runtime checks
         renderer.section("Runtime")
         checks = [
@@ -866,43 +1164,90 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             check_sqlite_write(),
             check_mcp_server(),
         ]
-        
+
         for check in checks:
             renderer.check(check.label, check.status, check.detail, check.remediation)
-        
+
+        # Operational health
+        worker = _worker_health()
+        session_lifecycle = _session_lifecycle_health(ctx.obj["db"])
+        feedback = _feedback_health(ctx.obj["db"])
+
+        renderer.section("Worker Health")
+        renderer.item("Worker process detected", str(worker.get("process_detected", False)))
+        renderer.item("Worker process count", f"{worker.get('process_count', 0):,}")
+
+        renderer.section("Session Lifecycle Health")
+        renderer.item("Sessions started", f"{session_lifecycle.get('sessions_started', 0):,}")
+        renderer.item("Sessions ended/committed", f"{session_lifecycle.get('sessions_committed', 0):,}")
+
+        renderer.section("Feedback Health")
+        renderer.item("Recall/context calls", f"{feedback.get('recall_or_context_calls', 0):,}")
+        renderer.item("Remember calls", f"{feedback.get('remember_calls', 0):,}")
+        renderer.item("Feedback/reinforcement calls", f"{feedback.get('feedback_or_reinforcement_calls', 0):,}")
+        age = feedback.get("last_feedback_age_days")
+        renderer.item(
+            "Last feedback",
+            "never" if age is None else f"{age:g} day(s) ago",
+        )
+
         # Client checks
         renderer.section("Clients")
         clients = get_client_statuses()
         warnings_list = []
-        
+
         for key, client in clients.items():
             status, detail = summarize_client_status(client)
             renderer.check(client.name, status, detail)
             if status == Status.WARN:
                 warnings_list.append((client.name, detail))
-        
+
         # Warnings
-        if warnings_list:
+        operational_warnings = []
+        for label, health in (
+            ("Worker", worker),
+            ("Session lifecycle", session_lifecycle),
+            ("Feedback", feedback),
+        ):
+            for warning in health.get("warnings", []):
+                operational_warnings.append((label, str(warning)))
+
+        if warnings_list or operational_warnings:
             renderer.section("Warnings")
+            for label, warning in operational_warnings:
+                remediation = None
+                if label == "Worker":
+                    remediation = "Run: slowave worker --once, or configure the worker service if you want automatic consolidation."
+                elif label == "Feedback":
+                    if "counters unavailable" in warning:
+                        remediation = "Run `slowave status --json` or inspect the SQLite DB schema; this diagnostic is best-effort and does not mean feedback is broken."
+                    else:
+                        remediation = "Check client lifecycle instructions and post-recall feedback hooks. This is independent from the background worker."
+                elif label == "Session lifecycle":
+                    if "counters unavailable" in warning:
+                        remediation = "Run `slowave status --json` or inspect the SQLite DB schema; this diagnostic is best-effort and does not mean lifecycle hooks are broken."
+                    else:
+                        remediation = "Check that the client calls session end/commit hooks when a conversation or task finishes."
+                renderer.warning(f"{label}: {warning}", remediation)
             for name, detail in warnings_list:
                 if "custom instructions" in detail.lower():
                     renderer.warning(
                         f"{name}: {detail}",
-                        "Run: slowave install claude-desktop --print-instructions"
+                        "Run: slowave setup --dry-run, then slowave setup"
                     )
                 else:
                     renderer.warning(f"{name}: {detail}")
-        
+
         # Summary
         has_fail = any(c.status == Status.FAIL for c in checks)
-        has_warn = bool(warnings_list)
-        
+        has_warn = bool(warnings_list) or bool(operational_warnings)
+
         if has_fail:
             msg = f"Setup required. {len([c for c in checks if c.status == Status.FAIL])} check(s) failed."
             renderer.summary(False, msg)
             sys.exit(1)
         elif has_warn:
-            msg = f"Usable with {len(warnings_list)} warning(s)."
+            msg = f"Usable with {len(warnings_list) + len(operational_warnings)} warning(s)."
             renderer.summary(True, msg)
         else:
             renderer.summary(True, "All systems ready.")
@@ -911,8 +1256,8 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
 @click.option("--dry-run", is_flag=True, help="Preview what would be removed.")
 def uninstall_cmd(dry_run: bool) -> None:
     """Remove all Slowave configuration (keeps database by default).
-    
-    Removes ONLY Slowave-specific entries: MCP servers, lifecycle blocks, 
+
+    Removes ONLY Slowave-specific entries: MCP servers, lifecycle blocks,
     hooks, and worker service. Never deletes entire files or breaks configs.
     Database at ~/.slowave/ is preserved — remove manually if desired.
     """
@@ -923,14 +1268,14 @@ def uninstall_cmd(dry_run: bool) -> None:
     )
     import platform
     from pathlib import Path
-    
+
     click.echo(click.style("\nSlowave uninstall", bold=True))
     if dry_run:
         click.echo(click.style("  [DRY RUN]\n", fg="yellow"))
-    
+
     changes = []
     errors = []
-    
+
     def safe_remove_from_json(path: Path, remove_fn, desc: str):
         """Safely remove Slowave config from JSON without breaking structure."""
         if not path.exists():
@@ -945,7 +1290,7 @@ def uninstall_cmd(dry_run: bool) -> None:
                 changes.append(desc)
         except Exception as e:
             errors.append(f"{desc}: {str(e)[:100]}")
-    
+
     def safe_remove_block(path: Path, desc: str):
         """Safely remove lifecycle block between markers."""
         if not path.exists():
@@ -968,7 +1313,7 @@ def uninstall_cmd(dry_run: bool) -> None:
                 changes.append(desc)
         except Exception as e:
             errors.append(f"{desc}: {str(e)[:100]}")
-    
+
     # Claude Code - MCP and hooks
     def remove_cc_mcp_hooks(cfg):
         modified = False
@@ -993,29 +1338,29 @@ def uninstall_cmd(dry_run: bool) -> None:
             if not cfg["hooks"]:
                 del cfg["hooks"]
         return modified
-    
+
     safe_remove_from_json(_claude_settings_path(), remove_cc_mcp_hooks, "Claude Code MCP + hooks")
     safe_remove_block(_claude_md_path(), "Claude Code lifecycle")
-    
+
     # Claude Desktop - use safe helper
     def remove_cd_mcp(cfg):
         if "slowave" in cfg.get("mcpServers", {}):
             del cfg["mcpServers"]["slowave"]
             return True
         return False
-    
+
     safe_remove_from_json(_claude_desktop_config_path(), remove_cd_mcp, "Claude Desktop MCP")
-    
+
     # Cline
     def remove_cline_mcp(cfg):
         if "slowave" in cfg.get("mcpServers", {}):
             del cfg["mcpServers"]["slowave"]
             return True
         return False
-    
+
     safe_remove_from_json(_cline_mcp_settings_path(), remove_cline_mcp, "Cline MCP")
     safe_remove_block(_clinerules_path(), "Cline lifecycle")
-    
+
     # Worker
     system = platform.system()
     if not dry_run:
@@ -1040,17 +1385,17 @@ def uninstall_cmd(dry_run: bool) -> None:
                 pass
     else:
         changes.append(f"worker ({system})")
-    
+
     if changes:
         click.echo("  Removed:" if not dry_run else "  Would remove:")
         for c in changes:
             click.echo(f"    - {c}")
     else:
         click.echo("  No configuration found")
-    
+
     if not dry_run:
         click.echo("\n  ⚠️  Manual steps:")
-        click.echo("    - Claude Desktop Custom Instructions (delete Slowave block)")
+        click.echo("    - Claude Desktop Custom Instructions (delete the Slowave block if you added it manually)")
         click.echo("    - Package: pipx uninstall slowave")
         click.echo("    - Database (optional): rm -rf ~/.slowave")
     click.echo()
