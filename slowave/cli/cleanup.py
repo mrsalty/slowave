@@ -104,7 +104,11 @@ def _remove_lifecycle_blocks(dry_run: bool) -> int:
         new_content = content
         if _MARKER_START in new_content and _MARKER_END in new_content:
             start = new_content.index(_MARKER_START)
-            end = new_content.index(_MARKER_END) + len(_MARKER_END)
+            # Advance past the full end-marker line (e.g. "<!-- slowave-lifecycle-end v2 -->")
+            # Using only len(_MARKER_END) would leave the " v2 -->" suffix on the next line.
+            end_marker_pos = new_content.index(_MARKER_END)
+            end_of_line = new_content.find("\n", end_marker_pos)
+            end = end_of_line + 1 if end_of_line != -1 else len(new_content)
             new_content = new_content[:start] + new_content[end:]
         new_content = _strip_legacy_slowave_section(new_content).lstrip("\n")
         if new_content == content:
@@ -270,9 +274,33 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
         if dry_run:
             _ok(f"Would remove: {slowave_dir}")
         else:
-            shutil.rmtree(slowave_dir)
-            _ok(f"Removed: {slowave_dir}")
-            removed_count += 1
+            # On Windows the DB may still be held open by a running worker or MCP
+            # process even after the scheduler task was deleted.  Attempt to kill
+            # any lingering slowave processes before removing the directory.
+            if SYSTEM == "Windows":
+                try:
+                    subprocess.run(
+                        [
+                            "powershell", "-NonInteractive", "-Command",
+                            "Get-Process | Where-Object { $_.Path -like '*slowave*' } "
+                            "| Stop-Process -Force -ErrorAction SilentlyContinue",
+                        ],
+                        capture_output=True, check=False, timeout=5,
+                    )
+                    import time as _time; _time.sleep(0.6)
+                except Exception:
+                    pass
+
+            try:
+                shutil.rmtree(slowave_dir)
+                _ok(f"Removed: {slowave_dir}")
+                removed_count += 1
+            except OSError as exc:
+                _warn(
+                    f"Could not remove {slowave_dir}: {exc.strerror}.\n"
+                    "  The database may still be in use by a running worker or MCP process.\n"
+                    "  Stop those processes, then re-run 'slowave cleanup'."
+                )
     else:
         _skip("No ~/.slowave directory found")
 

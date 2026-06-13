@@ -67,7 +67,6 @@ data/stalememory/manifest.json
 data/locomo/locomo10.json
 
 # Private working docs
-docs/iterations/
 
 # Build artifacts
 *.whl
