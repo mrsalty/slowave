@@ -1,7 +1,9 @@
 """Client status checking for doctor command."""
 from __future__ import annotations
+import json
 import subprocess
 from dataclasses import dataclass
+from pathlib import Path
 from slowave.cli.output import Status
 
 @dataclass
@@ -11,6 +13,32 @@ class ClientStatus:
     hooks_installed: bool = False
     lifecycle_enabled: bool = False
     running: bool = False
+
+
+def _cursor_mcp_config_path() -> Path:
+    return Path.home() / ".cursor" / "mcp.json"
+
+
+def _windsurf_mcp_config_paths() -> list[Path]:
+    return [
+        Path.home() / ".codeium" / "windsurf" / "mcp_config.json",
+        Path.home() / ".codeium" / "mcp_config.json",
+    ]
+
+
+def _json_has_slowave_mcp(path: Path) -> bool:
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    servers = data.get("mcpServers") or data.get("servers") or {}
+    return isinstance(servers, dict) and "slowave" in servers
+
+
+def _any_json_has_slowave_mcp(paths: list[Path]) -> bool:
+    return any(_json_has_slowave_mcp(path) for path in paths)
 
 def get_client_statuses() -> dict[str, ClientStatus]:
     statuses = {}
@@ -24,7 +52,7 @@ def get_client_statuses() -> dict[str, ClientStatus]:
         cc_settings = _claude_settings_path()
         cc_md = _claude_md_path()
         cc_has_mcp = cc_has_hooks = cc_has_lifecycle = False
-        
+
         if cc_json.exists():
             try:
                 cfg_j = _read_json(cc_json)
@@ -44,13 +72,13 @@ def get_client_statuses() -> dict[str, ClientStatus]:
         if cc_md.exists():
             try: cc_has_lifecycle = _MARKER_START in cc_md.read_text(encoding="utf-8", errors="ignore")
             except: pass
-        
+
         if cc_json.exists() or cc_settings.exists() or cc_md.exists():
             statuses["claude_code"] = ClientStatus(
                 name="Claude Code", mcp_configured=cc_has_mcp,
                 hooks_installed=cc_has_hooks, lifecycle_enabled=cc_has_lifecycle,
             )
-        
+
         cd_config = _claude_desktop_config_path()
         if cd_config.exists():
             cd_has_mcp = False
@@ -61,7 +89,7 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             statuses["claude_desktop"] = ClientStatus(
                 name="Claude Desktop", mcp_configured=cd_has_mcp,
             )
-        
+
         cline_mcp = _cline_mcp_settings_path()
         cline_rules = _clinerules_path()
         cline_has_mcp = cline_has_lifecycle = False
@@ -78,8 +106,20 @@ def get_client_statuses() -> dict[str, ClientStatus]:
                 name="Cline", mcp_configured=cline_has_mcp,
                 lifecycle_enabled=cline_has_lifecycle,
             )
+
+        cursor_mcp = _cursor_mcp_config_path()
+        statuses["cursor"] = ClientStatus(
+            name="Cursor",
+            mcp_configured=_json_has_slowave_mcp(cursor_mcp),
+        )
+
+        windsurf_mcp_paths = _windsurf_mcp_config_paths()
+        statuses["windsurf"] = ClientStatus(
+            name="Windsurf",
+            mcp_configured=_any_json_has_slowave_mcp(windsurf_mcp_paths),
+        )
     except ImportError: pass
-    
+
     import platform
     system = platform.system()
     worker_running = False
@@ -94,13 +134,17 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             result = subprocess.run(["powershell", "-Command", "Get-ScheduledTask -TaskName SlowaveWorker -ErrorAction SilentlyContinue"], capture_output=True, text=True, check=False)
             worker_running = "SlowaveWorker" in result.stdout
     except: pass
-    
+
     statuses["worker"] = ClientStatus(name="Background worker", running=worker_running)
     return statuses
 
 def summarize_client_status(client: ClientStatus) -> tuple[Status, str]:
     if "worker" in client.name.lower():
         return (Status.OK if client.running else Status.SKIP, "running" if client.running else "not running")
+    if client.name in {"Cursor", "Windsurf"}:
+        if client.mcp_configured:
+            return (Status.WARN, "MCP configured; lifecycle feedback not configured or not supported")
+        return (Status.SKIP, "not configured")
     if "desktop" in client.name.lower():
         if not client.mcp_configured:
             return (Status.SKIP, "not configured")
