@@ -6,14 +6,15 @@
 ### Bug Fixes
 
 * **Cline TUI lifecycle:** `~/.clinerules` is not a globally-read path for Cline TUI — only `.clinerules` inside cwd is read; global rules live in `~/.cline/rules/`; change `_clinerules_path()` to write `~/.cline/rules/slowave.md` so lifecycle instructions are injected into every session regardless of working directory ([20260613_cline_clinerules_global_path](docs/iterations/20260613_cline_clinerules_global_path.md))
-
+* **dashboard:** port-conflict error surfaced as raw Python traceback; wrap `ThreadingHTTPServer` bind in `try/except OSError`, detect `EADDRINUSE` by errno, print actionable message and exit cleanly ([7753cfd](https://github.com/mrsalty/slowave/commit/7753cfd))
+* **dashboard:** `_slowave_processes()` spawned one `ps -p <ppid>` subprocess per process found, making `/api/status` O(N) subprocesses per poll; fix: build pid→command dict in a single `ps -axo` pass — O(1) lookup ([7753cfd](https://github.com/mrsalty/slowave/commit/7753cfd))
 
 ## [0.5.4](https://github.com/mrsalty/slowave/compare/slowave-v0.5.3...slowave-v0.5.4) (2026-06-13)
 
 
 ### Bug Fixes
 
-* **MCP:** all tool names registered without `slowave_` prefix — LLM instructed to call `slowave_activate` but wire name was `activate`; all tool invocations failed silently on Cline TUI; renamed all 7 tools to `slowave_*` ([20260613_cline_mcp_tool_name_mismatch](docs/iterations/20260613_cline_mcp_tool_name_mismatch.md))
+* **MCP:** all tool names registered without `slowave_` prefix — LLM instructed to call `slowave_activate` but wire name was `activate`; all tool invocations failed silently on Cline TUI and any client that does not apply a server-name prefix; renamed all 7 tools to `slowave_activate`, `slowave_remember`, `slowave_recall`, `slowave_reinforce`, `slowave_commit`, `slowave_stats`, `slowave_remember_procedure` ([20260613_cline_mcp_tool_name_mismatch](docs/iterations/20260613_cline_mcp_tool_name_mismatch.md))
 
 
 ## [0.5.3](https://github.com/mrsalty/slowave/compare/slowave-v0.5.2...slowave-v0.5.3) (2026-06-13)
