@@ -1,0 +1,490 @@
+#!/usr/bin/env python3
+"""StaleMemory evaluation harness for Slowave.
+
+Evaluates Slowave's ability to detect implicit belief drift (staleness).
+Each scenario has multi-session traces where a user preference changes
+implicitly (through behavior, never explicitly stated after session 0).
+Slowave must recall the *post-drift* (current) preference, not the
+originally-established stale one.
+
+Based on: "When Agent Memory Anchors on What Users Said: Implicit Belief
+Staleness and Behavioral Belief Tracking" (StaleMemory benchmark, EMNLP 2026).
+Dataset: data/stalememory/scenarios.jsonl  (1,200 scenarios)
+
+Metrics (zero LLM calls):
+  - detection_rate:    recalled post-drift value (hit)
+  - stale_rate:        recalled pre-drift value (anchor pull)
+  - no_answer_rate:    neither value found
+
+Usage:
+  # Quick smoke (50 per attribute/pattern combo):
+  python tests/integration/stalememory_eval.py --limit 5
+
+  # Full run (1200 scenarios):
+  python tests/integration/stalememory_eval.py
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import logging
+import os
+import sys
+import tempfile
+import time
+from dataclasses import dataclass
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+
+logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
+for noisy in ("sentence_transformers", "transformers", "httpx", "httpcore",
+              "huggingface_hub", "filelock", "tqdm"):
+    logging.getLogger(noisy).setLevel(logging.ERROR)
+
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
+
+REPO_ROOT = Path(__file__).resolve().parent.parent.parent
+sys.path.insert(0, str(REPO_ROOT))
+
+from slowave.core.config import SlowaveConfig
+from slowave.core.engine import SlowaveEngine
+from slowave.latent.replay_engine import ReplayConfig
+from slowave.latent.retrieval import RetrievalConfig
+from slowave.latent.salience import SalienceConfig
+from slowave.symbolic.encoder import EncoderConfig, TextEncoder
+
+ALL_ATTRIBUTES = [
+    "programming_language", "output_format", "communication_style",
+    "naming_convention", "error_handling", "explanation_approach",
+    "example_scope", "tool_preference",
+]
+DRIFT_PATTERNS = ["abrupt", "gradual", "noisy"]
+
+
+# ── Scoring ──────────────────────────────────────────────────────────────────
+
+def _value_present(text: str, value: str) -> bool:
+    text_lower = text.lower()
+    value_lower = value.lower()
+    if value_lower in text_lower:
+        return True
+    if "_" in value:
+        if value.replace("_", " ").lower() in text_lower:
+            return True
+        if value.replace("_", "").lower() in text_lower:
+            return True
+    return False
+
+
+def score_recall(
+    hypothesis: str, post_val: str, pre_val: str
+) -> tuple[bool, bool, bool]:
+    """Return (detected, stale, no_answer)."""
+    detected = _value_present(hypothesis, post_val)
+    if detected:
+        return True, False, False
+    if _value_present(hypothesis, pre_val):
+        return False, True, False
+    return False, False, True
+
+
+# ── Per-scenario runner ───────────────────────────────────────────────────────
+
+@dataclass
+class ScenarioResult:
+    scenario_id: str
+    attribute: str
+    drift_pattern: str
+    pre_drift_value: str
+    post_drift_value: str
+    probe_question: str
+    expected_answer: str
+    hypothesis: str
+    detected: bool
+    stale: bool
+    no_answer: bool
+    n_schemas: int
+    n_episodes: int
+    consolidate: bool
+    latency_ingest_s: float
+    latency_recall_s: float
+    n_sessions_ingested: int
+    error: str | None = None
+
+
+def run_scenario(
+    scenario: dict[str, Any],
+    *,
+    consolidate: bool,
+    assignment_threshold: float,
+    shared_encoder: TextEncoder,
+    top_k: int = 10,
+) -> ScenarioResult:
+    sid = scenario["scenario_id"]
+    attribute = scenario["attribute"]
+    pre_val = scenario["pre_drift_value"]
+    post_val = scenario["post_drift_value"]
+    drift_pattern = scenario["drift_pattern"]
+    probe_question = scenario["probe_question"]
+    expected = scenario["expected_answer"]
+    sessions = scenario["sessions"]
+
+    # Deterministic seed per scenario so consolidation sampling is reproducible.
+    import hashlib as _hashlib
+    import numpy as _np
+    _seed = int.from_bytes(_hashlib.sha256(str(sid).encode('utf-8')).digest()[:4], 'big') % (2**31)
+    _np.random.seed(_seed)
+
+    with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
+        db_path = f.name
+
+    try:
+        cfg = SlowaveConfig(
+            db_path=db_path,
+            dim=shared_encoder.dim,
+            encoder=EncoderConfig(),
+            salience=SalienceConfig(tau_seconds=86400.0),
+            replay=ReplayConfig(
+                assignment_threshold=assignment_threshold,
+                sample_size=256, max_prototypes_per_replay=32,
+                use_multi_scale=True,
+            ),
+            retrieval=RetrievalConfig(
+                salience_weight=0.3, neighbor_top_k=6, use_multi_scale=True,
+            ),
+            disable_encoder=False,
+        )
+        eng = SlowaveEngine(cfg, shared_encoder=shared_encoder)
+
+        # Compute synthetic timestamps: spread non-probe sessions evenly
+        # over a 180-day window ending 1 day ago, so salience decay and
+        # the temporal recency bonus operate on realistic time separations.
+        # Pre-drift sessions are months old; post-drift sessions are recent.
+        _now = int(time.time())
+        _window_end = _now - 86400          # 1 day ago
+        _window_start = _now - 180 * 86400  # 180 days ago
+        _non_probe = [s for s in sessions if not s["is_probe"]]
+        _n_non_probe = max(1, len(_non_probe))
+        def _session_ts(idx: int) -> int:
+            frac = idx / (_n_non_probe - 1) if _n_non_probe > 1 else 0.0
+            return int(_window_start + frac * (_window_end - _window_start))
+
+        n_ingested = 0
+        t_ingest_start = time.time()
+        for sess_idx, sess in enumerate(_non_probe):
+            sess_ts = _session_ts(sess_idx)
+            session_id = eng.session_start(agent="stalememory", ts=sess_ts)
+            for turn in sess["turns"]:
+                role = str(turn.get("role", "user"))
+                content = str(turn.get("content", "")).strip()
+                if not content:
+                    continue
+                etype = "user_message" if role == "user" else "assistant_message"
+                eng.event_append(session_id=session_id, type=etype, content=content, ts=sess_ts)
+            eng.session_end(session_id, consolidate=consolidate, ts=sess_ts)
+            n_ingested += 1
+        latency_ingest = time.time() - t_ingest_start
+
+        t_recall_start = time.time()
+        result = eng.recall(probe_question, top_k=top_k, evidence=False)
+        latency_recall = time.time() - t_recall_start
+
+        schemas_text = " ".join(s.content_text for s in result.schemas)
+        episodes_text = " ".join(
+            ep["content_text"] for ep in result.episode_texts if ep["content_text"]
+        )
+        hypothesis = " ".join([schemas_text, episodes_text]).strip()
+
+        detected, stale, no_answer = score_recall(hypothesis, post_val, pre_val)
+        eng.close()
+
+        return ScenarioResult(
+            scenario_id=sid, attribute=attribute, drift_pattern=drift_pattern,
+            pre_drift_value=pre_val, post_drift_value=post_val,
+            probe_question=probe_question, expected_answer=expected,
+            hypothesis=hypothesis[:400],
+            detected=detected, stale=stale, no_answer=no_answer,
+            n_schemas=len(result.schemas), n_episodes=len(result.episode_texts),
+            consolidate=consolidate,
+            latency_ingest_s=round(latency_ingest, 2),
+            latency_recall_s=round(latency_recall, 4),
+            n_sessions_ingested=n_ingested,
+        )
+
+    except Exception as e:
+        return ScenarioResult(
+            scenario_id=sid, attribute=attribute, drift_pattern=drift_pattern,
+            pre_drift_value=pre_val, post_drift_value=post_val,
+            probe_question=probe_question, expected_answer=expected,
+            hypothesis="", detected=False, stale=False, no_answer=True,
+            n_schemas=0, n_episodes=0, consolidate=consolidate,
+            latency_ingest_s=0.0, latency_recall_s=0.0, n_sessions_ingested=0,
+            error=str(e),
+        )
+    finally:
+        for ext in ("", "-wal", "-shm"):
+            p = db_path + ext
+            if os.path.exists(p):
+                os.remove(p)
+
+
+# ── Report ────────────────────────────────────────────────────────────────────
+
+def print_report(results: list[ScenarioResult]) -> None:
+    print()
+    print("=" * 70)
+    print(" SLOWAVE — StaleMemory Evaluation Report")
+    print("=" * 70)
+    print(f" Dataset : StaleMemory (implicit belief staleness, 1,200 scenarios)")
+    print(f" Scorer  : keyword value-match (zero LLM calls)")
+    print(f" Total   : {len(results)} scenarios")
+    print()
+    valid = [r for r in results if not r.error]
+    n = len(valid)
+    detected = sum(1 for r in valid if r.detected)
+    stale = sum(1 for r in valid if r.stale)
+    no_ans = sum(1 for r in valid if r.no_answer)
+    errors = sum(1 for r in results if r.error)
+    print(f" {'Metric':<35} {'Count':>7}  {'Rate':>7}")
+    print(f" {'-'*35} {'-'*7}  {'-'*7}")
+    print(f" {'Detection Rate (post-drift)':<35} {detected:>7}  {100*detected/max(1,n):>6.1f}%")
+    print(f" {'Stale Persistence (anchor pull)':<35} {stale:>7}  {100*stale/max(1,n):>6.1f}%")
+    print(f" {'No Answer (neither found)':<35} {no_ans:>7}  {100*no_ans/max(1,n):>6.1f}%")
+    print(f" {'Errors':<35} {errors:>7}  {100*errors/max(1,len(results)):>6.1f}%")
+    print()
+    print(f" {'Drift Pattern':<20} {'N':>5}  {'Detect':>8}  {'Stale':>7}  {'NoAns':>7}")
+    print(f" {'-'*20} {'-'*5}  {'-'*8}  {'-'*7}  {'-'*7}")
+    for pattern in DRIFT_PATTERNS:
+        rs = [r for r in valid if r.drift_pattern == pattern]
+        if not rs:
+            continue
+        pn = len(rs)
+        d = sum(1 for r in rs if r.detected)
+        s = sum(1 for r in rs if r.stale)
+        na = sum(1 for r in rs if r.no_answer)
+        print(f" {pattern:<20} {pn:>5}  {100*d/pn:>7.1f}%  {100*s/pn:>6.1f}%  {100*na/pn:>6.1f}%")
+    print()
+    print(f" {'Attribute':<25} {'N':>5}  {'Detect':>8}  {'Stale':>7}  {'NoAns':>7}")
+    print(f" {'-'*25} {'-'*5}  {'-'*8}  {'-'*7}  {'-'*7}")
+    for attr in ALL_ATTRIBUTES:
+        rs = [r for r in valid if r.attribute == attr]
+        if not rs:
+            continue
+        an = len(rs)
+        d = sum(1 for r in rs if r.detected)
+        s = sum(1 for r in rs if r.stale)
+        na = sum(1 for r in rs if r.no_answer)
+        print(f" {attr:<25} {an:>5}  {100*d/an:>7.1f}%  {100*s/an:>6.1f}%  {100*na/an:>6.1f}%")
+    print()
+    if valid:
+        ingests = sorted(r.latency_ingest_s for r in valid)
+        recalls = sorted(r.latency_recall_s for r in valid)
+        print(" Latency summary")
+        print(f"  ingest: mean={sum(ingests)/len(ingests):.2f}s  "
+              f"p50={ingests[len(ingests)//2]:.2f}s  max={ingests[-1]:.2f}s")
+        print(f"  recall: mean={sum(recalls)/len(recalls)*1000:.1f}ms  "
+              f"p50={recalls[len(recalls)//2]*1000:.1f}ms  max={recalls[-1]*1000:.1f}ms")
+    print()
+    stale_misses = [r for r in valid if r.stale][:5]
+    if stale_misses:
+        print(" Sample stale misses (anchor pull):")
+        for r in stale_misses:
+            print(f"  [{r.attribute}/{r.drift_pattern}] {r.pre_drift_value}→{r.post_drift_value}")
+            print(f"    Recalled: {r.hypothesis[:100]}")
+    print()
+    print("=" * 70)
+
+
+# ── Payload helpers ───────────────────────────────────────────────────────────
+
+def _result_row(r: ScenarioResult) -> dict[str, Any]:
+    return {
+        "scenario_id": r.scenario_id, "attribute": r.attribute,
+        "drift_pattern": r.drift_pattern, "pre_drift_value": r.pre_drift_value,
+        "post_drift_value": r.post_drift_value, "probe_question": r.probe_question,
+        "expected_answer": r.expected_answer, "hypothesis": r.hypothesis,
+        "detected": r.detected, "stale": r.stale, "no_answer": r.no_answer,
+        "n_schemas": r.n_schemas, "n_episodes": r.n_episodes,
+        "latency_ingest_s": r.latency_ingest_s, "latency_recall_s": r.latency_recall_s,
+        "n_sessions_ingested": r.n_sessions_ingested, "error": r.error,
+    }
+
+
+def _build_payload(
+    *, results: list[ScenarioResult], dataset_path: Path,
+    args: argparse.Namespace, total_elapsed: float, partial: bool,
+) -> dict[str, Any]:
+    valid = [r for r in results if not r.error]
+    n = len(valid)
+    by_pattern: dict[str, dict] = {}
+    for pat in DRIFT_PATTERNS:
+        rs = [r for r in valid if r.drift_pattern == pat]
+        if not rs:
+            continue
+        pn = len(rs)
+        by_pattern[pat] = {
+            "n": pn,
+            "detection_rate": round(sum(1 for r in rs if r.detected) / pn, 4),
+            "stale_rate": round(sum(1 for r in rs if r.stale) / pn, 4),
+            "no_answer_rate": round(sum(1 for r in rs if r.no_answer) / pn, 4),
+        }
+    by_attribute: dict[str, dict] = {}
+    for attr in ALL_ATTRIBUTES:
+        rs = [r for r in valid if r.attribute == attr]
+        if not rs:
+            continue
+        an = len(rs)
+        by_attribute[attr] = {
+            "n": an,
+            "detection_rate": round(sum(1 for r in rs if r.detected) / an, 4),
+            "stale_rate": round(sum(1 for r in rs if r.stale) / an, 4),
+            "no_answer_rate": round(sum(1 for r in rs if r.no_answer) / an, 4),
+        }
+    detected = sum(1 for r in valid if r.detected)
+    stale_c = sum(1 for r in valid if r.stale)
+    no_ans = sum(1 for r in valid if r.no_answer)
+    return {
+        "meta": {
+            "benchmark": "StaleMemory",
+            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "partial": partial, "dataset": str(dataset_path),
+            "limit": args.limit, "attributes": args.attributes,
+            "drift_patterns": args.drift_patterns,
+            "consolidate": not args.no_consolidate,
+            "assignment_threshold": args.assignment_threshold,
+            "top_k": args.top_k,
+            "total_elapsed_s": round(total_elapsed, 2),
+            "llm_calls": 0,
+        },
+        "summary": {
+            "n": len(results), "n_valid": n,
+            "detection_rate": round(detected / max(1, n), 4),
+            "stale_rate": round(stale_c / max(1, n), 4),
+            "no_answer_rate": round(no_ans / max(1, n), 4),
+            "by_drift_pattern": by_pattern,
+            "by_attribute": by_attribute,
+        },
+        "results": [_result_row(r) for r in results],
+    }
+
+
+def _write_payload(out_path: Path, payload: dict[str, Any]) -> None:
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out_path.with_suffix(out_path.suffix + ".tmp")
+    with open(tmp, "w") as f:
+        json.dump(payload, f, indent=2)
+    os.replace(tmp, out_path)
+
+
+# ── Main ──────────────────────────────────────────────────────────────────────
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description="StaleMemory evaluation harness for Slowave")
+    parser.add_argument("--dataset", default="data/stalememory/scenarios.jsonl")
+    parser.add_argument("--attributes", nargs="+", default=ALL_ATTRIBUTES)
+    parser.add_argument("--drift-patterns", nargs="+", default=DRIFT_PATTERNS, dest="drift_patterns")
+    parser.add_argument("--limit", type=int, default=0,
+                        help="Max scenarios per attribute×pattern (0=all)")
+    parser.add_argument("--no-consolidate", action="store_true")
+    parser.add_argument("--assignment-threshold", type=float, default=0.85)
+    parser.add_argument("--top-k", type=int, default=10)
+    parser.add_argument("--out", default="")
+    args = parser.parse_args()
+
+    dataset_path = Path(args.dataset)
+    if not dataset_path.is_absolute():
+        dataset_path = REPO_ROOT / dataset_path
+
+    print(f"Loading dataset: {dataset_path}")
+    scenarios: list[dict] = []
+    with open(dataset_path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                scenarios.append(json.loads(line))
+    print(f"Total in file: {len(scenarios)}")
+
+    selected: list[dict] = []
+    combo_count: dict[tuple[str, str], int] = {}
+    for s in scenarios:
+        attr = s["attribute"]
+        pattern = s["drift_pattern"]
+        if attr not in args.attributes or pattern not in args.drift_patterns:
+            continue
+        key = (attr, pattern)
+        combo_count[key] = combo_count.get(key, 0)
+        if args.limit > 0 and combo_count[key] >= args.limit:
+            continue
+        selected.append(s)
+        combo_count[key] += 1
+
+    print(f"Selected: {len(selected)} scenarios")
+    if args.limit:
+        print(f"(capped at {args.limit} per attribute×pattern)")
+    print(f"consolidate={not args.no_consolidate}  threshold={args.assignment_threshold}  top_k={args.top_k}")
+
+    print("Loading encoder (bge-small-en-v1.5)...", end=" ", flush=True)
+    enc_cfg = EncoderConfig()
+    shared_enc = TextEncoder(enc_cfg)
+    _ = shared_enc.dim
+    print(f"OK (dim={shared_enc.dim})")
+    print()
+
+    if args.out:
+        out_path = Path(args.out)
+    else:
+        stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        mode_tag = "with_consolidation" if not args.no_consolidate else "no_consolidation"
+        out_path = Path(f"data/stalememory/runs/{stamp}_{mode_tag}.json")
+    if not out_path.is_absolute():
+        out_path = REPO_ROOT / out_path
+
+    results: list[ScenarioResult] = []
+    t_start = time.time()
+    try:
+        for i, scenario in enumerate(selected):
+            r = run_scenario(
+                scenario,
+                consolidate=not args.no_consolidate,
+                assignment_threshold=args.assignment_threshold,
+                shared_encoder=shared_enc,
+                top_k=args.top_k,
+            )
+            status = "HIT " if r.detected else ("STALE" if r.stale else "NOAN")
+            err = f" ERROR:{r.error[:50]}" if r.error else ""
+            print(
+                f"[{i+1:>4}/{len(selected)}] {r.attribute:<25} {r.drift_pattern:<8} "
+                f"{status}  {r.pre_drift_value}→{r.post_drift_value}  "
+                f"ingest={r.latency_ingest_s:.1f}s recall={r.latency_recall_s*1000:.0f}ms"
+                f"  sch={r.n_schemas} epi={r.n_episodes}{err}",
+                flush=True,
+            )
+            results.append(r)
+            _write_payload(
+                out_path,
+                _build_payload(results=results, dataset_path=dataset_path,
+                                args=args, total_elapsed=time.time() - t_start, partial=True),
+            )
+    except KeyboardInterrupt:
+        _write_payload(
+            out_path,
+            _build_payload(results=results, dataset_path=dataset_path,
+                            args=args, total_elapsed=time.time() - t_start, partial=True),
+        )
+        print(f"\nInterrupted. Partial results saved to: {out_path}")
+        raise
+
+    total_elapsed = time.time() - t_start
+    print(f"\nCompleted {len(results)} scenarios in {total_elapsed:.1f}s")
+    print_report(results)
+    payload = _build_payload(results=results, dataset_path=dataset_path,
+                             args=args, total_elapsed=total_elapsed, partial=False)
+    _write_payload(out_path, payload)
+    print(f"\nResults saved to: {out_path}")
+
+
+if __name__ == "__main__":
+    main()

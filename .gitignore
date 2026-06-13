@@ -1,0 +1,86 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg
+*.egg-info/
+dist/
+build/
+eggs/
+parts/
+var/
+sdist/
+wheels/
+lib/
+lib64/
+.installed.cfg
+*.egg-info
+MANIFEST
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+.env
+
+# Testing
+.pytest_cache/
+.coverage
+coverage.xml
+htmlcov/
+.tox/
+*.cover
+
+# IDEs
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Benchmark run outputs (keep datasets, not results)
+data/*/runs/
+data/runs/
+data/benchmark_regression_test/
+data/longmemeval/debug_dbs/
+data/longmemeval/logs/
+data/longmemeval/RESULTS_SUMMARY.md
+data/temporal_eval_*.json
+data/token_efficiency/
+
+# Benchmark datasets — not tracked in git (too large or third-party licensed).
+# Run scripts/download_datasets.sh to fetch them.
+data/longmemeval/longmemeval_oracle.json
+data/longmemeval/longmemeval_s_cleaned.json
+data/dmr_original/msc_self_instruct.jsonl
+data/stalememory/scenarios.jsonl
+data/stalememory/manifest.json
+data/locomo/locomo10.json
+
+# Private working docs
+docs/iterations/
+
+# Build artifacts
+*.whl
+*.tar.gz
+*.zip
+
+# Backup files
+*.bak
+*.orig
+
+# Local DB (user data, never commit)
+*.db
+!tests/**/*.db
+
+# uv
+.uv/
+
