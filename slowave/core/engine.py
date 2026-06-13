@@ -65,6 +65,7 @@ def _prefix_date(text: str, ts: int) -> str:
         return text
 
 
+
 def _default_memory_layer(schema_type: str) -> str:
     """Best-effort generic layer for explicit user memories."""
     t = str(schema_type or "").strip().lower()
@@ -73,6 +74,45 @@ def _default_memory_layer(schema_type: str) -> str:
     if t in {"fact", "lesson", "warning"}:
         return "domain"
     return "workspace"
+
+
+# --- Backward-compatible remember() result object ---
+class RememberResult(int):
+    """Backward-compatible result returned by ``SlowaveEngine.remember``.
+
+    ``RememberResult`` is an ``int`` subclass whose integer value is the
+    ``event_id``. Existing callers that compare, serialize, or store the return
+    value as an integer continue to work, while Python API users can access the
+    created memory/schema metadata through attributes.
+    """
+
+    event_id: int
+    schema_id: int
+    created_schema: "Schema | None"
+    superseded_schema_ids: list[int]
+
+    def __new__(
+        cls,
+        event_id: int,
+        *,
+        schema_id: int,
+        created_schema: "Schema | None" = None,
+        superseded_schema_ids: list[int] | None = None,
+    ) -> "RememberResult":
+        obj = int.__new__(cls, event_id)
+        obj.event_id = event_id
+        obj.schema_id = schema_id
+        obj.created_schema = created_schema
+        obj.superseded_schema_ids = list(superseded_schema_ids or [])
+        return obj
+
+    def as_dict(self) -> dict[str, Any]:
+        """Return a JSON-friendly representation of the remember result."""
+        return {
+            "event_id": self.event_id,
+            "schema_id": self.schema_id,
+            "superseded_schema_ids": list(self.superseded_schema_ids),
+        }
 
 
 class SlowaveEngine:
@@ -369,7 +409,7 @@ class SlowaveEngine:
         session_id: str | None = None,
         agent: str = "cli",
         scope: str | None = None,
-    ) -> int:
+    ) -> RememberResult:
         """Explicit user-driven memory. Logged as a high-salience event.
 
         Two paths depending on whether a live session_id is provided:
@@ -385,6 +425,10 @@ class SlowaveEngine:
           with an empty episode list.  The session is NOT ended here — that
           is the caller's responsibility.  This avoids double episode
           formation: once here and again when session_end runs.
+
+        Returns a ``RememberResult``. It behaves like the old integer event id
+        for backward compatibility, and also exposes ``event_id``, ``schema_id``,
+        ``created_schema``, and ``superseded_schema_ids`` for Python API users.
         """
         caller_owns_session = session_id is not None
 
@@ -431,6 +475,8 @@ class SlowaveEngine:
             evidence=[(episode_ids[0] if episode_ids else None, event_id, content, 1.0)],
         )
 
+        superseded_schema_ids: list[int] = []
+
         # Pattern-based deterministic supersession (before geometric check).
         # Detects explicit update signals like "now uses", "switched from X to Y", etc.
         # Only applies to explicit_remember; doesn't interfere with geometric logic below.
@@ -451,6 +497,8 @@ class SlowaveEngine:
                             relation="supersedes",
                             confidence=cand.confidence,
                         )
+                        if cand.old_schema_id not in superseded_schema_ids:
+                            superseded_schema_ids.append(cand.old_schema_id)
                     except (KeyError, Exception):
                         pass
                 else:
@@ -494,8 +542,20 @@ class SlowaveEngine:
                         relation="supersedes",
                         confidence=1.0,
                     )
+                    if candidate_id not in superseded_schema_ids:
+                        superseded_schema_ids.append(candidate_id)
 
-        return event_id
+        try:
+            created_schema = self.schemas.get(new_schema_id)
+        except KeyError:
+            created_schema = None
+
+        return RememberResult(
+            event_id,
+            schema_id=new_schema_id,
+            created_schema=created_schema,
+            superseded_schema_ids=superseded_schema_ids,
+        )
 
     # ---- consolidation ----------------------------------------------------
     def consolidate_once(self, *, triggered_by: str = "worker") -> dict[str, Any]:
