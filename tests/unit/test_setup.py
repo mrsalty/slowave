@@ -305,7 +305,8 @@ def fake_home(tmp_path, monkeypatch):
 
 class TestCleanupRemoveLifecycleBlocks:
     def test_removes_block_from_clinerules(self, fake_home):
-        target = fake_home / ".clinerules"
+        target = fake_home / ".cline" / "rules" / "slowave.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
         block = _lifecycle_block("cline-tui")
         target.write_text(block + "\n# My Notes\n", encoding="utf-8")
 
@@ -330,7 +331,8 @@ class TestCleanupRemoveLifecycleBlocks:
         assert not target.exists() or _MARKER_START not in target.read_text()
 
     def test_dry_run_does_not_modify_files(self, fake_home):
-        target = fake_home / ".clinerules"
+        target = fake_home / ".cline" / "rules" / "slowave.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
         block = _lifecycle_block("cline-tui")
         original = block + "\n# Notes\n"
         target.write_text(original, encoding="utf-8")
@@ -340,7 +342,8 @@ class TestCleanupRemoveLifecycleBlocks:
         assert target.read_text() == original
 
     def test_no_op_on_file_without_slowave_content(self, fake_home):
-        target = fake_home / ".clinerules"
+        target = fake_home / ".cline" / "rules" / "slowave.md"
+        target.parent.mkdir(parents=True, exist_ok=True)
         target.write_text("# Regular rules\n", encoding="utf-8")
 
         count = _cleanup_mod._remove_lifecycle_blocks(dry_run=False)
