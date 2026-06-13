@@ -33,6 +33,7 @@ def run_dashboard(
     open_browser: bool = True,
 ) -> None:
     """Run the local dashboard HTTP server."""
+    import sys as _sys
     db_path = os.path.abspath(os.path.expanduser(db_path))
     if host not in ("127.0.0.1", "localhost", "::1"):
         print(
@@ -46,7 +47,20 @@ def run_dashboard(
         refresh_ms=int(refresh_ms),
         allow_actions=bool(allow_actions),
     )
-    server = ThreadingHTTPServer((host, int(port)), handler)
+    try:
+        server = ThreadingHTTPServer((host, int(port)), handler)
+    except OSError as exc:
+        if exc.errno == 48 or exc.errno == 98:  # EADDRINUSE (macOS=48, Linux=98)
+            print(
+                f"\n✗  Port {port} is already in use.\n"
+                f"   Another slowave dashboard may already be running.\n"
+                f"   Open http://{host}:{port} in your browser, or stop it first:\n"
+                f"     pkill -f 'slowave dashboard'\n"
+                f"   Then re-run: slowave dashboard",
+                flush=True,
+            )
+            _sys.exit(1)
+        raise
     url = f"http://{host}:{int(port)}"
     print(f"slowave dashboard: {url}", flush=True)
     print(f"db: {db_path}", flush=True)
@@ -406,8 +420,21 @@ def _slowave_processes() -> list[dict[str, Any]]:
         )
     except Exception:
         return []
+
+    # Build a pid→command map for ALL processes in one pass so we can look up
+    # parent commands without spawning one ps(1) subprocess per slowave process.
+    all_commands: dict[int, str] = {}
+    lines = out.splitlines()
+    for line in lines[1:]:
+        parts = line.strip().split(None, 5)
+        if len(parts) >= 6:
+            try:
+                all_commands[int(parts[0])] = parts[5]
+            except (ValueError, IndexError):
+                pass
+
     rows: list[dict[str, Any]] = []
-    for line in out.splitlines()[1:]:
+    for line in lines[1:]:
         parts = line.strip().split(None, 5)
         if len(parts) < 6:
             continue
@@ -421,13 +448,7 @@ def _slowave_processes() -> list[dict[str, Any]]:
         )
         if not (is_mcp or is_worker or is_dashboard):
             continue
-        parent_command = None
-        try:
-            parent_command = subprocess.check_output(
-                ["ps", "-p", str(ppid), "-o", "command="], text=True, stderr=subprocess.DEVNULL
-            ).strip() or None
-        except Exception:
-            pass
+        parent_command = all_commands.get(int(ppid)) or None
         rows.append({
             "pid": int(pid),
             "ppid": int(ppid),
