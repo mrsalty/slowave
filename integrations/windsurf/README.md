@@ -12,7 +12,7 @@ slowave setup --client windsurf
 ```
 
 `slowave setup` handles everything automatically:
-- Patches Windsurf's MCP config with the `slowave-mcp` server block
+- Patches Windsurf's MCP config to connect to the Slowave HTTP daemon
 - Injects the lifecycle instruction block into `~/.codeium/windsurf/memories/global_rules.md`
 - Installs the background worker service
 
@@ -47,13 +47,14 @@ Edit `~/.codeium/windsurf/mcp_config.json` (create it if missing):
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp"
+      "type": "http",
+      "url": "http://127.0.0.1:8766/mcp"
     }
   }
 }
 ```
 
-Use the path from `which slowave-mcp`. Restart Windsurf after editing.
+Make sure the daemon is running (`slowave serve start`). Restart Windsurf after editing.
 
 ---
 
@@ -78,7 +79,7 @@ slowave recall "what is my favourite food"
 
 | Symptom | Fix |
 |---|---|
-| Tools don't appear | Check MCP path (`slowave setup --dry-run`), check JSON syntax, restart Windsurf |
+| Tools don't appear | Run `slowave serve start`, then `slowave serve status`; restart Windsurf |
 | Tools appear but aren't called | `global_rules.md` block missing — re-run `slowave setup` |
 | Sessions are empty | Verify `global_rules.md` has the Slowave lifecycle block — re-run `slowave setup` |
-| Stale MCP path after `brew upgrade` | Re-run `slowave setup` — it detects and fixes the stale path |
+

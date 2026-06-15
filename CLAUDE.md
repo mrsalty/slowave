@@ -80,13 +80,25 @@ SLOWAVE_DB           Default: ~/.slowave/slowave.db
 
 ## Slowave memory usage (this repo)
 
-This repo has Slowave MCP configured. When working here use the 5-verb cognitive cycle:
+This repo has Slowave MCP configured. Use the session-event-context lifecycle:
 
-> **Scope rule:** Always set `scope="project:slowave"` for all calls in this repo.
-> Omitting scope causes memories from unrelated projects to bleed into retrieval results.
+> **Scope rule:** Always set `project="slowave"` for all calls in this repo.
+> Omitting project causes memories from unrelated projects to bleed into retrieval results.
 
-1. **Task start**: `slowave_activate(query="<task>", scope="project:slowave", goal="<3-6 word verb-noun phrase>", task_type="<category>")` → stores `retrieval_id` and `session_id`.
-2. **Durable facts**: `slowave_remember(content, type, scope="project:slowave")` — for decisions, lessons, constraints, architectural facts that persist across sessions. Do NOT store ephemeral state (current PR, in-progress bug, temp workarounds) — that belongs in events, encoded automatically.
-3. **Mid-task lookup**: `slowave_recall(query, scope="project:slowave")` — when you need specific historical context not surfaced by activate. Always pass scope to avoid cross-project bleed.
-4. **Feedback** *(mandatory after using memories)*: `slowave_reinforce(retrieval_id, feedback, outcome, used_memory_ids=[...])`. Feedback is NOT auto-fired; skipping it means slowave cannot learn.
-5. **Task end**: `slowave_commit(scope="project:slowave", outcome="success|partial|failure")` — closes session, forms episodes.
+**Session lifecycle — mandatory:**
+
+1. **Task start**: `slowave_session_start(agent="cline-tui", project="slowave")` → store returned `session_id`.
+2. **Log user request**: `slowave_event(session_id, "user_message", "<self-contained summary>")`.
+3. **Prime context**: `slowave_context(project="slowave", limit=8, query="<task>", application="cline-tui", topics=[], entities=["Slowave"], mode="default")`.
+4. **During work**: call `slowave_event(session_id, type, content)` for every meaningful exchange, decision, tool result, or error. Types: `user_message`, `assistant_message`, `tool_call`, `tool_result`, `decision`, `discovery`, `error`, `task_complete`, `task_failed`.
+5. **Task end**: `slowave_event(session_id, "assistant_message", "<summary>")` then `slowave_session_end(session_id)`.
+
+**Durable facts** (facts that survive independently): `slowave_remember(content, type, project="slowave")` — for long-lived preferences, decisions, constraints, lessons, procedures, warnings, tasks, or open questions. Types: `fact`, `preference`, `decision`, `constraint`, `procedure`, `task`, `open_question`, `warning`, `lesson`, `artifact`.
+
+**Broad memory search** (investigation, evidence drill-through): `slowave_recall(query, top_k=5, evidence=true)` — intentionally broad, may return cross-project summaries. Do NOT use for default scoped context; use `slowave_context` instead.
+
+**Anti-patterns to avoid:**
+- Calling only `slowave_session_start` + `slowave_session_end` with no events between.
+- Batching all events into one giant call at the end.
+- Using `slowave_recall` for default task priming (use `slowave_context` instead).
+- Forgetting to log `tool_result` events when tools reveal new information.

@@ -555,11 +555,13 @@ def _slowave_processes() -> list[dict[str, Any]]:
         if len(parts) < 5:
             continue
         pid, ppid, stat, rss, command = parts
-        if (
-            "slowave-mcp" not in command
-            and "slowave worker" not in command
-            and "slowave.cli.main" not in command
-        ):
+        if not any(token in command for token in (
+            "slowave.mcp.http_server",
+            "slowave-mcp-http",
+            "slowave worker",
+            "slowave.cli.main",
+            "slowave serve",
+        )):
             continue
         rows.append(
             {
@@ -1110,6 +1112,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
         check_embedding_backend,
         check_sqlite_write,
         check_mcp_server,
+        check_http_daemon,
     )
     from slowave.cli.clients import get_client_statuses, summarize_client_status
     from slowave import __version__
@@ -1142,6 +1145,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             "embedding_backend": check_embedding_backend(),
             "sqlite_write": check_sqlite_write(),
             "mcp_server": check_mcp_server(),
+            "http_daemon": check_http_daemon(),
         }
 
         result["runtime"] = {
@@ -1222,6 +1226,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             check_embedding_backend(),
             check_sqlite_write(),
             check_mcp_server(),
+            check_http_daemon(),
         ]
 
         for check in checks:
@@ -1438,12 +1443,25 @@ def uninstall_cmd(dry_run: bool) -> None:
                 changes.append("systemd worker")
         elif system == "Windows":
             try:
-                subprocess.run(["powershell", "-Command", "Unregister-ScheduledTask -TaskName SlowaveWorker -Confirm:$false"], capture_output=True, check=False)
-                changes.append("Task Scheduler worker")
-            except:
+                subprocess.run(["powershell", "-NonInteractive", "-Command",
+                                "Unregister-ScheduledTask -TaskName SlowaveDaemon -Confirm:$false -ErrorAction SilentlyContinue"],
+                               capture_output=True, check=False)
+                changes.append("Task Scheduler daemon (SlowaveDaemon)")
+            except Exception:
+                pass
+            try:
+                subprocess.run(["powershell", "-NonInteractive", "-Command",
+                                "Unregister-ScheduledTask -TaskName SlowaveWorker -Confirm:$false -ErrorAction SilentlyContinue"],
+                               capture_output=True, check=False)
+                changes.append("Task Scheduler worker (SlowaveWorker)")
+            except Exception:
                 pass
     else:
-        changes.append(f"worker ({system})")
+        if system == "Windows":
+            changes.append("Task Scheduler daemon (SlowaveDaemon)")
+            changes.append("Task Scheduler worker (SlowaveWorker)")
+        else:
+            changes.append(f"worker ({system})")
 
     if changes:
         click.echo("  Removed:" if not dry_run else "  Would remove:")
@@ -1472,3 +1490,181 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
+# ---------------------------------------------------------------------------
+# serve command group
+# ---------------------------------------------------------------------------
+
+@cli.group("serve")
+def serve_cmd() -> None:
+    """Manage the Slowave HTTP MCP daemon."""
+
+
+@serve_cmd.command("start")
+@click.option(
+    "--host",
+    default="127.0.0.1",
+    show_default=True,
+    help="Bind host (default 127.0.0.1, localhost only).",
+)
+@click.option(
+    "--port",
+    default=8766,
+    show_default=True,
+    help="Bind port for the HTTP MCP daemon.",
+)
+@click.option(
+    "--log-level",
+    default="INFO",
+    show_default=True,
+    type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
+)
+@click.option(
+    "--foreground", "-f",
+    is_flag=True,
+    help="Run in foreground (block). Default: run in foreground (background not yet supported).",
+)
+def serve_start(
+    host: str,
+    port: int,
+    log_level: str,
+    foreground: bool,
+) -> None:
+    """Start the Slowave HTTP MCP daemon.
+
+    Starts a persistent HTTP MCP server on http://<HOST>:<PORT>/mcp
+    (default http://127.0.0.1:8766/mcp).  Only ONE daemon process should
+    run at a time; the daemon enforces this via a PID file.
+
+    Configure AI clients to use HTTP mode:
+
+    \b
+      {"mcpServers": {"slowave": {"type": "http", "url": "http://127.0.0.1:8766/mcp"}}}
+    """
+    from slowave.mcp.daemon import is_running, read_pid
+    from slowave.mcp.http_server import main as http_main
+
+    if is_running():
+        click.echo(
+            click.style("  ERROR", fg="red", bold=True)
+            + f"  Daemon already running (pid={read_pid()}). "
+            "Run 'slowave serve stop' to stop it."
+        )
+        sys.exit(1)
+
+    click.echo(
+        click.style("  Starting", fg="green", bold=True)
+        + f"  Slowave HTTP MCP daemon on http://{host}:{port}/mcp"
+    )
+    click.echo("  Press Ctrl+C to stop.")
+    http_main(host=host, port=port, log_level=log_level)
+
+
+@serve_cmd.command("stop")
+def serve_stop() -> None:
+    """Stop the running Slowave HTTP MCP daemon."""
+    from slowave.mcp.daemon import is_running, stop_daemon, read_pid
+
+    if not is_running():
+        click.echo("  No daemon is currently running.")
+        return
+
+    pid = read_pid()
+    if stop_daemon():
+        click.echo(click.style("  Stopped", fg="green") + f"  daemon (pid={pid}).")
+    else:
+        click.echo(click.style("  ERROR", fg="red") + "  Could not stop daemon.")
+        sys.exit(1)
+
+
+@serve_cmd.command("status")
+@click.option("--json", "as_json", is_flag=True, help="JSON output.")
+def serve_status(as_json: bool) -> None:
+    """Show the status of the Slowave HTTP MCP daemon."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+    from slowave.mcp.daemon import daemon_status
+    from slowave import __version__
+
+    status = daemon_status()
+    mcp_url = f"http://127.0.0.1:8766/mcp"
+    health_url = f"http://127.0.0.1:8766/health"
+
+    # Try to fetch live health from running daemon
+    health: dict = {}
+    if status["running"]:
+        try:
+            with urllib.request.urlopen(health_url, timeout=2) as resp:
+                health = _json.loads(resp.read())
+        except Exception:
+            pass
+
+    payload = {
+        **status,
+        "mcp_url": mcp_url,
+        "health": health,
+    }
+
+    if as_json:
+        click.echo(_json.dumps(payload, indent=2))
+        return
+
+    from slowave.cli.output import get_renderer, Status
+
+    renderer = get_renderer(use_emoji=False)
+    renderer.title("Slowave HTTP MCP Daemon")
+
+    renderer.section("Daemon")
+    daemon_status_label = Status.OK if status["running"] else Status.SKIP
+    renderer.check(
+        "HTTP MCP Daemon",
+        daemon_status_label,
+        f"pid={status['pid']}" if status["running"] else "not running",
+    )
+    renderer.item("PID file", status["pid_file"], dim=True)
+    renderer.item("MCP URL", mcp_url)
+
+    if health:
+        renderer.section("Live Status")
+        renderer.item("Version", health.get("version", "?"))
+        renderer.item("Active sessions", str(health.get("active_sessions", 0)))
+        renderer.item("Database", health.get("db", "?"), dim=True)
+
+    if not status["running"]:
+        renderer.hint("Start with: slowave serve start")
+
+
+@serve_cmd.command("restart")
+@click.option("--host", default="127.0.0.1", show_default=True)
+@click.option("--port", default=8766, show_default=True)
+@click.option("--log-level", default="INFO", show_default=True)
+def serve_restart(host: str, port: int, log_level: str) -> None:
+    """Restart the Slowave HTTP MCP daemon."""
+    import time as _time
+    from slowave.mcp.daemon import is_running, stop_daemon, read_pid
+    from slowave.mcp.http_server import main as http_main
+
+    if is_running():
+        pid = read_pid()
+        click.echo(f"  Stopping daemon (pid={pid})...")
+        stop_daemon()
+        # Wait briefly for old process to exit
+        for _ in range(10):
+            _time.sleep(0.3)
+            if not is_running():
+                break
+        if is_running():
+            click.echo(click.style("  ERROR", fg="red") + "  Old daemon did not exit in time.")
+            sys.exit(1)
+        click.echo("  Old daemon stopped.")
+
+    click.echo(
+        click.style("  Starting", fg="green", bold=True)
+        + f"  Slowave HTTP MCP daemon on http://{host}:{port}/mcp"
+    )
+    http_main(host=host, port=port, log_level=log_level)
+
+
+# Expose serve under the main CLI
+cli.add_command(serve_cmd)
