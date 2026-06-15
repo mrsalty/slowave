@@ -12,11 +12,15 @@ slowave setup --client cline
 ```
 
 `slowave setup` handles everything automatically:
-- Patches Cline's MCP settings JSON with the `slowave-mcp` server block
+- Patches Cline's MCP settings JSON to connect to the Slowave HTTP daemon
 - Injects the lifecycle instruction block into `~/.clinerules`
 - Installs the background worker service
 
-Restart / reload Cline, then [verify](#verify).
+Then start the daemon and restart Cline:
+
+```bash
+slowave serve start
+```
 
 ---
 
@@ -24,7 +28,7 @@ Restart / reload Cline, then [verify](#verify).
 
 | What | Where |
 |---|---|
-| MCP server | `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` (VS Code, macOS) |
+| MCP server (HTTP) | `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` (VS Code, macOS) |
 | Lifecycle instructions | `~/.clinerules` |
 | Background worker | launchd (macOS) / systemd (Linux) / Task Scheduler (Windows) |
 
@@ -46,13 +50,14 @@ Open Cline's MCP settings JSON and add or merge:
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp"
+      "type": "http",
+      "url": "http://127.0.0.1:8766/mcp"
     }
   }
 }
 ```
 
-Use the path from `which slowave-mcp`. Restart / reload Cline after editing.
+Make sure the daemon is running (`slowave serve start`). Restart / reload Cline after editing.
 
 ---
 

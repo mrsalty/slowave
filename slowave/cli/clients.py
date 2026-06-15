@@ -27,6 +27,7 @@ def _windsurf_mcp_config_paths() -> list[Path]:
 
 
 def _json_has_slowave_mcp(path: Path) -> bool:
+    """Return True if the config file has a slowave MCP entry (HTTP or legacy stdio)."""
     if not path.exists():
         return False
     try:
@@ -35,6 +36,20 @@ def _json_has_slowave_mcp(path: Path) -> bool:
         return False
     servers = data.get("mcpServers") or data.get("servers") or {}
     return isinstance(servers, dict) and "slowave" in servers
+
+
+def _json_has_slowave_http(path: Path) -> bool:
+    """Return True if the config file has a Slowave HTTP (url-based) MCP entry."""
+    if not path.exists():
+        return False
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+    except Exception:
+        return False
+    servers = data.get("mcpServers") or data.get("servers") or {}
+    entry = servers.get("slowave") if isinstance(servers, dict) else None
+    # HTTP entry: has "url" key (Cline uses url-only; no type field)
+    return isinstance(entry, dict) and "url" in entry and "command" not in entry
 
 
 def _any_json_has_slowave_mcp(paths: list[Path]) -> bool:
@@ -136,22 +151,40 @@ def get_client_statuses() -> dict[str, ClientStatus]:
     except: pass
 
     statuses["worker"] = ClientStatus(name="Background worker", running=worker_running)
+
+    # HTTP MCP daemon check
+    import urllib.request, urllib.error, json as _json
+    http_daemon_running = False
+    try:
+        with urllib.request.urlopen("http://127.0.0.1:8766/health", timeout=1) as resp:
+            http_daemon_running = resp.status == 200
+    except Exception:
+        pass
+    statuses["http_daemon"] = ClientStatus(name="HTTP MCP daemon", running=http_daemon_running)
+
     return statuses
 
 def summarize_client_status(client: ClientStatus) -> tuple[Status, str]:
+    if "http mcp daemon" in client.name.lower():
+        return (
+            Status.OK if client.running else Status.SKIP,
+            "running on :8766" if client.running else "not running (start with: slowave serve start)",
+        )
     if "worker" in client.name.lower():
         return (Status.OK if client.running else Status.SKIP, "running" if client.running else "not running")
     if client.name in {"Cursor", "Windsurf"}:
         if client.mcp_configured:
-            return (Status.WARN, "MCP configured; lifecycle feedback not configured or not supported")
-        return (Status.SKIP, "not configured")
+            if not client.lifecycle_enabled:
+                return (Status.WARN, "MCP configured (HTTP); lifecycle feedback not configured or not supported")
+            return (Status.OK, "MCP (HTTP)")
+        return (Status.SKIP, "not configured (run: slowave setup)")
     if "desktop" in client.name.lower():
         if not client.mcp_configured:
-            return (Status.SKIP, "not configured")
-        return (Status.WARN, "MCP configured; custom instructions missing")
+            return (Status.SKIP, "not configured (run: slowave setup)")
+        return (Status.WARN, "MCP configured (HTTP); custom instructions missing")
     if client.mcp_configured:
-        parts = ["MCP"]
+        parts = ["MCP (HTTP)"]
         if client.hooks_installed: parts.append("hooks")
         if client.lifecycle_enabled: parts.append("lifecycle")
         return (Status.OK, ", ".join(parts))
-    return (Status.SKIP, "not configured")
+    return (Status.SKIP, "not configured (run: slowave setup)")

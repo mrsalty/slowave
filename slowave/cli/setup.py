@@ -1,16 +1,16 @@
 """slowave setup — one-command post-install wiring.
 
 Automates:
-  1. Locating the slowave-mcp binary (absolute path).
-  2. Patching MCP client configs (Claude Code, Claude Desktop, Cline).
-     Claude Code MCP entry goes into ~/.claude.json (user-scope registry).
-  3. Injecting lifecycle instructions (CLAUDE.md, .clinerules) and
-     UserPromptSubmit/Stop hooks into ~/.claude/settings.json (hooks only).
-  4. Installing the background worker as a user service
+  1. Patching MCP client configs (Claude Code, Claude Desktop, Cline, Cursor, Windsurf)
+     to point to the Slowave HTTP MCP daemon at http://127.0.0.1:8766/mcp.
+  2. Injecting lifecycle instructions (CLAUDE.md, .clinerules, etc.) into client
+     rule files, and UserPromptSubmit/Stop hooks into ~/.claude/settings.json.
+  3. Installing the background worker as a user service
      (launchd on macOS, systemd on Linux, Task Scheduler on Windows).
-  5. Running `slowave doctor` to verify the result.
+  4. Running `slowave doctor` to verify the result.
 
 All steps are idempotent — re-running is always safe.
+Start the HTTP MCP daemon separately: slowave serve start
 """
 
 from __future__ import annotations
@@ -250,10 +250,18 @@ def _windsurf_global_rules_path() -> Path:
 
 
 def _cline_mcp_settings_path() -> Path:
-    """VS Code / Cursor / TUI Cline MCP settings — best-effort detection."""
+    """Return the active Cline MCP settings path (best-effort detection).
+
+    Priority:
+      1. ~/.cline/mcp.json             — Cline CLI v3 (preferred)
+      2. ~/.cline/data/settings/cline_mcp_settings.json  — older CLI / TUI
+      3. VS Code globalStorage path    — VS Code extension
+      4. Cursor globalStorage path     — Cursor extension
+    """
     if SYSTEM == "Darwin":
         candidates = [
-            _home() / ".cline/data/settings/cline_mcp_settings.json",  # Cline TUI
+            _home() / ".cline" / "mcp.json",  # Cline CLI v3
+            _home() / ".cline/data/settings/cline_mcp_settings.json",  # older TUI
             _home() / "Library/Application Support/Code/User/globalStorage"
             "/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
             _home() / "Library/Application Support/Cursor/User/globalStorage"
@@ -262,7 +270,8 @@ def _cline_mcp_settings_path() -> Path:
     elif SYSTEM == "Windows":
         appdata = os.environ.get("APPDATA", str(_home() / "AppData" / "Roaming"))
         candidates = [
-            _home() / ".cline/data/settings/cline_mcp_settings.json",  # Cline TUI
+            _home() / ".cline" / "mcp.json",  # Cline CLI v3
+            _home() / ".cline/data/settings/cline_mcp_settings.json",  # older TUI
             Path(appdata) / "Code/User/globalStorage"
             "/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
             Path(appdata) / "Cursor/User/globalStorage"
@@ -271,7 +280,8 @@ def _cline_mcp_settings_path() -> Path:
     else:
         xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
         candidates = [
-            _home() / ".cline/data/settings/cline_mcp_settings.json",  # Cline TUI
+            _home() / ".cline" / "mcp.json",  # Cline CLI v3
+            _home() / ".cline/data/settings/cline_mcp_settings.json",  # older TUI
             Path(xdg) / "Code/User/globalStorage"
             "/saoudrizwan.claude-dev/settings/cline_mcp_settings.json",
             Path(xdg) / "Cursor/User/globalStorage"
@@ -280,7 +290,8 @@ def _cline_mcp_settings_path() -> Path:
     for p in candidates:
         if p.exists():
             return p
-    return candidates[0] if candidates else _home() / "cline_mcp_settings.json"
+    # Default to CLI v3 path (creates it if needed)
+    return _home() / ".cline" / "mcp.json"
 
 
 # ---------------------------------------------------------------------------
@@ -445,57 +456,23 @@ def _all_lifecycle_paths() -> list[Path]:
 # MCP binary detection
 # ---------------------------------------------------------------------------
 
-def _find_mcp_binary() -> str | None:
-    found = shutil.which("slowave-mcp")
-    if found:
-        # Keep the stable symlink path (e.g. /opt/homebrew/bin/slowave-mcp) rather
-        # than resolving it to a versioned Cellar path that breaks on brew upgrade.
-        return str(Path(found).absolute())
-    extras: list[Path] = [
-        _home() / ".local" / "bin" / "slowave-mcp",
-        _home() / ".local" / "pipx" / "venvs" / "slowave" / "bin" / "slowave-mcp",
-        Path("/opt/homebrew/bin/slowave-mcp"),
-        Path("/usr/local/bin/slowave-mcp"),
-    ]
-    if SYSTEM == "Windows":
-        local_appdata = os.environ.get("LOCALAPPDATA", str(_home() / "AppData" / "Local"))
-        appdata = os.environ.get("APPDATA", str(_home() / "AppData" / "Roaming"))
-        # pip install on Windows puts scripts in a version-specific subdirectory, e.g.
-        # %LOCALAPPDATA%\Programs\Python\Python312\Scripts\slowave-mcp.exe
-        # Glob for any Python* subdirectory rather than hardcoding versions.
-        python_base = Path(local_appdata) / "Programs" / "Python"
-        versioned_scripts = sorted(python_base.glob("Python*/Scripts/slowave-mcp.exe"), reverse=True)
-        extras += [
-            # pip install --user (%APPDATA%\Python\PythonXY\Scripts\)
-            *sorted((Path(appdata) / "Python").glob("Python*/Scripts/slowave-mcp.exe"), reverse=True),
-            # pip install (system Python installer, version-specific)
-            *versioned_scripts,
-            # pipx on Windows (%LOCALAPPDATA%\pipx\venvs\)
-            Path(local_appdata) / "pipx" / "venvs" / "slowave" / "Scripts" / "slowave-mcp.exe",
-            Path(local_appdata) / "pipx" / "venvs" / "slowave" / "Scripts" / "slowave-mcp",
-        ]
-    for p in extras:
-        if p.exists():
-            return str(p.absolute())
-    return None
-
-
 def _find_slowave_binary() -> str:
+    """Return the absolute path to the `slowave` CLI binary."""
     found = shutil.which("slowave")
     if found:
-        # Same: keep the stable symlink, don't resolve into a versioned path.
-        return str(Path(found).absolute())
-    mcp = _find_mcp_binary() or ""
-    # e.g. /opt/homebrew/bin/slowave-mcp -> /opt/homebrew/bin/slowave
-    candidate = mcp.replace("-mcp.exe", ".exe").replace("-mcp", "")
-    if candidate and Path(candidate).exists():
-        return candidate
-    return "slowave"  # fallback — will be resolved at runtime
+        return str(Path(found).resolve())
+    # Common install locations
+    candidates: list[Path] = [
+        _home() / ".local" / "bin" / "slowave",
+        _home() / ".local" / "pipx" / "venvs" / "slowave" / "bin" / "slowave",
+        Path("/opt/homebrew/bin/slowave"),
+        Path("/usr/local/bin/slowave"),
+    ]
+    for c in candidates:
+        if c.exists():
+            return str(c)
+    return "slowave"  # fallback – rely on PATH
 
-
-# ---------------------------------------------------------------------------
-# JSON config helpers
-# ---------------------------------------------------------------------------
 
 def _backup_file(path: Path) -> Path | None:
     """Create a timestamped backup of *path* before overwriting it.
@@ -548,27 +525,66 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
-def _patch_mcp_servers(config: dict[str, Any], mcp_path: str) -> tuple[dict[str, Any], bool]:
-    """Patch mcpServers in a config dict. Uses type:stdio format (current Claude Code standard).
-    Also accepts the legacy {command} format as up-to-date to avoid spurious re-writes.
+def _patch_mcp_servers(
+    config: dict[str, Any],
+    url: str = "http://127.0.0.1:8766/mcp",
+    *,
+    include_type: bool = False,
+    use_sse: bool = False,
+) -> tuple[dict[str, Any], bool]:
+    """Patch mcpServers in a config dict to use the Slowave HTTP daemon.
+
+    Most clients (Claude Desktop, Cline, Cursor, Windsurf) use url-only: {url: <url>}.
+    Claude Code requires {type: http, url: <url>} (MCP Streamable HTTP transport).
+    Claude Desktop does NOT support type: http — url-only only.
+    Pass include_type=True only for Claude Code.
+    Migrates legacy stdio entries (command/type:stdio) transparently.
+    Returns (updated_config, changed).
     """
     servers = config.setdefault("mcpServers", {})
-    want = {"type": "stdio", "command": mcp_path}
     existing = servers.get("slowave", {})
-    # Up-to-date if it already matches the new format, or the old {command}-only format
-    if existing == want or existing == {"command": mcp_path}:
-        # Upgrade legacy format silently
-        if existing == {"command": mcp_path}:
+    effective_url = url.replace("/mcp", "/sse") if use_sse else url
+    want = {"type": "http", "url": effective_url} if include_type else {"url": effective_url}
+    # Already correct (exact match)
+    if existing == want:
+        return config, False
+    # url-only entry exists and we do not need type — already fine
+    if not include_type and isinstance(existing, dict) and existing.get("url") == effective_url and "command" not in existing:
+        # Strip any stale type field written by a previous version
+        if list(existing.keys()) != ["url"] or existing.get("type"):
             servers["slowave"] = want
             return config, True
+        return config, False
+    # Anything else (stdio, missing, different url) — overwrite
+    servers["slowave"] = want
+    return config, True
+
+
+def _patch_mcp_servers_stdio(
+    config: dict[str, Any],
+    command: str,
+) -> tuple[dict[str, Any], bool]:
+    """Patch mcpServers in a config dict to use the Slowave stdio server.
+
+    Claude Desktop uses the stdio (command-based) MCP transport — it does NOT
+    support the url-only or type:http formats used by Claude Code / Cline.
+    The correct entry is: {"command": "<absolute-path-to-slowave-mcp>"}
+    Returns (updated_config, changed).
+    """
+    servers = config.setdefault("mcpServers", {})
+    existing = servers.get("slowave", {})
+    want = {"command": command}
+    if existing == want:
         return config, False
     servers["slowave"] = want
     return config, True
 
 
 def _remove_mcp_servers_from_settings(config: dict[str, Any]) -> tuple[dict[str, Any], bool]:
-    """Remove mcpServers from settings.json (it was written there by old Slowave versions
-    but Claude Code ignores it — MCP config belongs in ~/.claude.json).
+    """Remove any slowave mcpServers entry from settings.json.
+
+    Handles both old stdio entries and any stale entries left in the wrong file.
+    MCP config belongs in the client-specific JSON (e.g. ~/.claude.json), not settings.json.
     """
     if "mcpServers" not in config:
         return config, False
@@ -823,6 +839,27 @@ _LAUNCHD_PLIST = """\
 </plist>
 """
 
+_LAUNCHD_DAEMON_PLIST = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key><string>com.slowave.daemon</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>{bin}</string>
+      <string>serve</string>
+      <string>start</string>
+    </array>
+    <key>RunAtLoad</key><true/>
+    <key>KeepAlive</key><true/>
+    <key>StandardOutPath</key><string>/tmp/slowave-daemon.log</string>
+    <key>StandardErrorPath</key><string>/tmp/slowave-daemon.err</string>
+  </dict>
+</plist>
+"""
+
 _SYSTEMD_SERVICE = """\
 [Unit]
 Description=Slowave background consolidation worker
@@ -832,6 +869,20 @@ After=network.target
 ExecStart={bin} worker --interval 300
 Restart=always
 RestartSec=10
+
+[Install]
+WantedBy=default.target
+"""
+
+_SYSTEMD_DAEMON_SERVICE = """\
+[Unit]
+Description=Slowave HTTP MCP daemon
+After=network.target
+
+[Service]
+ExecStart={bin} serve start
+Restart=always
+RestartSec=5
 
 [Install]
 WantedBy=default.target
@@ -951,18 +1002,97 @@ def _install_worker_windows(slowave_bin: str) -> tuple[str, bool]:
     return task_name, True
 
 
+def _install_daemon_macos(slowave_bin: str) -> tuple[str, bool]:
+    """Install the HTTP MCP daemon as a launchd user agent (macOS)."""
+    plist_dir = _home() / "Library" / "LaunchAgents"
+    plist_path = plist_dir / "com.slowave.daemon.plist"
+    content = _LAUNCHD_DAEMON_PLIST.format(bin=slowave_bin)
+    if plist_path.exists() and plist_path.read_text(encoding="utf-8") == content:
+        return str(plist_path), False
+    plist_dir.mkdir(parents=True, exist_ok=True)
+    plist_path.write_text(content, encoding="utf-8")
+    try:
+        subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True, check=False)
+        subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True, check=False)
+    except FileNotFoundError:
+        pass
+    return str(plist_path), True
+
+
+def _install_daemon_linux(slowave_bin: str) -> tuple[str, bool]:
+    """Install the HTTP MCP daemon as a systemd user service (Linux)."""
+    xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
+    svc_dir = Path(xdg) / "systemd" / "user"
+    svc_path = svc_dir / "slowave-daemon.service"
+    content = _SYSTEMD_DAEMON_SERVICE.format(bin=slowave_bin)
+    if svc_path.exists() and svc_path.read_text(encoding="utf-8") == content:
+        return str(svc_path), False
+    svc_dir.mkdir(parents=True, exist_ok=True)
+    svc_path.write_text(content, encoding="utf-8")
+    try:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", "slowave-daemon"],
+            capture_output=True, check=False,
+        )
+    except FileNotFoundError:
+        pass
+    return str(svc_path), True
+
+
+def _install_daemon_windows(slowave_bin: str) -> tuple[str, bool]:
+    """Register the HTTP MCP daemon as a Windows Scheduled Task."""
+    task_name = "SlowaveDaemon"
+    already_registered = False
+    try:
+        check = subprocess.run(
+            ["powershell", "-NonInteractive", "-Command",
+             f"$t = Get-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
+             f"if ($t) {{ $t.Actions[0].Execute }}"],
+            capture_output=True, text=True, check=False,
+        )
+        existing_exe = check.stdout.strip()
+        if existing_exe and existing_exe.lower() == slowave_bin.lower():
+            already_registered = True
+    except FileNotFoundError:
+        pass
+
+    if already_registered:
+        return task_name, False
+
+    ps = (
+        f"$a=New-ScheduledTaskAction -Execute '{slowave_bin}' -Argument 'serve start';"
+        f"$t=New-ScheduledTaskTrigger -AtLogOn;"
+        f"$s=New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 "
+        f"-RestartInterval (New-TimeSpan -Minutes 1);"
+        f"$p=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;"
+        f"Register-ScheduledTask -TaskName '{task_name}' -Action $a -Trigger $t -Settings $s "
+        f"-Principal $p -Force;"
+        f"Start-ScheduledTask -TaskName '{task_name}'"
+    )
+    try:
+        subprocess.run(["powershell", "-NonInteractive", "-Command", ps],
+                       capture_output=True, check=False)
+    except FileNotFoundError:
+        pass
+    return task_name, True
+
+
 def _build_summary(client: str, worker: bool, install_hooks: bool,
-                   mcp_path: str, slowave_bin: str) -> Summary:
+                   slowave_bin: str) -> Summary:
     """Build a summary of changes without modifying any files."""
     summary = Summary()
-    summary.add_binary("slowave-mcp", mcp_path)
     summary.add_binary("slowave", slowave_bin)
 
     for spec in _clients_for(client):
         mcp_file = spec.mcp_path()
         if not spec.require_dir_exists or mcp_file.parent.exists():
             cfg = _read_json(mcp_file)
-            _, changed_mcp = _patch_mcp_servers(cfg, mcp_path)
+            if spec.key == "claude-desktop":
+                slowave_mcp_bin = str(Path(slowave_bin).parent / "slowave-mcp")
+                _, changed_mcp = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
+            else:
+                _, changed_mcp = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
             summary.add_change(Change(
                 change_type=ChangeType.MCP_CONFIG,
                 client=spec.label,
@@ -1104,13 +1234,18 @@ def _section(title: str) -> None:
 def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_json: bool = False) -> None:
     """One-command post-install wiring for Claude Code, Claude Desktop, Cline, Cursor, and Windsurf.
 
+    Configures every detected client to connect to the Slowave HTTP MCP daemon
+    at http://127.0.0.1:8766/mcp.  Start the daemon separately with:
+
+        slowave serve start
+
     Automates MCP config, lifecycle instruction injection, enforcement hooks,
     and the background worker service. All steps are idempotent.
 
     \b
     Examples:
       slowave setup                       # wire everything
-      slowave setup --client claude-code  # Claude Code only
+      slowave setup --client cline        # Cline only
       slowave setup --no-worker           # skip service install
       slowave setup --dry-run             # preview without writing
     """
@@ -1120,16 +1255,12 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
 
     # 1. Binaries
     _section("1. Locating binaries")
-    mcp_path = _find_mcp_binary()
-    if not mcp_path:
-        _err("slowave-mcp not found. Install first:  pipx install slowave")
-        sys.exit(1)
-    _ok(f"slowave-mcp: {mcp_path}")
     slowave_bin = _find_slowave_binary()
-    _ok(f"slowave:     {slowave_bin}")
+    _ok(f"slowave: {slowave_bin}")
+    _ok("MCP endpoint: http://127.0.0.1:8766/mcp  (start daemon: slowave serve start)")
 
     # Build and display summary
-    summary = _build_summary(client, worker, install_hooks, mcp_path, slowave_bin)
+    summary = _build_summary(client, worker, install_hooks, slowave_bin)
     click.echo(summary.format())
     
     # Confirm unless dry-run
@@ -1148,35 +1279,26 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
             _warn(f"{spec.label} config dir not found: {mcp_file.parent}  ({spec.label} installed?)")
         else:
             cfg = _read_json(mcp_file)
-            cfg, changed = _patch_mcp_servers(cfg, mcp_path)
+            if spec.key == "claude-desktop":
+                slowave_mcp_bin = str(Path(slowave_bin).parent / "slowave-mcp")
+                cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
+                transport_label = "stdio"
+            else:
+                cfg, changed = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
+                transport_label = "HTTP"
             if changed:
                 if dry_run:
-                    _ok(f"Would add MCP server → {mcp_file}")
+                    _ok(f"Would set MCP server ({transport_label}) → {mcp_file}")
                 else:
                     _write_json(mcp_file, cfg)
-                    _ok(f"MCP server added → {mcp_file}")
+                    _ok(f"MCP server set ({transport_label}) → {mcp_file}")
             else:
-                _skip(f"MCP server already present in {mcp_file}")
-
-        # Claude Code ≤0.4.2 migration: remove stale mcpServers from settings.json
-        if spec.key == "claude-code":
-            settings_path = _claude_settings_path()
-            cfg_settings = _read_json(settings_path)
-            cfg_settings, cleaned = _remove_mcp_servers_from_settings(cfg_settings)
-            if cleaned:
-                if dry_run:
-                    _ok(f"Would remove stale mcpServers from {settings_path} (moved to ~/.claude.json)")
-                else:
-                    _write_json(settings_path, cfg_settings)
-                    _ok(f"Removed stale mcpServers from settings.json (moved to ~/.claude.json)")
+                _skip(f"MCP server already configured ({transport_label}) in {mcp_file}")
 
         # Enforcement hooks — data-driven via spec.hooks_patch_fn
         if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None:
             hooks_file = spec.hooks_config_path()
             cfg_hooks = _read_json(hooks_file)
-            # Re-use the already-loaded settings dict for Claude Code (avoid double-read)
-            if spec.key == "claude-code":
-                cfg_hooks = cfg_settings
             if install_hooks:
                 cfg_hooks, changed = spec.hooks_patch_fn(cfg_hooks)
                 if changed:
@@ -1204,8 +1326,45 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
         elif spec.manual_lifecycle and spec.manual_note:
             _warn(f"REQUIRED — {spec.manual_note}")
 
-    # Worker service
-    _section("7. Background worker service")
+    # HTTP MCP daemon service
+    _section("7. HTTP MCP daemon service")
+    if worker:
+        if dry_run:
+            if SYSTEM == "Darwin":
+                _ok("Would install launchd service → ~/Library/LaunchAgents/com.slowave.daemon.plist")
+            elif SYSTEM == "Linux":
+                _ok("Would install systemd service → ~/.config/systemd/user/slowave-daemon.service")
+            elif SYSTEM == "Windows":
+                _ok("Would register Task Scheduler task: SlowaveDaemon")
+            else:
+                _warn(f"Unknown platform '{SYSTEM}' — run manually: slowave serve start")
+        else:
+            if SYSTEM == "Darwin":
+                path, changed = _install_daemon_macos(slowave_bin)
+                if changed:
+                    _ok(f"launchd daemon service installed → {path}")
+                else:
+                    _skip("launchd daemon service already up-to-date")
+            elif SYSTEM == "Linux":
+                path, changed = _install_daemon_linux(slowave_bin)
+                if changed:
+                    _ok(f"systemd daemon service installed → {path}")
+                    _ok("Verify:  systemctl --user status slowave-daemon")
+                else:
+                    _skip("systemd daemon service already up-to-date")
+            elif SYSTEM == "Windows":
+                task, changed = _install_daemon_windows(slowave_bin)
+                if changed:
+                    _ok(f"Task Scheduler task registered: {task}")
+                else:
+                    _skip(f"Task Scheduler task already up-to-date: {task}")
+            else:
+                _warn(f"Unknown platform '{SYSTEM}'. Run manually: slowave serve start")
+    else:
+        _skip("Skipped (--no-worker). Run manually: slowave serve start")
+
+    # Background worker service
+    _section("8. Background worker service")
     if worker:
         if dry_run:
             if SYSTEM == "Darwin":
@@ -1220,16 +1379,16 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
             if SYSTEM == "Darwin":
                 path, changed = _install_worker_macos(slowave_bin)
                 if changed:
-                    _ok(f"launchd service installed → {path}")
+                    _ok(f"launchd worker service installed → {path}")
                 else:
-                    _skip(f"launchd service already up-to-date")
+                    _skip("launchd worker service already up-to-date")
             elif SYSTEM == "Linux":
                 path, changed = _install_worker_linux(slowave_bin)
                 if changed:
-                    _ok(f"systemd service installed → {path}")
+                    _ok(f"systemd worker service installed → {path}")
                     _ok("Verify:  systemctl --user status slowave-worker")
                 else:
-                    _skip("systemd service already up-to-date")
+                    _skip("systemd worker service already up-to-date")
             elif SYSTEM == "Windows":
                 task, _ = _install_worker_windows(slowave_bin)
                 _ok(f"Task Scheduler task registered: {task}")
@@ -1239,7 +1398,7 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     else:
         _skip("Skipped (--no-worker). Run manually: slowave worker --interval 300")
 
-    # 7. Doctor
+    # 9. Doctor
     _section("8. Verification")
     if dry_run:
         _skip("Dry-run — skipping doctor check.")

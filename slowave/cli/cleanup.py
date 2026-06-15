@@ -27,6 +27,66 @@ from slowave.cli.setup import (
 SYSTEM = platform.system()
 
 
+def _remove_daemon_service(dry_run: bool) -> int:
+    """Remove HTTP MCP daemon service. Returns 1 if removed, 0 otherwise."""
+    if SYSTEM == "Darwin":
+        plist_path = _home() / "Library" / "LaunchAgents" / "com.slowave.daemon.plist"
+        if plist_path.exists():
+            if dry_run:
+                _ok(f"Would stop and remove: {plist_path}")
+                return 0
+            try:
+                subprocess.run(["launchctl", "unload", str(plist_path)],
+                               check=False, capture_output=True)
+                plist_path.unlink()
+                _ok(f"Removed launchd daemon service: {plist_path}")
+                return 1
+            except Exception as e:
+                _warn(f"Could not remove launchd daemon service: {e}")
+        else:
+            _skip("No launchd daemon service found")
+
+    elif SYSTEM == "Linux":
+        import os
+        xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
+        service_path = Path(xdg) / "systemd" / "user" / "slowave-daemon.service"
+        if service_path.exists():
+            if dry_run:
+                _ok(f"Would stop and remove: {service_path}")
+                return 0
+            try:
+                subprocess.run(["systemctl", "--user", "stop", "slowave-daemon"],
+                               check=False, capture_output=True)
+                subprocess.run(["systemctl", "--user", "disable", "slowave-daemon"],
+                               check=False, capture_output=True)
+                service_path.unlink()
+                subprocess.run(["systemctl", "--user", "daemon-reload"],
+                               check=False, capture_output=True)
+                _ok(f"Removed systemd daemon service: {service_path}")
+                return 1
+            except Exception as e:
+                _warn(f"Could not remove systemd daemon service: {e}")
+        else:
+            _skip("No systemd daemon service found")
+
+    elif SYSTEM == "Windows":
+        if dry_run:
+            _ok("Would remove Task Scheduler task: SlowaveDaemon")
+            return 0
+        try:
+            subprocess.run(
+                ["schtasks", "/Delete", "/TN", "SlowaveDaemon", "/F"],
+                check=False, capture_output=True
+            )
+            _ok("Removed Task Scheduler task: SlowaveDaemon")
+            return 1
+        except Exception as e:
+            _warn(f"Could not remove scheduled task SlowaveDaemon: {e}")
+    else:
+        _skip(f"Unknown platform: {SYSTEM}")
+    return 0
+
+
 def _remove_worker_service(dry_run: bool) -> int:
     """Remove background worker service. Returns 1 if removed, 0 otherwise."""
     if SYSTEM == "Darwin":
@@ -255,20 +315,24 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
     
     removed_count = 0
     
-    # 1. Stop and remove worker service
-    _section("1. Background worker service")
+    # 1. Stop and remove HTTP MCP daemon service
+    _section("1. HTTP MCP daemon service")
+    removed_count += _remove_daemon_service(dry_run)
+
+    # 2. Stop and remove background worker service
+    _section("2. Background worker service")
     removed_count += _remove_worker_service(dry_run)
-    
-    # 2. Remove lifecycle blocks
-    _section("2. Lifecycle instruction blocks")
+
+    # 3. Remove lifecycle blocks
+    _section("3. Lifecycle instruction blocks")
     removed_count += _remove_lifecycle_blocks(dry_run)
-    
-    # 3. Remove MCP server configs
-    _section("3. MCP server configurations")
+
+    # 4. Remove MCP server configs
+    _section("4. MCP server configurations")
     removed_count += _remove_mcp_configs(dry_run)
-    
-    # 4. Remove data directory
-    _section("4. Local data and database")
+
+    # 5. Remove data directory
+    _section("5. Local data and database")
     slowave_dir = _home() / ".slowave"
     if slowave_dir.exists():
         if dry_run:
@@ -304,8 +368,8 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
     else:
         _skip("No ~/.slowave directory found")
 
-    # 5. Remove setup backup files
-    _section("5. Setup backup files")
+    # 6. Remove setup backup files
+    _section("6. Setup backup files")
     removed_count += _remove_setup_backups(dry_run)
 
     # Summary
