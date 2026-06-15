@@ -61,13 +61,13 @@ class TestScopeHandling:
             content="Project A specific fact",
             type="fact",
             scope="project:alpha",
-        )
+        ).schema_id
         
         proj_b_id = eng.remember(
             content="Project B specific fact",
             type="fact",
             scope="project:beta",
-        )
+        ).schema_id
         
         # Get context in strict_scope mode for project:alpha
         context = eng.context_brief(
@@ -93,18 +93,22 @@ class TestScopeHandling:
         # Store two scoped facts
         fact_a = eng.remember(content="Alpha-only constraint", type="constraint", scope="alpha")
         fact_b = eng.remember(content="Beta-only constraint", type="constraint", scope="beta")
+        # Use .schema_id explicitly — RememberResult is an int subclass whose integer
+        # value is the event_id, NOT the schema_id; comparing to schema ids requires .schema_id.
+        fact_a_sid = fact_a.schema_id
+        fact_b_sid = fact_b.schema_id
 
         # strict_scope with scope="alpha" must exclude beta
         ctx = eng.context_brief(query="constraint", scope="alpha", mode="strict_scope")
         ids = {s.id for s in ctx.schemas}
-        assert fact_a in ids, "same-scope fact must appear"
-        assert fact_b not in ids, "other-scope fact must be excluded in strict_scope"
+        assert fact_a_sid in ids, "same-scope fact must appear"
+        assert fact_b_sid not in ids, "other-scope fact must be excluded in strict_scope"
 
         # strict_scope with scope=None must behave like default (no hard exclusion)
         ctx_no_scope = eng.context_brief(query="constraint", scope=None, mode="strict_scope")
         ids_no_scope = {s.id for s in ctx_no_scope.schemas}
         # Both facts may appear when no scope is set (no hard block fires)
-        assert fact_a in ids_no_scope or fact_b in ids_no_scope, (
+        assert fact_a_sid in ids_no_scope or fact_b_sid in ids_no_scope, (
             "strict_scope with no scope must not hard-block anything"
         )
 
@@ -117,14 +121,14 @@ class TestScopeHandling:
             content="Global system fact",
             type="fact",
             scope=None,
-        )
+        ).schema_id
         
         # Remember project-specific fact
         proj_id = eng.remember(
             content="Project specific fact",
             type="fact",
             scope="project:alpha",
-        )
+        ).schema_id
         
         # Get context in strict_scope mode for project:alpha
         context = eng.context_brief(

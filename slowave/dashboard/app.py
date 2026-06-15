@@ -94,8 +94,8 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                     self._send_html(_INDEX_HTML)
                 elif path == "/api/status":
                     self._send_json(_status_payload(db_path))
-                elif path == "/api/processes":
-                    self._send_json({"processes": _slowave_processes()})
+                elif path == "/api/daemon":
+                    self._send_json(_daemon_health())
                 elif path == "/api/db/health":
                     self._send_json(_db_health(db_path))
                 elif path == "/api/schemas":
@@ -125,14 +125,6 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                 payload = json.loads(body or "{}")
                 if path == "/api/recall":
                     self._send_json(_recall_payload(db_path, payload))
-                elif path == "/api/processes/kill":
-                    if not allow_actions:
-                        self._send_json(
-                            {"error": "kill actions are disabled; restart dashboard with --allow-actions"},
-                            status=HTTPStatus.FORBIDDEN,
-                        )
-                    else:
-                        self._send_json(_kill_process(payload))
                 else:
                     self._send_json({"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND)
             except Exception as e:
@@ -333,6 +325,7 @@ def _status_payload(db_path: str) -> dict[str, Any]:
             ).fetchone()
             if lc and lc["ts"]:
                 last_consolidation_ts = int(lc["ts"])
+        daemon = _daemon_health()
         processes = _slowave_processes()
         return {
             "db_path": db_path,
@@ -344,8 +337,9 @@ def _status_payload(db_path: str) -> dict[str, Any]:
             "schema_health": schema_health,
             "scopes": scopes,
             "recent_sessions": recent_sessions,
+            "daemon": daemon,
             "processes": processes,
-            "warnings": _warnings(schema_health, processes),
+            "warnings": _warnings(schema_health, daemon),
             "last_consolidation_ts": last_consolidation_ts,
             "now_ts": int(time.time()),
         }
@@ -396,14 +390,10 @@ def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
-def _warnings(schema_health: dict[str, Any], processes: list[dict[str, Any]]) -> list[str]:
+def _warnings(schema_health: dict[str, Any], daemon: dict[str, Any]) -> list[str]:
     out: list[str] = []
-    mcp = [p for p in processes if "slowave-mcp" in p.get("command", "")]
-    if len(mcp) > 1:
-        out.append(f"{len(mcp)} slowave-mcp processes detected; check duplicate MCP clients or stale sessions.")
-    orphaned = [p for p in mcp if int(p.get("ppid", 0)) == 1]
-    if orphaned:
-        out.append(f"{len(orphaned)} slowave-mcp processes are orphaned with PPID=1.")
+    if not daemon.get("running"):
+        out.append("HTTP MCP daemon is not running. Run: slowave serve start")
     if schema_health.get("needs_review_schemas", 0):
         out.append(f"{schema_health['needs_review_schemas']} schemas need review.")
     if schema_health.get("active_exact_duplicate_rows", 0):
@@ -411,7 +401,33 @@ def _warnings(schema_health: dict[str, Any], processes: list[dict[str, Any]]) ->
     return out
 
 
+def _daemon_health() -> dict[str, Any]:
+    """Fetch live status from the HTTP MCP daemon health endpoint."""
+    try:
+        import urllib.request, urllib.error, json as _json
+        with urllib.request.urlopen("http://127.0.0.1:8766/health", timeout=2) as resp:
+            data = _json.loads(resp.read())
+        return {
+            "running": True,
+            "version": data.get("version", "?"),
+            "active_sessions": data.get("active_sessions", 0),
+            "engines_loaded": data.get("engines_loaded", []),
+            "url": "http://127.0.0.1:8766/mcp",
+            "health_url": "http://127.0.0.1:8766/health",
+        }
+    except Exception:
+        return {
+            "running": False,
+            "version": None,
+            "active_sessions": 0,
+            "engines_loaded": [],
+            "url": "http://127.0.0.1:8766/mcp",
+            "health_url": "http://127.0.0.1:8766/health",
+        }
+
+
 def _slowave_processes() -> list[dict[str, Any]]:
+    """List running Slowave worker and dashboard processes (not daemon — managed separately)."""
     try:
         out = subprocess.check_output(
             ["ps", "-axo", "pid,ppid,stat,etime,rss,command"],
@@ -439,14 +455,13 @@ def _slowave_processes() -> list[dict[str, Any]]:
         if len(parts) < 6:
             continue
         pid, ppid, stat, etime, rss, command = parts
-        is_mcp = "slowave-mcp" in command
         is_worker = "slowave worker" in command or (
             "slowave.cli.main" in command and " worker" in command
         )
         is_dashboard = "slowave dashboard" in command or (
             "slowave.cli.main" in command and " dashboard" in command
         )
-        if not (is_mcp or is_worker or is_dashboard):
+        if not (is_worker or is_dashboard):
             continue
         parent_command = all_commands.get(int(ppid)) or None
         rows.append({
@@ -456,9 +471,7 @@ def _slowave_processes() -> list[dict[str, Any]]:
             "age_seconds": _parse_etime_seconds(etime),
             "rss_kb": int(rss),
             "command": command,
-            "parent_command": parent_command,
-            "kind": "mcp" if is_mcp else ("worker" if is_worker else "dashboard"),
-            "orphaned": int(ppid) == 1,
+            "kind": "worker" if is_worker else "dashboard",
         })
     return rows
 
@@ -834,45 +847,6 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
         conn.close()
 
 
-def _kill_process(payload: dict[str, Any]) -> dict[str, Any]:
-    """Send SIGTERM to a slowave-mcp or slowave-worker process by PID.
-
-    Only kills processes whose command line contains 'slowave-mcp' or
-    'slowave worker' — refuses to kill anything else for safety.
-    """
-    pid = payload.get("pid")
-    if not pid:
-        return {"error": "pid is required"}
-    try:
-        pid = int(pid)
-    except (TypeError, ValueError):
-        return {"error": f"invalid pid: {pid!r}"}
-
-    # Safety check: only kill known slowave processes
-    try:
-        out = subprocess.check_output(
-            ["ps", "-p", str(pid), "-o", "command="], text=True, stderr=subprocess.DEVNULL
-        ).strip()
-    except subprocess.CalledProcessError:
-        return {"error": f"pid {pid} not found"}
-
-    is_mcp = "slowave-mcp" in out
-    is_worker = "slowave worker" in out or ("slowave.cli.main" in out and " worker" in out)
-    if not (is_mcp or is_worker):
-        return {
-            "error": f"pid {pid} is not a slowave-mcp or slowave-worker process (command: {out[:80]!r})"
-        }
-
-    sig = payload.get("signal", "TERM").upper()
-    signum = {"TERM": 15, "KILL": 9, "INT": 2}.get(sig, 15)
-    try:
-        os.kill(pid, signum)
-        return {"ok": True, "pid": pid, "signal": sig, "command": out[:80]}
-    except ProcessLookupError:
-        return {"error": f"pid {pid} no longer exists"}
-    except PermissionError:
-        return {"error": f"permission denied killing pid {pid}"}
-
 
 def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
     query = str(payload.get("query") or "").strip()
@@ -928,20 +902,21 @@ a{color:var(--blue);text-decoration:none}
 
 /* ── LAYOUT ── */
 .app-header{
-  background:#060c19;
+  background:linear-gradient(to bottom,#0d1321,#060c19);
   border-bottom:1px solid var(--line);
   position:sticky;top:0;z-index:100;
   padding:0 22px;
+  box-shadow:0 2px 8px rgba(0,0,0,.3);
 }
 .header-top{
   display:flex;align-items:center;justify-content:space-between;
-  padding:12px 0;
+  padding:16px 0;
   gap:12px;
 }
 .brand{display:flex;align-items:center;gap:10px}
 .brand-icon{font-size:22px;line-height:1}
 .brand-name{font-size:18px;font-weight:700;letter-spacing:-0.3px;color:#fff}
-.brand-version{font-size:11px;color:var(--muted);margin-left:6px;font-weight:400}
+.brand-version{font-size:11px;color:var(--muted);margin-left:8px;font-weight:500;background:rgba(79,155,255,.1);padding:2px 6px;border-radius:4px;border:1px solid rgba(79,155,255,.2)}
 .header-meta{display:flex;align-items:center;gap:16px;flex-wrap:wrap}
 .db-path{
   font-size:11px;color:var(--muted);max-width:380px;
@@ -962,18 +937,20 @@ a{color:var(--blue);text-decoration:none}
 .nav-tabs{
   display:flex;gap:2px;
   border-top:1px solid var(--line);
+  border-bottom:1px solid var(--line);
   overflow-x:auto;
+  background:linear-gradient(to bottom,rgba(15,24,41,.5),rgba(8,14,28,.5));
 }
 .tab{
   border:0;background:transparent;color:var(--muted);
-  padding:10px 16px;cursor:pointer;font-size:13px;font-weight:500;
-  border-bottom:2px solid transparent;white-space:nowrap;
+  padding:12px 18px;cursor:pointer;font-size:13px;font-weight:500;
+  border-bottom:3px solid transparent;white-space:nowrap;
   display:flex;align-items:center;gap:6px;
-  transition:color .15s,border-color .15s;
+  transition:all .2s ease;
   font-family:var(--font);
 }
-.tab:hover{color:var(--text)}
-.tab.active{color:var(--blue);border-bottom-color:var(--blue)}
+.tab:hover{color:var(--text);border-bottom-color:rgba(79,155,255,.3)}
+.tab.active{color:var(--blue);border-bottom-color:var(--blue);background:rgba(79,155,255,.05)}
 .tab-badge{
   background:var(--red);color:#fff;border-radius:999px;
   font-size:10px;font-weight:700;padding:1px 5px;min-width:16px;text-align:center;
@@ -991,23 +968,25 @@ main{padding:20px;max-width:1600px;margin:0 auto}
   gap:10px;margin-bottom:16px;
 }
 .stat-card{
-  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  padding:14px 16px;position:relative;overflow:hidden;
+  background:linear-gradient(135deg,rgba(15,24,41,.8),rgba(20,30,51,.6));border:1px solid rgba(30,45,74,.6);border-radius:var(--radius);
+  padding:14px 16px;position:relative;overflow:hidden;transition:all .2s ease;box-shadow:0 2px 8px rgba(0,0,0,.2);
 }
+.stat-card:hover{border-color:rgba(79,155,255,.4);box-shadow:0 4px 16px rgba(79,155,255,.1),0 2px 8px rgba(0,0,0,.3);transform:translateY(-1px)}
 .stat-card::before{
-  content:"";position:absolute;top:0;left:0;right:0;height:2px;
+  content:"";position:absolute;top:0;left:0;right:0;height:3px;
   background:var(--accent,var(--blue));border-radius:var(--radius) var(--radius) 0 0;
 }
 .stat-card .sc-icon{font-size:18px;margin-bottom:6px;opacity:.8}
-.stat-card .sc-label{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px}
+.stat-card .sc-label{font-size:11px;color:var(--muted);font-weight:500;text-transform:uppercase;letter-spacing:.5px;white-space:nowrap}
 .stat-card .sc-value{font-size:28px;font-weight:700;letter-spacing:-1px;line-height:1.1;margin-top:2px}
 .stat-card .sc-sub{font-size:11px;color:var(--muted);margin-top:3px}
 
 /* ── PANELS ── */
 .panel{
-  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  padding:16px;
+  background:linear-gradient(135deg,rgba(15,24,41,.5),rgba(20,30,51,.3));border:1px solid rgba(30,45,74,.6);border-radius:var(--radius);
+  padding:16px;box-shadow:0 2px 8px rgba(0,0,0,.15);transition:all .2s ease;
 }
+.panel:hover{border-color:rgba(30,45,74,.8);box-shadow:0 4px 12px rgba(0,0,0,.2)}
 .panel-title{font-size:14px;font-weight:600;color:var(--text);margin-bottom:12px}
 .panel + .panel{margin-top:10px}
 .two-col{display:grid;grid-template-columns:1fr 1fr;gap:12px}
@@ -1018,11 +997,11 @@ main{padding:20px;max-width:1600px;margin:0 auto}
 .alert{
   border-radius:var(--radius);padding:12px 16px;margin-bottom:12px;
   display:flex;align-items:flex-start;gap:10px;
-  font-size:13px;
+  font-size:13px;border-left:4px solid;
 }
-.alert-warn{background:#2a1e06;border:1px solid #5a3c0a;color:#ffe0a0}
-.alert-ok{background:var(--green-bg);border:1px solid #1a4d2e;color:#9af5c0}
-.alert-error{background:var(--red-bg);border:1px solid #4a1a22;color:#ffb4c8}
+.alert-warn{background:#2a1e06;border-color:#f5b942;color:#ffe0a0;border-top:1px solid #5a3c0a;border-right:1px solid #5a3c0a;border-bottom:1px solid #5a3c0a}
+.alert-ok{background:var(--green-bg);border-color:#3ecf6e;color:#9af5c0;border-top:1px solid #1a4d2e;border-right:1px solid #1a4d2e;border-bottom:1px solid #1a4d2e}
+.alert-error{background:var(--red-bg);border-color:#f04e6a;color:#ffb4c8;border-top:1px solid #4a1a22;border-right:1px solid #4a1a22;border-bottom:1px solid #4a1a22}
 .alert-icon{font-size:16px;flex-shrink:0;margin-top:1px}
 .alert ul{margin:6px 0 0 16px;list-style:disc}
 .alert li{margin-bottom:2px}
@@ -1030,9 +1009,11 @@ main{padding:20px;max-width:1600px;margin:0 auto}
 /* ── TABLES ── */
 .table-wrap{overflow-x:auto}
 table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{padding:9px 10px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
-th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;background:var(--panel2);position:sticky;top:0}
-tr:hover td{background:var(--panel2)}
+th,td{padding:10px 12px;text-align:left;border-bottom:1px solid var(--line);vertical-align:top}
+th{color:var(--muted);font-weight:600;font-size:11px;text-transform:uppercase;letter-spacing:.5px;background:linear-gradient(to bottom,rgba(20,30,51,.8),rgba(15,24,41,.6));position:sticky;top:0}
+tbody tr{transition:background-color .15s ease}
+tbody tr:nth-child(odd) td{background:rgba(15,24,41,.3)}
+tbody tr:hover td{background:rgba(20,30,51,.6)}
 .empty-state{padding:40px;text-align:center;color:var(--muted)}
 .empty-state .es-icon{font-size:36px;margin-bottom:8px}
 .empty-state .es-text{font-size:14px}
@@ -1040,14 +1021,17 @@ tr:hover td{background:var(--panel2)}
 /* ── PILLS ── */
 .pill{
   display:inline-flex;align-items:center;border-radius:999px;
-  padding:2px 8px;font-size:11px;border:1px solid var(--line);margin:1px;
-  white-space:nowrap;
+  padding:3px 10px;font-size:11px;border:1px solid;margin:1px;
+  white-space:nowrap;font-weight:500;box-shadow:0 1px 2px rgba(0,0,0,.1);
 }
 .pill-active{background:#0a2018;color:#7af5aa;border-color:#1a4d2e}
 .pill-needs_review{background:#221800;color:#ffd580;border-color:#5a3c0a}
 .pill-contradicted{background:#200d14;color:#ff9aaa;border-color:#4a1a22}
 .pill-superseded{background:#1a1430;color:#c4b0f5;border-color:#3a2d6a}
 .pill-archived{background:#181e30;color:#8090b4;border-color:#2a3558}
+.pill input[type=checkbox]{accent-color:currentColor;width:11px;height:11px;margin:0 4px 0 0;cursor:pointer;vertical-align:middle;flex-shrink:0}
+.pill:has(input[type=checkbox]):not(:has(input:checked)){opacity:.38;filter:saturate(.3)}
+.pill:has(input[type=checkbox]){cursor:pointer;user-select:none;transition:opacity .15s,filter .15s}
 .pill-mcp{background:#0e1e36;color:#7ab5ff;border-color:#1e3d6a}
 .pill-worker{background:#0e261e;color:#7af5aa;border-color:#1a4d2e}
 .pill-dashboard{background:#221800;color:#ffd580;border-color:#5a3c0a}
@@ -1067,31 +1051,34 @@ tr:hover td{background:var(--panel2)}
 /* ── CONTROLS ── */
 .controls{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
 .controls input,.controls select,input[type=text],input[type=number],select,textarea{
-  background:var(--panel2);border:1px solid var(--line2);color:var(--text);
-  border-radius:var(--radius-sm);padding:7px 10px;font-size:13px;
-  font-family:var(--font);
+  background:linear-gradient(to bottom,rgba(20,30,51,.6),rgba(15,24,41,.4));border:1px solid rgba(30,45,74,.6);color:var(--text);
+  border-radius:8px;padding:8px 12px;font-size:13px;
+  font-family:var(--font);transition:all .2s ease;
+}
+.controls input:hover,.controls select:hover,input:hover,select:hover,textarea:hover{
+  border-color:rgba(30,45,74,.8);box-shadow:0 2px 4px rgba(0,0,0,.1);
 }
 .controls input:focus,.controls select:focus,input:focus,select:focus,textarea:focus{
-  outline:none;border-color:var(--blue);box-shadow:0 0 0 2px rgba(79,155,255,.15);
+  outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,155,255,.2);background:linear-gradient(to bottom,rgba(25,37,64,.7),rgba(20,30,51,.5));
 }
 btn,button.btn,.btn{
   display:inline-flex;align-items:center;gap:6px;
-  border:1px solid var(--line2);border-radius:var(--radius-sm);
-  padding:7px 14px;font-size:13px;font-weight:500;cursor:pointer;
-  font-family:var(--font);background:var(--panel2);color:var(--text);
-  transition:background .15s,border-color .15s;
+  border:1px solid rgba(30,45,74,.6);border-radius:8px;
+  padding:8px 16px;font-size:13px;font-weight:500;cursor:pointer;
+  font-family:var(--font);background:linear-gradient(to bottom,rgba(20,30,51,.8),rgba(15,24,41,.6));color:var(--text);
+  transition:all .2s ease;box-shadow:0 2px 4px rgba(0,0,0,.1);
 }
 btn.primary,.btn-primary,button.primary{
-  background:var(--blue);color:#060c19;border-color:var(--blue);font-weight:700;
+  background:linear-gradient(to bottom,#6aabff,#4f9bff);color:#060c19;border-color:#4f9bff;font-weight:700;box-shadow:0 2px 8px rgba(79,155,255,.2);
 }
-btn.primary:hover,.btn-primary:hover{background:#6aabff}
-btn:hover,.btn:hover,button.btn:hover{background:var(--panel3)}
+btn.primary:hover,.btn-primary:hover{background:linear-gradient(to bottom,#7ab5ff,#6aabff);box-shadow:0 4px 12px rgba(79,155,255,.3);transform:translateY(-1px)}
+btn:hover,.btn:hover,button.btn:hover{background:linear-gradient(to bottom,rgba(25,37,64,.8),rgba(20,30,51,.6));border-color:rgba(30,45,74,.8);box-shadow:0 2px 8px rgba(0,0,0,.2)}
 
 /* ── SPINNER ── */
 .spinner{
   display:inline-block;width:16px;height:16px;
-  border:2px solid var(--line2);border-top-color:var(--blue);
-  border-radius:50%;animation:spin .7s linear infinite;
+  border:2px solid rgba(79,155,255,.2);border-top-color:var(--blue);
+  border-radius:50%;animation:spin .8s linear infinite;box-shadow:0 0 0 1px rgba(79,155,255,.1);
 }
 @keyframes spin{to{transform:rotate(360deg)}}
 .loading-overlay{
@@ -1100,11 +1087,16 @@ btn:hover,.btn:hover,button.btn:hover{background:var(--panel3)}
 }
 .loading-overlay.show{display:flex}
 
+/* ── GRAPH CONTROLS GRID ── */
+.graph-controls-grid{display:grid;grid-template-columns:max-content 1fr;gap:8px 16px;align-items:center}
+.gc-label{font-size:12px;color:var(--muted);font-weight:500;white-space:nowrap;text-align:right}
+.gc-value{display:flex;align-items:center;flex-wrap:wrap;gap:6px}
+
 /* ── GRAPH ── */
 .graph-layout{display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px}
 .graph-box{
-  height:680px;background:#050b18;border:1px solid var(--line);
-  border-radius:var(--radius);position:relative;overflow:hidden;
+  height:680px;background:linear-gradient(135deg,rgba(5,11,24,.8),rgba(8,14,28,.6));border:1px solid rgba(30,45,74,.6);
+  border-radius:var(--radius);position:relative;overflow:hidden;box-shadow:0 2px 8px rgba(0,0,0,.2);
 }
 svg{width:100%;height:100%}
 .edge{stroke-opacity:.7;transition:stroke-opacity .2s}
@@ -1116,8 +1108,8 @@ svg{width:100%;height:100%}
 .graph-side{height:680px;overflow-y:auto}
 .graph-legend{
   display:flex;flex-wrap:wrap;gap:8px;margin-bottom:10px;
-  padding:10px 12px;background:var(--panel2);
-  border:1px solid var(--line);border-radius:var(--radius);
+  padding:12px 14px;background:linear-gradient(to bottom,rgba(20,30,51,.6),rgba(15,24,41,.4));
+  border:1px solid rgba(30,45,74,.6);border-radius:var(--radius);box-shadow:0 2px 4px rgba(0,0,0,.1);
 }
 .legend-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--muted)}
 .legend-dot{width:10px;height:10px;border-radius:50%;flex-shrink:0}
@@ -1137,9 +1129,9 @@ svg{width:100%;height:100%}
 .detail-section{margin-top:14px}
 .detail-section h4{font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid var(--line)}
 pre.code-block{
-  background:#060c19;border:1px solid var(--line);border-radius:var(--radius-sm);
-  padding:10px;font-size:11px;color:#a8c0e8;overflow:auto;
-  font-family:"SF Mono","Fira Code",monospace;line-height:1.5;max-height:200px;
+  background:linear-gradient(to bottom,rgba(8,14,28,.8),rgba(6,12,25,.6));border:1px solid rgba(30,45,74,.6);border-radius:var(--radius-sm);
+  padding:12px;font-size:11px;color:#a8c0e8;overflow:auto;
+  font-family:"SF Mono","Fira Code",monospace;line-height:1.6;max-height:200px;box-shadow:inset 0 1px 3px rgba(0,0,0,.2);
 }
 .conf-bar{display:inline-flex;align-items:center;gap:6px}
 .conf-track{width:80px;height:5px;background:var(--panel2);border-radius:999px;overflow:hidden}
@@ -1147,9 +1139,10 @@ pre.code-block{
 
 /* ── PROCEDURES ── */
 .proc-card{
-  background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);
-  padding:14px;margin-bottom:10px;
+  background:linear-gradient(135deg,rgba(15,24,41,.5),rgba(20,30,51,.3));border:1px solid rgba(30,45,74,.6);border-radius:var(--radius);
+  padding:16px;margin-bottom:12px;box-shadow:0 2px 6px rgba(0,0,0,.1);transition:all .2s ease;
 }
+.proc-card:hover{border-color:rgba(30,45,74,.8);box-shadow:0 4px 10px rgba(0,0,0,.15)}
 .proc-header{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;margin-bottom:8px}
 .proc-goal{font-weight:600;font-size:14px;color:var(--text)}
 .proc-meta{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
@@ -1177,9 +1170,10 @@ tr.expandable:hover td{background:var(--panel3)}
 .gen-bar{height:6px;border-radius:999px;background:var(--blue);min-width:2px}
 .gen-bar-track{flex:1;height:6px;background:var(--panel3);border-radius:999px;overflow:hidden}
 .scope-reg-card{
-  background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);
-  padding:10px 14px;margin-bottom:6px;display:flex;align-items:center;justify-content:space-between;gap:10px;
+  background:linear-gradient(to right,rgba(15,24,41,.4),rgba(20,30,51,.3));border:1px solid rgba(30,45,74,.5);border-radius:8px;
+  padding:12px 14px;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between;gap:10px;transition:all .2s ease;
 }
+.scope-reg-card:hover{border-color:rgba(30,45,74,.7);box-shadow:0 2px 4px rgba(0,0,0,.1)}
 .scope-reg-id{font-family:"SF Mono","Fira Code",monospace;font-size:12px;font-weight:600}
 .scope-reg-meta{font-size:11px;color:var(--muted)}
 </style>
@@ -1203,11 +1197,10 @@ tr.expandable:hover td{background:var(--panel3)}
     <button class="tab active" data-tab="overview">📊 Overview</button>
     <button class="tab" data-tab="schemas">📖 Schemas</button>
     <button class="tab" data-tab="procedures">🧭 Procedures</button>
+    <button class="tab" data-tab="generalization">🌐 Generalization</button>
     <button class="tab" data-tab="graph">🕸 Graph</button>
     <button class="tab" data-tab="recall">🔍 Recall</button>
-    <button class="tab" data-tab="processes">⚙️ Processes</button>
     <button class="tab" data-tab="worker">🧠 Worker</button>
-    <button class="tab" data-tab="generalization">🌐 Generalization</button>
     <button class="tab" data-tab="db">💾 DB Health</button>
   </nav>
 </header>
@@ -1223,14 +1216,8 @@ tr.expandable:hover td{background:var(--panel3)}
       <div id="schemaHealthPanel"></div>
     </div>
     <div class="panel">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div class="panel-title" style="margin:0">⚙️ Running processes</div>
-        <div style="display:flex;gap:6px">
-          <button class="btn" style="font-size:11px;padding:4px 10px" onclick="document.querySelector('.tab[data-tab=processes]').click()">View all</button>
-          <button id="killAllBtn" class="btn" style="font-size:11px;padding:4px 10px;color:var(--red);border-color:var(--red);display:none" onclick="killAllStaleMcp()">✕ Kill stale MCP</button>
-        </div>
-      </div>
-      <div id="processMini"></div>
+      <div class="panel-title">🔌 HTTP MCP Daemon</div>
+      <div id="daemonPanel"></div>
     </div>
   </div>
   <div class="two-col" style="margin-top:10px">
@@ -1279,26 +1266,51 @@ tr.expandable:hover td{background:var(--panel3)}
   <div id="procList"></div>
 </section>
 
+<!-- GENERALIZATION -->
+<section id="generalization" class="section">
+  <div class="stat-grid" id="genStatGrid"></div>
+  <div class="two-col" style="margin-top:0">
+    <div class="panel">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+        <div class="panel-title" style="margin:0">🏆 Promoted memories</div>
+        <button class="btn" style="font-size:11px;padding:4px 10px" onclick="loadGeneralization()">↺ Refresh</button>
+      </div>
+      <div id="genLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
+      <div id="genPromotedList"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🗂 Scope registry</div>
+      <div id="genScopeRegistry"></div>
+    </div>
+  </div>
+</section>
+
 <!-- GRAPH -->
 <section id="graph" class="section">
   <div class="panel" style="margin-bottom:10px">
-    <div class="controls">
-      <input id="graphScope" placeholder="scope filter" style="width:160px"/>
-      <input id="graphLimit" type="number" value="120" min="1" max="300" style="width:70px"/>
-      <label class="pill"><input type="checkbox" class="gstat" value="active" checked> active</label>
-      <label class="pill"><input type="checkbox" class="gstat" value="needs_review" checked> needs review</label>
-      <label class="pill"><input type="checkbox" class="gstat" value="contradicted" checked> contradicted</label>
-      <label class="pill"><input type="checkbox" class="gstat" value="superseded" checked> superseded</label>
-      <label class="pill"><input type="checkbox" class="gstat" value="archived"> archived</label>
-      <button class="btn primary" onclick="loadGraph()">Refresh</button>
-    </div>
-    <div class="controls" style="margin-bottom:0">
-      <span style="font-size:12px;color:var(--muted)">Min salience</span>
-      <span id="graphMinSalienceLabel" class="pill">0.00</span>
-      <input id="graphMinSalience" type="range" value="0" min="0" max="25" step="0.1"
-        oninput="syncSalienceSlider()" style="flex:1;min-width:200px;accent-color:var(--blue)">
-      <span style="font-size:11px;color:var(--muted)">max: <span id="graphObservedMaxSalienceLabel">25.00</span></span>
-      <button class="btn" onclick="resetSalienceSlider()">Reset</button>
+    <div class="graph-controls-grid">
+      <span class="gc-label">Scope</span>
+      <div class="gc-value"><input id="graphScope" placeholder="all scopes" style="width:160px"/></div>
+      <span class="gc-label">Limit</span>
+      <div class="gc-value"><input id="graphLimit" type="number" value="120" min="1" max="300" style="width:70px"/></div>
+      <span class="gc-label">Statuses</span>
+      <div class="gc-value">
+        <label class="pill pill-active"><input type="checkbox" class="gstat" value="active" checked> active</label>
+        <label class="pill pill-needs_review"><input type="checkbox" class="gstat" value="needs_review" checked> needs review</label>
+        <label class="pill pill-contradicted"><input type="checkbox" class="gstat" value="contradicted" checked> contradicted</label>
+        <label class="pill pill-superseded"><input type="checkbox" class="gstat" value="superseded" checked> superseded</label>
+        <label class="pill pill-archived"><input type="checkbox" class="gstat" value="archived"> archived</label>
+      </div>
+      <span class="gc-label">Min salience</span>
+      <div class="gc-value" style="gap:8px">
+        <span id="graphMinSalienceLabel" class="pill" style="min-width:38px;justify-content:center">0.00</span>
+        <input id="graphMinSalience" type="range" value="0" min="0" max="25" step="0.1"
+          oninput="syncSalienceSlider()" style="flex:1;min-width:180px;accent-color:var(--blue)">
+        <span style="font-size:11px;color:var(--muted);white-space:nowrap">max: <span id="graphObservedMaxSalienceLabel">25.00</span></span>
+        <button class="btn" onclick="resetSalienceSlider()">Reset</button>
+      </div>
+      <span></span>
+      <div class="gc-value"><button class="btn primary" onclick="loadGraph()">Refresh</button></div>
     </div>
   </div>
   <div class="graph-legend" id="graphLegend"></div>
@@ -1329,15 +1341,6 @@ tr.expandable:hover td{background:var(--panel3)}
   </div>
 </section>
 
-<!-- PROCESSES -->
-<section id="processes" class="section">
-  <div class="panel">
-    <div class="panel-title">⚙️ Slowave processes</div>
-    <div id="processLoading" class="loading-overlay"><div class="spinner"></div></div>
-    <div class="table-wrap" id="processTable"></div>
-  </div>
-</section>
-
 <!-- WORKER -->
 <section id="worker" class="section">
   <div class="stat-grid" id="workerStatGrid"></div>
@@ -1353,25 +1356,6 @@ tr.expandable:hover td{background:var(--panel3)}
     <div id="workerLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
     <div id="workerChart" style="margin-bottom:12px"></div>
     <div class="table-wrap" id="workerTable"></div>
-  </div>
-</section>
-
-<!-- GENERALIZATION -->
-<section id="generalization" class="section">
-  <div class="stat-grid" id="genStatGrid"></div>
-  <div class="two-col" style="margin-top:0">
-    <div class="panel">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div class="panel-title" style="margin:0">🏆 Promoted memories</div>
-        <button class="btn" style="font-size:11px;padding:4px 10px" onclick="loadGeneralization()">↺ Refresh</button>
-      </div>
-      <div id="genLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
-      <div id="genPromotedList"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">🗂 Scope registry</div>
-      <div id="genScopeRegistry"></div>
-    </div>
   </div>
 </section>
 
@@ -1396,11 +1380,24 @@ const statusColor={active:"#3ecf6e",needs_review:"#f5b942",contradicted:"#f04e6a
 const relColor={reinforces:"#3ecf6e",refines:"#4f9bff",contradicts:"#f04e6a",supersedes:"#f5b942",related_to:"#5a6e91",part_of:"#34c4c4"};
 const relLabel={reinforces:"reinforces",refines:"refines",contradicts:"contradicts",supersedes:"supersedes",related_to:"related",part_of:"part of"};
 
+function truncContent(s,max){
+  if(!s||s.length<=max)return esc(s);
+  return '<span title="'+esc(s)+'">'+esc(s.slice(0,max-3))+'<span style="color:var(--muted)"> …</span></span>';
+}
 function esc(s){return String(s??"")
   .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")
   .replace(/"/g,"&quot;").replace(/'/g,"&#39;");}
 function fmtBytes(n){n=Number(n||0);if(n<1024)return n+" B";if(n<1048576)return (n/1024).toFixed(1)+" KB";return (n/1048576).toFixed(2)+" MB";}
 function fmtTs(ts){if(!ts)return "—";return new Date(Number(ts)*1000).toLocaleString();}
+function fmtTsCompact(ts){
+  if(!ts)return "—";
+  const d=new Date(Number(ts)*1000);
+  return d.toLocaleTimeString();
+}
+function fmtTsCompactSub(ts){
+  if(!ts)return "";
+  return new Date(Number(ts)*1000).toLocaleDateString();
+}
 function fmtDate(ts){if(!ts)return "—";return new Date(Number(ts)*1000).toLocaleDateString();}
 function age(s){s=Number(s||0);if(s<60)return s+"s";if(s<3600)return Math.floor(s/60)+"m";if(s<86400)return Math.floor(s/3600)+"h "+Math.floor((s%3600)/60)+"m";return Math.floor(s/86400)+"d";}
 function dur(s){if(s==null||s===undefined)return "open";s=Number(s);if(s<1)return "<1s";return age(s);}
@@ -1422,8 +1419,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   b.classList.add("active");
   document.getElementById(b.dataset.tab).classList.add("active");
   const tab=b.dataset.tab;
-  if(tab==="processes")loadProcesses();
-  else if(tab==="schemas")loadSchemas();
+  if(tab==="schemas")loadSchemas();
   else if(tab==="procedures")loadProcedures();
   else if(tab==="graph")loadGraph();
   else if(tab==="worker")loadWorker();
@@ -1505,10 +1501,10 @@ async function loadStatus(){
   } else if(warns.length){
     alertHtml=`<div class="alert alert-warn"><span class="alert-icon">⚠️</span><div><b>${warns.length} warning${warns.length>1?"s":""}</b><ul>${warns.map(w=>`<li>${esc(w)}</li>`).join("")}</ul></div></div>`;
     // Update badge
-    document.querySelectorAll(".tab[data-tab=processes] .tab-badge").forEach(b=>{b.textContent=warns.length;b.classList.add("show");});
+    
   } else {
     alertHtml=`<div class="alert alert-ok"><span class="alert-icon">✅</span><div><b>All systems healthy</b> — no warnings detected.</div></div>`;
-    document.querySelectorAll(".tab[data-tab=processes] .tab-badge").forEach(b=>{b.classList.remove("show");});
+    
   }
   document.getElementById("alertArea").innerHTML=alertHtml;
 
@@ -1545,24 +1541,32 @@ async function loadStatus(){
     <div style="margin-top:10px;font-size:11px;color:var(--muted)">${esc(lastConsolidated)}</div>
   `;
 
-  // PROCESS MINI
-  const procs=d.processes||[];
-  const staleMcp=procs.filter(p=>p.kind==="mcp"&&p.age_seconds>600);
-  const killAllBtn=document.getElementById("killAllBtn");
-  if(killAllBtn) killAllBtn.style.display=staleMcp.length&&ALLOW_ACTIONS?"":"none";
-  if(!procs.length){
-    document.getElementById("processMini").innerHTML="<div style='color:var(--muted);font-size:13px'>No slowave processes detected.</div>";
-  } else {
-    document.getElementById("processMini").innerHTML=procs.map(p=>{
-      const badge=p.orphaned?`<span class="pill pill-orphan">orphan</span>`:`<span class="pill pill-ok">healthy</span>`;
-      const stale=p.kind==="mcp"&&p.age_seconds>600?`<span class="pill pill-warn" style="font-size:10px">stale</span>`:"";
-      return `<div style="display:flex;align-items:center;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--line);font-size:13px">
-        <div><span class="pill pill-${esc(p.kind)}">${esc(p.kind)}</span> PID ${p.pid} ${stale}</div>
-        <div style="color:var(--muted);font-size:11px">${age(p.age_seconds)} · ${fmtBytes(p.rss_kb*1024)}</div>
-        ${badge}
-      </div>`;
-    }).join("");
-  }
+  // DAEMON HEALTH PANEL
+  const dmn=d.daemon||{};
+  const daemonRunning=dmn.running===true;
+  const daemonBadge=daemonRunning
+    ?`<span class="pill pill-ok">&#x2022; running</span>`
+    :`<span class="pill pill-orphan">&#x25cf; stopped</span>`;
+  const daemonUrl=dmn.url||"http://127.0.0.1:8766/mcp";
+  const daemonSessions=Number(dmn.active_sessions||0);
+  const daemonVersion=dmn.version?"v"+dmn.version:"";
+  document.getElementById("daemonPanel").innerHTML=daemonRunning?`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      ${daemonBadge}
+      <span style="font-size:12px;color:var(--muted)">${esc(daemonVersion)}</span>
+    </div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px;margin-bottom:10px">
+      <div><span style="color:var(--muted)">Endpoint</span><br><code style="font-size:11px">${esc(daemonUrl)}</code></div>
+      <div><span style="color:var(--muted)">Active sessions</span><br><b>${daemonSessions}</b></div>
+    </div>
+    <div style="font-size:11px;color:var(--muted)">
+      <a href="${esc(dmn.health_url||'http://127.0.0.1:8766/health')}" target="_blank" style="color:var(--blue)">health endpoint &#x2197;</a>
+    </div>`:daemonRunning===false?`
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px">
+      ${daemonBadge}
+    </div>
+    <div style="color:var(--muted);font-size:13px;margin-bottom:8px">HTTP MCP daemon is not running.</div>
+    <div style="font-size:12px">Start it with: <code>slowave serve start</code></div>`:"";
 
   // RECENT SESSIONS
   const sess=d.recent_sessions||[];
@@ -1641,7 +1645,7 @@ function renderSchemasTable(schemas){
       <td>${esc(s.schema_class||"—")}</td>
       <td>${esc(s.scope||"—")}</td>
       <td>${num(s.support_count)}</td>
-      <td style="max-width:380px;word-break:break-word">${esc(s.content)}</td>
+      <td style="max-width:380px;word-break:break-word">${truncContent(s.content,120)}</td>
     </tr>`;
   }).join("");
   return `<table><thead><tr>
@@ -1682,6 +1686,10 @@ async function expandSchemaRow(tr,schemaId){
       </div>`:"<div style='font-size:12px;color:var(--muted)'>Not yet recalled across multiple scopes.</div>"}
   </div>`;
   expTr.innerHTML=`<td colspan="9"><div class="expand-content">
+    <div class="detail-section" style="margin-bottom:14px">
+      <h4>Content</h4>
+      <div style="font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;padding:10px 12px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm)">${esc(s.content)}</div>
+    </div>
     <div class="three-col">
       <div>
         <div class="detail-section"><h4>Facets</h4><pre class="code-block">${esc(JSON.stringify(s.facets,null,2))}</pre></div>
@@ -1741,63 +1749,6 @@ async function loadProcedures(){
   }finally{ld.classList.remove("show");}
 }
 
-// ── PROCESSES ──
-async function loadProcesses(){
-  const ld=document.getElementById("processLoading");
-  ld.classList.add("show");
-  try{
-    const d=await getJSON("/api/processes");
-    const procs=d.processes||[];
-    if(!procs.length){
-      document.getElementById("processTable").innerHTML=emptyState("No slowave processes found.","⚙️");
-      return;
-    }
-    const heads=["PID","Kind","PPID","Stat","Age","RSS","Status","Command","Parent"];
-    if(ALLOW_ACTIONS) heads.push("Kill");
-    const rows=procs.map(p=>{
-      const killBtn=ALLOW_ACTIONS
-        ?`<button class="btn" style="padding:4px 10px;font-size:11px;color:var(--red);border-color:var(--red)"
-            onclick="killProc(${p.pid},this)">✕ kill</button>`
-        :`<span style="font-size:11px;color:var(--muted)" title="Restart dashboard with --allow-actions to enable">locked</span>`;
-      const row=[
-        `<b>${p.pid}</b>`,
-        `<span class="pill pill-${esc(p.kind)}">${esc(p.kind)}</span>`,
-        p.ppid,p.stat,age(p.age_seconds),fmtBytes(p.rss_kb*1024),
-        p.orphaned?`<span class="pill pill-orphan">orphaned</span>`:`<span class="pill pill-ok">healthy</span>`,
-        `<code style="font-size:11px">${esc((p.command||"").slice(0,80))}</code>`,
-        `<code style="font-size:11px">${esc((p.parent_command||"").slice(0,60))}</code>`,
-      ];
-      if(ALLOW_ACTIONS) row.push(killBtn);
-      return row;
-    });
-    const rawCols=[0,1,6,7,8,...(ALLOW_ACTIONS?[9]:[])];
-    document.getElementById("processTable").innerHTML=table(heads,rows,rawCols);
-    if(!ALLOW_ACTIONS){
-      document.getElementById("processTable").insertAdjacentHTML("afterbegin",
-        `<div class="alert alert-warn" style="margin-bottom:8px"><span class="alert-icon">🔒</span>
-         <div>Kill buttons are <b>disabled</b>. Restart with <code>slowave dashboard --allow-actions</code> to enable them.
-         Or use the quick-kill command: <code>pkill -f slowave-mcp</code></div></div>`);
-    }
-  }finally{ld.classList.remove("show");}
-}
-
-async function killProc(pid,btn){
-  if(!confirm(`Send SIGTERM to PID ${pid}?`)) return;
-  btn.disabled=true;btn.textContent="…";
-  try{
-    const d=await postJSON("/api/processes/kill",{pid,signal:"TERM"});
-    if(d.ok){
-      btn.textContent="✓ sent";btn.style.color="var(--green)";
-      setTimeout(loadProcesses,1500);
-    } else {
-      btn.textContent="✕ err";btn.style.color="var(--red)";
-      alert("Error: "+(d.error||JSON.stringify(d)));
-      btn.disabled=false;
-    }
-  }catch(e){btn.textContent="✕ err";btn.disabled=false;alert(String(e));}
-}
-
-
 // ── WORKER ──
 async function loadWorker(){
   const ld=document.getElementById("workerLoading");
@@ -1816,13 +1767,14 @@ async function loadWorker(){
       {icon:"📖",label:"Schemas created",val:num(sum.total_schemas_created),accent:"var(--green)"},
       {icon:"🔁",label:"Reinforced",val:num(sum.total_schemas_reinforced),accent:"var(--cyan)"},
       {icon:"⏱",label:"Avg duration",val:(sum.avg_duration_ms||0).toFixed(0)+"ms",accent:"var(--amber)"},
-      {icon:"🕐",label:"Last run",val:fmtTs(sum.last_run_ts),accent:"var(--muted)",raw:true},
+      {icon:"🕐",label:"Last run",val:fmtTsCompact(sum.last_run_ts),sub:fmtTsCompactSub(sum.last_run_ts),accent:"var(--muted)",raw:true},
     ];
     document.getElementById("workerStatGrid").innerHTML=cards.map(c=>
       `<div class="stat-card" style="--accent:${c.accent}">
         <div class="sc-icon">${c.icon}</div>
         <div class="sc-label">${esc(c.label)}</div>
         <div class="sc-value">${c.raw?c.val:esc(String(c.val))}</div>
+        ${c.sub?`<div class="sc-sub">${c.raw?c.sub:esc(c.sub)}</div>`:""}
       </div>`
     ).join("");
 
@@ -1863,20 +1815,6 @@ async function loadWorker(){
     const rawCols=[4,7];
     tbl.innerHTML=table(heads,rows,rawCols);
   }finally{ld.classList.remove("show");}
-}
-
-async function killAllStaleMcp(){
-  const d=await getJSON("/api/processes");
-  const stale=(d.processes||[]).filter(p=>p.kind==="mcp"&&p.age_seconds>600);
-  if(!stale.length){alert("No stale MCP processes found.");return;}
-  if(!confirm(`Kill ${stale.length} stale slowave-mcp process${stale.length>1?"es":""} (age > 10 min)?`)) return;
-  let ok=0,fail=0;
-  for(const p of stale){
-    const r=await postJSON("/api/processes/kill",{pid:p.pid,signal:"TERM"});
-    if(r.ok) ok++; else fail++;
-  }
-  alert(`Sent SIGTERM: ${ok} succeeded, ${fail} failed.`);
-  setTimeout(()=>{loadStatus();if(document.querySelector(".tab[data-tab=processes].active"))loadProcesses();},1500);
 }
 
 // ── GRAPH ──

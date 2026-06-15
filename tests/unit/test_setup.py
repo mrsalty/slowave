@@ -4,7 +4,7 @@ Uses a fake home directory (tmp_path) so no real config files are touched.
 All tests are offline — no binaries, no subprocesses, no network.
 
 Coverage:
-  - _patch_mcp_servers          idempotence, new, legacy-upgrade
+  - _patch_mcp_servers          idempotence, HTTP format, legacy stdio migration
   - _remove_mcp_servers_from_settings
   - _patch_claude_code_hooks    idempotence, new
   - _inject_block               new file, idempotent update, legacy strip
@@ -32,7 +32,7 @@ from slowave.cli.setup import (
     _lifecycle_block,
 )
 
-MCP_PATH = "/usr/local/bin/slowave-mcp"
+HTTP_URL = "http://127.0.0.1:8766/mcp"
 
 
 # ===========================================================================
@@ -41,30 +41,45 @@ MCP_PATH = "/usr/local/bin/slowave-mcp"
 
 class TestPatchMcpServers:
     def test_adds_server_to_empty_config(self):
-        cfg, changed = _patch_mcp_servers({}, MCP_PATH)
+        cfg, changed = _patch_mcp_servers({})
         assert changed is True
-        assert cfg["mcpServers"]["slowave"]["command"] == MCP_PATH
+        assert cfg["mcpServers"]["slowave"] == {"url": HTTP_URL}
 
-    def test_idempotent_new_format(self):
-        cfg = {"mcpServers": {"slowave": {"type": "stdio", "command": MCP_PATH}}}
-        _, changed = _patch_mcp_servers(cfg, MCP_PATH)
+    def test_idempotent_http_format(self):
+        cfg = {"mcpServers": {"slowave": {"url": HTTP_URL}}}
+        _, changed = _patch_mcp_servers(cfg)
         assert changed is False
 
-    def test_upgrades_legacy_command_only_format(self):
-        cfg = {"mcpServers": {"slowave": {"command": MCP_PATH}}}
-        cfg2, changed = _patch_mcp_servers(cfg, MCP_PATH)
+    def test_migrates_legacy_stdio_format(self):
+        # Old stdio entry should be replaced with HTTP
+        cfg = {"mcpServers": {"slowave": {"type": "stdio", "command": "/usr/local/bin/slowave-mcp"}}}
+        cfg2, changed = _patch_mcp_servers(cfg)
         assert changed is True
-        assert cfg2["mcpServers"]["slowave"]["type"] == "stdio"
+        assert cfg2["mcpServers"]["slowave"] == {"url": HTTP_URL}
 
-    def test_replaces_stale_path(self):
-        cfg = {"mcpServers": {"slowave": {"type": "stdio", "command": "/old/path/slowave-mcp"}}}
-        _, changed = _patch_mcp_servers(cfg, MCP_PATH)
+    def test_migrates_legacy_command_only_format(self):
+        cfg = {"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}}}
+        cfg2, changed = _patch_mcp_servers(cfg)
         assert changed is True
+        assert cfg2["mcpServers"]["slowave"] == {"url": HTTP_URL}
 
     def test_preserves_other_mcp_servers(self):
         cfg = {"mcpServers": {"othertool": {"command": "/usr/bin/other"}}}
-        cfg2, _ = _patch_mcp_servers(cfg, MCP_PATH)
+        cfg2, _ = _patch_mcp_servers(cfg)
         assert "othertool" in cfg2["mcpServers"]
+
+    def test_include_type_writes_type_field(self):
+        """Claude Code requires type:http."""
+        cfg, changed = _patch_mcp_servers({}, include_type=True)
+        assert changed is True
+        assert cfg["mcpServers"]["slowave"] == {"type": "http", "url": HTTP_URL}
+
+    def test_no_type_by_default(self):
+        """Cline / Cursor / Windsurf use url-only."""
+        cfg, changed = _patch_mcp_servers({})
+        assert changed is True
+        assert cfg["mcpServers"]["slowave"] == {"url": HTTP_URL}
+        assert "type" not in cfg["mcpServers"]["slowave"]
 
 
 # ===========================================================================
@@ -73,13 +88,13 @@ class TestPatchMcpServers:
 
 class TestRemoveMcpServersFromSettings:
     def test_removes_slowave_entry(self):
-        cfg = {"mcpServers": {"slowave": {"command": MCP_PATH}}}
+        cfg = {"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}}}
         cfg2, changed = _remove_mcp_servers_from_settings(cfg)
         assert changed is True
         assert "slowave" not in cfg2.get("mcpServers", {})
 
     def test_removes_empty_mcpServers_key(self):
-        cfg = {"mcpServers": {"slowave": {"command": MCP_PATH}}}
+        cfg = {"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}}}
         cfg2, _ = _remove_mcp_servers_from_settings(cfg)
         assert "mcpServers" not in cfg2
 
@@ -358,7 +373,7 @@ class TestCleanupRemoveMcpConfigs:
         cursor_dir.mkdir()
         cfg_path = cursor_dir / "mcp.json"
         cfg_path.write_text(
-            json.dumps({"mcpServers": {"slowave": {"command": MCP_PATH}, "other": {}}}),
+            json.dumps({"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}, "other": {}}}),
             encoding="utf-8",
         )
 
@@ -373,7 +388,7 @@ class TestCleanupRemoveMcpConfigs:
         cursor_dir = fake_home / ".cursor"
         cursor_dir.mkdir()
         cfg_path = cursor_dir / "mcp.json"
-        original = json.dumps({"mcpServers": {"slowave": {"command": MCP_PATH}}})
+        original = json.dumps({"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}}})
         cfg_path.write_text(original, encoding="utf-8")
 
         _cleanup_mod._remove_mcp_configs(dry_run=True)

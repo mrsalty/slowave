@@ -44,13 +44,14 @@ Edit `~/.cursor/mcp.json` (create it if missing):
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp"
+      "type": "http",
+      "url": "http://127.0.0.1:8766/mcp"
     }
   }
 }
 ```
 
-Use the path from `which slowave-mcp`. Restart Cursor after editing.
+Make sure the daemon is running (`slowave serve start`). Restart Cursor after editing.
 
 ---
 
@@ -75,7 +76,7 @@ slowave recall "what is my favourite food"
 
 | Symptom | Fix |
 |---|---|
-| Tools don't appear | Check MCP path (`slowave setup --dry-run`), check JSON syntax, restart Cursor |
+| Tools don't appear | Run `slowave serve start`, then `slowave serve status`; restart Cursor |
 | Tools appear but aren't called | Rules for AI block not set — complete Step 1 above |
 | Sessions are empty | Confirm Rules for AI block is set — complete Step 1 above |
-| Stale MCP path after `brew upgrade` | Re-run `slowave setup` — it detects and fixes the stale path |
+
