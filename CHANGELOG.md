@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.7](https://github.com/mrsalty/slowave/compare/slowave-v0.5.6...slowave-v0.5.7) (2026-06-15)
+
+
+### Features
+
+* HTTP MCP daemon transport — 2026-06-15 18:33:25 ([ea8ca5c](https://github.com/mrsalty/slowave/commit/ea8ca5ce7c539caf57471c3eeacd8522a7a50357))
+* migrate MCP transport to HTTP daemon ([1332e81](https://github.com/mrsalty/slowave/commit/1332e81d4adbfc61fecb6b5281018a740a2b7a65))
+
 ## [0.5.6](https://github.com/mrsalty/slowave/compare/slowave-v0.5.5...slowave-v0.5.6) (2026-06-13)
 
 
