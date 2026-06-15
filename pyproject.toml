@@ -31,6 +31,8 @@ dependencies = [
   "transformers>=4.30",
   "huggingface-hub>=0.16",
   "mcp[cli]>=1.0",
+  "uvicorn>=0.20",
+  "starlette>=0.27",
 ]
 
 [project.urls]
@@ -41,11 +43,13 @@ Changelog = "https://github.com/mrsalty/slowave/releases"
 
 [project.optional-dependencies]
 test = ["pytest>=9.0.3", "faiss-cpu>=1.7"]
+http = ["httpx>=0.25"]
 dev = ["pytest>=9.0.3", "black", "isort", "build", "twine", "faiss-cpu>=1.7"]
 
 [project.scripts]
 slowave = "slowave.cli.main:main"
 slowave-mcp = "slowave.mcp.server:main"
+slowave-mcp-http = "slowave.mcp.http_server:main"
 
 [tool.setuptools.packages.find]
 include = ["slowave*"]

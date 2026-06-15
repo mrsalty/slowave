@@ -108,16 +108,48 @@ def check_sqlite_write() -> CheckResult:
         )
 
 def check_mcp_server() -> CheckResult:
+    """Check that the slowave CLI entry point exists (proxy for correct install)."""
     import shutil
     try:
-        mcp_path = shutil.which("slowave-mcp")
-        if mcp_path:
-            return CheckResult(label="slowave-mcp", status=Status.OK, detail=mcp_path)
-        else:
-            return CheckResult(
-                label="slowave-mcp",
-                status=Status.FAIL,
-                remediation="run: pip install slowave (or pipx install slowave)",
-            )
+        bin_path = shutil.which("slowave")
+        if bin_path:
+            return CheckResult(label="slowave binary", status=Status.OK, detail=bin_path)
+        return CheckResult(
+            label="slowave binary",
+            status=Status.FAIL,
+            remediation="run: pip install slowave (or pipx install slowave)",
+        )
     except Exception as e:
-        return CheckResult(label="slowave-mcp", status=Status.FAIL, detail=str(e)[:100])
+        return CheckResult(label="slowave binary", status=Status.FAIL, detail=str(e)[:100])
+
+
+def check_http_daemon(host: str = "127.0.0.1", port: int = 8766) -> CheckResult:
+    """Check whether the Slowave HTTP MCP daemon is reachable."""
+    import urllib.request
+    import urllib.error
+    import json as _json
+
+    url = f"http://{host}:{port}/health"
+    try:
+        with urllib.request.urlopen(url, timeout=2) as resp:
+            data = _json.loads(resp.read())
+        version = data.get("version", "?")
+        sessions = data.get("active_sessions", 0)
+        return CheckResult(
+            label=f"HTTP MCP daemon (:{port})",
+            status=Status.OK,
+            detail=f"v{version}, {sessions} active session(s)",
+        )
+    except urllib.error.URLError:
+        return CheckResult(
+            label=f"HTTP MCP daemon (:{port})",
+            status=Status.SKIP,
+            detail="not running",
+            remediation="Run: slowave serve start",
+        )
+    except Exception as e:
+        return CheckResult(
+            label=f"HTTP MCP daemon (:{port})",
+            status=Status.WARN,
+            detail=str(e)[:80],
+        )
