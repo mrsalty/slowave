@@ -48,14 +48,14 @@ Edit `~/.claude.json` (create it if it doesn't exist):
 {
   "mcpServers": {
     "slowave": {
-      "type": "stdio",
-      "command": "/absolute/path/to/slowave-mcp"
+      "type": "http",
+      "url": "http://127.0.0.1:8766/mcp"
     }
   }
 }
 ```
 
-Use the path from `which slowave-mcp`. Restart Claude Code after editing.
+Make sure the daemon is running (`slowave serve start`). Restart Claude Code after editing.
 
 ---
 
@@ -80,6 +80,6 @@ slowave recall "what is my favourite food"
 
 | Symptom | Fix |
 |---|---|
-| Tools don't appear | Check MCP path (`slowave setup --dry-run`), restart Claude Code |
+| Tools don't appear | Run `slowave serve start`, then `slowave serve status`; restart Claude Code |
 | Tools appear but aren't called | `CLAUDE.md` block or hooks missing — re-run `slowave setup` |
 | Sessions are empty | Hooks should enforce this on every turn; check `~/.claude/settings.json` has the hook entries |

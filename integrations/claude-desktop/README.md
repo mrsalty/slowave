@@ -45,13 +45,15 @@ Edit `~/Library/Application Support/Claude/claude_desktop_config.json`:
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp"
+      "command": "/path/to/slowave-mcp"
     }
   }
 }
 ```
 
-Use the path from `which slowave-mcp`. Restart Claude Desktop after editing.
+Replace `/path/to/slowave-mcp` with the actual path — run `which slowave-mcp` to find it (e.g. `~/.local/bin/slowave-mcp`). Restart Claude Desktop after editing.
+
+> **Note:** Claude Desktop uses stdio transport (command-based). It does NOT support the `url` or `type: "http"` formats — those are for Claude Code / Cline only.
 
 ---
 
@@ -80,4 +82,4 @@ slowave recall "what is my favourite food"
 | Tools appear but aren\'t called | Custom Instructions not set — complete Step 1 above |
 | Only works from turn 2 | Custom Instructions not set (Skills fire too late) — complete Step 1 above |
 | Sessions are empty | Confirm Custom Instructions are set — complete Step 1 above |
-| Stale MCP path after `brew upgrade` | Re-run `slowave setup` — it detects and fixes the stale path |
+

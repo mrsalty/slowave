@@ -12,7 +12,7 @@ This guide walks through manual Slowave configuration for users who prefer not t
 2. Verify binaries are available:
    ```bash
    which slowave
-   which slowave-mcp
+   slowave serve status
    ```
 3. Note the **absolute paths** — you'll need them for config files.
 
@@ -102,15 +102,16 @@ Edit the appropriate config file(s) and add Slowave to the `mcpServers` section.
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp"
+      "type": "http",
+      "url": "http://127.0.0.1:8766/mcp"
     }
   }
 }
 ```
 
-Replace `/absolute/path/to/slowave-mcp` with the output of `which slowave-mcp`.
+Make sure the daemon is running: `slowave serve start`.
 
-**Important:** Use the absolute path, not just `slowave-mcp`. Some clients run with restricted PATH and won't find the binary otherwise.
+**Important:** The Slowave HTTP daemon must be running before clients can connect. Start it with `slowave serve start`.
 
 ---
 
@@ -219,7 +220,7 @@ slowave recall "what is my favourite food" --top-k 5
 
 ### MCP Server Not Found
 
-Use absolute path from `which slowave-mcp` in config files.
+Ensure the daemon is running with `slowave serve start`.
 
 ### Lifecycle Not Running
 

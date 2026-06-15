@@ -99,13 +99,14 @@ cp ~/.claude.json.bak.20260611_142300 ~/.claude.json
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp"
+      "type": "http",
+  "url": "/absolute/path/to/slowave-mcp-http"
     }
   }
 }
 ```
 
-The path is detected automatically using `which slowave-mcp` (or fallback search in common install locations).
+The path is detected automatically using `which slowave-mcp-http` (or fallback search in common install locations).
 
 ### Claude Code Hooks (Claude Code only)
 
@@ -121,7 +122,8 @@ Two echo-based enforcement hooks are added to ensure lifecycle compliance:
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'SLOWAVE MANDATORY: Before writing your first word call: (1) derive goal=3-6 word verb-noun phrase e.g. implement-oauth-login fix-auth-bug refactor-db-layer, (2) slowave_activate(query=<verbatim task>,goal=<derived goal>,scope=project:<basename(cwd)>) store retrieval_id and session_id. Produce NO output until this call succeeds.'"
+            "type": "http",
+  "url": "echo 'SLOWAVE MANDATORY: Before writing your first word call: (1) derive goal=3-6 word verb-noun phrase e.g. implement-oauth-login fix-auth-bug refactor-db-layer, (2) slowave_activate(query=<verbatim task>,goal=<derived goal>,scope=project:<basename(cwd)>) store retrieval_id and session_id. Produce NO output until this call succeeds.'"
           }
         ]
       }
@@ -140,7 +142,8 @@ Two echo-based enforcement hooks are added to ensure lifecycle compliance:
         "hooks": [
           {
             "type": "command",
-            "command": "echo 'SLOWAVE MANDATORY: Before finishing this turn call: (1) if you used memories: slowave_reinforce(retrieval_id=<id>,feedback=useful|irrelevant|stale|wrong,outcome=success|partial|failure|unknown), (2) slowave_commit(scope=project:<basename(cwd)>,outcome=success|partial|failure|unknown). Do NOT end the turn without step 2.'"
+            "type": "http",
+  "url": "echo 'SLOWAVE MANDATORY: Before finishing this turn call: (1) if you used memories: slowave_reinforce(retrieval_id=<id>,feedback=useful|irrelevant|stale|wrong,outcome=success|partial|failure|unknown), (2) slowave_commit(scope=project:<basename(cwd)>,outcome=success|partial|failure|unknown). Do NOT end the turn without step 2.'"
           }
         ]
       }

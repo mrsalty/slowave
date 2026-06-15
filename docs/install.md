@@ -70,7 +70,7 @@ pipx uninstall slowave  # remove package
 
 ## Step 1 — Install
 
-Choose one method. They all give you the same two binaries: `slowave` (CLI) and `slowave-mcp` (MCP server).
+Choose one method. They all give you the `slowave` CLI and the `slowave-mcp-http` daemon entry point.
 
 **pipx** *(recommended — isolated, no venv management)*
 
@@ -105,12 +105,12 @@ Verify the install:
 
 ```bash
 which slowave        # e.g. /opt/homebrew/bin/slowave
-which slowave-mcp    # e.g. /opt/homebrew/bin/slowave-mcp
+slowave serve status  # confirm daemon is ready
 slowave doctor       # checks Python, faiss, ONNX embedding backend, MCP server
 slowave stats        # shows stored events / episodes / schemas
 ```
 
-> **Important:** always use the absolute path from `which slowave-mcp` — not just `slowave-mcp` — when configuring MCP clients. Some clients run with a restricted PATH and will not find the binary otherwise.
+> The Slowave HTTP daemon (`slowave serve start`) must be running before clients can connect. Use `slowave serve status` to confirm.
 
 Slowave stores data in `~/.slowave/slowave.db`. Set `SLOWAVE_DB=/absolute/path` only if you intentionally want a different database.
 
@@ -197,13 +197,14 @@ MCP configuration alone is not sufficient. A client that can see the tools but h
 {
   "mcpServers": {
     "slowave": {
-      "command": "/absolute/path/to/slowave-mcp"
+      "type": "http",
+      "url": "http://127.0.0.1:8766/mcp"
     }
   }
 }
 ```
 
-Replace `/absolute/path/to/slowave-mcp` with the output of `which slowave-mcp`.
+Make sure the daemon is running: `slowave serve start`.
 
 | Client | Config file |
 |---|---|
@@ -371,8 +372,8 @@ Read-only local web UI. Shows DB health, Slowave/MCP processes, schemas, a recal
 | Sessions exist but memory is empty | Client skipping `slowave_activate` or `slowave_commit` | Re-run `slowave setup` to refresh lifecycle instructions; Claude Code hooks enforce `slowave_activate` on every turn |
 | Recall returns nothing or stale results | Worker not running, or `slowave_recall` used as default | Run `slowave worker --once`; use `slowave_activate` for default priming, not `slowave_recall` |
 | Schemas don't appear | Worker/consolidation not running | Run `slowave worker --once` or check the service is active (`launchctl list | grep slowave`) |
-| `slowave setup` can't find `slowave-mcp` | Binary not on PATH | Run `which slowave-mcp`; if empty, re-install or use the absolute path |
-| Stale versioned Cellar path after `brew upgrade` | Pre-v0.1.8 setup wrote the resolved Cellar path instead of the stable symlink | Re-run `slowave setup` — it detects the mismatch and rewrites the config with the stable `/opt/homebrew/bin/slowave-mcp` symlink |
+| `slowave setup` runs but clients show no tools | Daemon not running | Run `slowave serve start`, then `slowave serve status` |
+
 
 ---
 
