@@ -456,6 +456,28 @@ def _all_lifecycle_paths() -> list[Path]:
 # MCP binary detection
 # ---------------------------------------------------------------------------
 
+def _add_exe_if_windows(binary_name: str) -> str:
+    """Add .exe extension to binary name on Windows if not already present.
+    
+    Args:
+        binary_name: The base binary name (e.g., 'slowave', 'slowave-mcp')
+    
+    Returns:
+        The binary name with .exe extension on Windows, unchanged on other platforms.
+    """
+    if SYSTEM == "Windows" and not binary_name.lower().endswith(".exe"):
+        return f"{binary_name}.exe"
+    return binary_name
+
+
+def _find_mcp_binary(slowave_bin: str) -> str:
+    """Derive the slowave-mcp binary path from the slowave binary path.
+    
+    Handles Windows .exe extensions correctly.
+    """
+    return str(Path(slowave_bin).parent / _add_exe_if_windows("slowave-mcp"))
+
+
 def _find_slowave_binary() -> str:
     """Return the absolute path to the `slowave` CLI binary."""
     found = shutil.which("slowave")
@@ -463,11 +485,18 @@ def _find_slowave_binary() -> str:
         return str(Path(found).resolve())
     # Common install locations
     candidates: list[Path] = [
-        _home() / ".local" / "bin" / "slowave",
-        _home() / ".local" / "pipx" / "venvs" / "slowave" / "bin" / "slowave",
-        Path("/opt/homebrew/bin/slowave"),
-        Path("/usr/local/bin/slowave"),
+        _home() / ".local" / "bin" / _add_exe_if_windows("slowave"),
+        _home() / ".local" / "pipx" / "venvs" / "slowave" / "bin" / _add_exe_if_windows("slowave"),
+        _home() / ".local" / "pipx" / "venvs" / "slowave" / "Scripts" / _add_exe_if_windows("slowave"),  # Windows pipx
+        Path("/opt/homebrew/bin/slowave"),  # macOS Homebrew
+        Path("/usr/local/bin/slowave"),     # Linux/Unix
     ]
+    # On Windows, add common AppData paths
+    if SYSTEM == "Windows":
+        appdata_local = os.environ.get("LOCALAPPDATA", str(_home() / "AppData" / "Local"))
+        candidates.extend([
+            Path(appdata_local) / "Programs" / "Python" / "Scripts" / "slowave.exe",
+        ])
     for c in candidates:
         if c.exists():
             return str(c)
@@ -1089,7 +1118,7 @@ def _build_summary(client: str, worker: bool, install_hooks: bool,
         if not spec.require_dir_exists or mcp_file.parent.exists():
             cfg = _read_json(mcp_file)
             if spec.key == "claude-desktop":
-                slowave_mcp_bin = str(Path(slowave_bin).parent / "slowave-mcp")
+                slowave_mcp_bin = _find_mcp_binary(slowave_bin)
                 _, changed_mcp = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
             else:
                 _, changed_mcp = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
@@ -1280,7 +1309,7 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
         else:
             cfg = _read_json(mcp_file)
             if spec.key == "claude-desktop":
-                slowave_mcp_bin = str(Path(slowave_bin).parent / "slowave-mcp")
+                slowave_mcp_bin = _find_mcp_binary(slowave_bin)
                 cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
                 transport_label = "stdio"
             else:
