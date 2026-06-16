@@ -122,8 +122,26 @@ def main() -> None:
     keeps the socket alive), the idle timer fires and the process self-exits.
 
     Set ``SLOWAVE_MCP_IDLE_TIMEOUT=0`` to disable the watchdog entirely.
+
+    Logging note: stdio MCP transport requires that stdout/stderr carry only
+    JSON-RPC messages.  Any stray text (including Python log output) corrupts
+    the protocol and prevents clients (Claude Desktop, etc.) from detecting the
+    server.  All log output is therefore redirected to a rotating file at
+    ~/.slowave/logs/mcp-stdio.log so it is never mixed into the MCP stream.
     """
-    logging.basicConfig(level=logging.INFO, format="[slowave-mcp] %(message)s")
+    # ---------------------------------------------------------------------------
+    # Redirect ALL logging to a file — stdout/stderr must stay clean for JSON-RPC
+    # ---------------------------------------------------------------------------
+    import pathlib
+    _log_dir = pathlib.Path.home() / ".slowave" / "logs"
+    _log_dir.mkdir(parents=True, exist_ok=True)
+    _log_file = _log_dir / "mcp-stdio.log"
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [slowave-mcp] %(levelname)s %(name)s: %(message)s",
+        handlers=[logging.FileHandler(_log_file, encoding="utf-8")],
+        force=True,
+    )
 
     # -- idle-timeout watchdog -----------------------------------------------
     _IDLE_TIMEOUT_S = int(os.environ.get("SLOWAVE_MCP_IDLE_TIMEOUT", "1800"))
