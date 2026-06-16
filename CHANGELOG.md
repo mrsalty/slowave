@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.8](https://github.com/mrsalty/slowave/compare/slowave-v0.5.7...slowave-v0.5.8) (2026-06-16)
+
+
+### Bug Fixes
+
+* **windows:** Claude Desktop integration - .exe paths and stdio logging ([bd6b87a](https://github.com/mrsalty/slowave/commit/bd6b87a78fd11a00638ee0bf63745687b39e2f1f))
+
 ## [0.5.7](https://github.com/mrsalty/slowave/compare/slowave-v0.5.6...slowave-v0.5.7) (2026-06-15)
 
 
