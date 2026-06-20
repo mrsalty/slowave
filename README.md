@@ -59,23 +59,8 @@ The LLM is an output channel — it verbalizes what memory already knows. It nev
 [Design rationale →](docs/design.md) — [Architecture →](docs/architecture.md)
 
 ## The big picture
-```
-┌────────────┐   work with   ┌─────────────┐
-│            │ ────────────▶ │ Claude Code │ ◀───┐
-│            │               └─────────────┘     │    (mcp)
-│    You     │               ┌─────────────┐     │    context         ┌────────────┐
-│  (local)   │ ────────────▶ │    Cline    │ ◀───┼──▶ remember  ◀───▶ │  Slowave   │◀──────┐
-│            │               └─────────────┘     │    recall          │  (local)   │       │
-│            │               ┌─────────────┐     │    procedure       └─────┬──────┘       │
-│            │ ────────────▶ │   Cursor    │ ◀───┘    feedback              │ evolves      │
-└────────────┘               └──────┬──────┘                                │ decays       │
-                                    │                                       │ reinforces   │
-                                    │                                       │ consolidates │
-                                    ▼                                       │ learns       │
-                              ┌────────────┐                                │ workflows    │
-                              │    LLM     │                                └──────────────┘
-                              └────────────┘
-```
+
+![Slowave flow](img/flow.png)
 
 ## Install
 
