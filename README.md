@@ -12,7 +12,7 @@ Slowave gives Claude Code, Cline, Cursor, Claude Desktop, Windsurf, and other MC
 
 ## Demo
 
-See Slowave in action: cold start → memory acquisition → cross-session recall across both Claude and Cline:
+See Slowave in action:
 
 ![Demo](img/demo.gif)
 
