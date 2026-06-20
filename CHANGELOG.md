@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.10](https://github.com/mrsalty/slowave/compare/slowave-v0.5.9...slowave-v0.5.10) (2026-06-20)
+
+
+### Documentation
+
+* add Homebrew install option to README ([a1f7600](https://github.com/mrsalty/slowave/commit/a1f760099533c6b6e9657b624e59782203b2013b))
+* pipx first in install section, drop macOS label from Homebrew ([b67e823](https://github.com/mrsalty/slowave/commit/b67e8231a6cdf439ca90e709d3fc7df9681c75fa))
+
 ## [0.5.9](https://github.com/mrsalty/slowave/compare/slowave-v0.5.8...slowave-v0.5.9) (2026-06-20)
 
 
