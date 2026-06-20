@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.9](https://github.com/mrsalty/slowave/compare/slowave-v0.5.8...slowave-v0.5.9) (2026-06-20)
+
+
+### Features
+
+* **benchmark:** WikiScenarios harness (18 scenarios, 4 ablations) + supersession and encoder improvements ([4d296cb](https://github.com/mrsalty/slowave/commit/4d296cbd3bf42e64a027b7ca23c7bb6f7ceb5a39))
+
+
+### Documentation
+
+* streamline README for clarity and conciseness ([fc2cbe8](https://github.com/mrsalty/slowave/commit/fc2cbe8a4e28071cd2975a47cb98db01138ee1fd))
+
 ## [0.5.8](https://github.com/mrsalty/slowave/compare/slowave-v0.5.7...slowave-v0.5.8) (2026-06-16)
 
 
