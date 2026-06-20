@@ -18,7 +18,7 @@ class TestONNXTextEncoder:
 
     def test_encoder_dim(self, encoder):
         """Test that encoder returns correct embedding dimension."""
-        assert encoder.dim == 384, "bge-small-en-v1.5 should always return 384-dim"
+        assert encoder.dim == 384, "default encoder should return 384-dim embeddings"
 
     def test_encode_single_text(self, encoder):
         """Test encoding a single text string."""

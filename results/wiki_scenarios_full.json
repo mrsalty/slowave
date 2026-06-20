@@ -1,0 +1,15 @@
+[
+  {
+    "scenario_id": "R-1",
+    "family": "retrieval",
+    "expected_keyword": "network",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: Fundamentally, deep learning refers to a class of machine learning algorithms in which a hierarchy of layers is used to transform input data into a progressively more abstract and composite representation. For example, in an image recognition model, the raw input may be an image (represented as a tensor of pixels). The first representational layer may attempt to identify basic shapes such as lines and circles, the second layer may compose and encode arrangements of edges, the ",
+    "detail": {
+      "n_Machine_learning": 112,
+      "n_Deep_learning": 119,
+      "n_Artificial_neural_network": 104,
+      "n_schemas": 0
+    }
+  }
+]

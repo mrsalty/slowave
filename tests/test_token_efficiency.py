@@ -6,7 +6,7 @@ Measures whether Slowave context_brief() saves tokens vs two realistic
 baselines, while simultaneously verifying retrieval quality.
 
 What makes this test credible:
-  - Uses the real BAAI/bge-small-en-v1.5 ONNX encoder (real semantic filtering)
+  - Uses the real paraphrase-multilingual-MiniLM-L12-v2 ONNX encoder (real semantic filtering)
   - 20 diverse memories (preferences, facts, decisions, lessons)
   - 20 realistic sessions each with a distinct query and a verifiable
     expected keyword that MUST appear in the brief if retrieval is working
@@ -448,7 +448,7 @@ def run_token_efficiency_test() -> dict[str, Any]:
                 "memories_ingested": len(MEMORIES),
                 "sessions_simulated": len(SESSIONS),
                 "token_estimation": "len(text) // 4  (GPT-style, +-15%)",
-                "encoder": "BAAI/bge-small-en-v1.5 (real ONNX, 384-dim)",
+                "encoder": "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2 (ONNX, 384-dim)",
                 "static_doc_tokens": static_tokens,
             },
             "per_session": per_session,
