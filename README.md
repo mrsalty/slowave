@@ -6,6 +6,7 @@
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
 [![PyPI Status](https://img.shields.io/pypi/status/slowave?color=orange)](https://pypi.org/project/slowave/)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
+[![Downloads](https://static.pepy.tech/badge/slowave)](https://pepy.tech/project/slowave)
 
 Slowave gives Claude Code, Cline, Cursor, Claude Desktop, Windsurf, and other MCP-compatible tools access to the same persistent memory. Instead of each tool forgetting in isolation, they share one memory layer that persists across sessions, follows you across tools, and costs $0 — no LLM in the loop, fully local.
 
