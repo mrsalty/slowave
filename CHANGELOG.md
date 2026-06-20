@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.10](https://github.com/mrsalty/slowave/compare/slowave-v0.5.9...slowave-v0.5.10) (2026-06-20)
+
+
+### Documentation
+
+* add Homebrew install option to README ([a1f7600](https://github.com/mrsalty/slowave/commit/a1f760099533c6b6e9657b624e59782203b2013b))
+
 ## [0.5.9](https://github.com/mrsalty/slowave/compare/slowave-v0.5.8...slowave-v0.5.9) (2026-06-20)
 
 
