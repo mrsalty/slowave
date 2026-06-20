@@ -9,6 +9,14 @@
 
 Slowave gives Claude Code, Cline, Cursor, Claude Desktop, Windsurf, and other MCP-compatible tools access to the same persistent memory. Instead of each tool forgetting in isolation, they share one memory layer that persists across sessions, follows you across tools, and costs $0 — no LLM in the loop, fully local.
 
+## Demo
+
+See Slowave in action: cold start → memory acquisition → cross-session recall across both Claude and Cline:
+
+<video src="img/demo.mp4" controls width="100%"></video>
+
+> *The demo shows: (1) cold start on a fresh project — Slowave discovers and stores key facts from CLAUDE.md, (2) agent is told to remember a rule (run tests & lint before pushing), (3) new Claude session — builds a feature, pushes, and recalls the rule, (4) new Cline session — asked what it remembers, and surfaces all memories including the test-and-lint rule.*
+
 ## The big picture
 ```
 ┌────────────┐   work with   ┌─────────────┐
