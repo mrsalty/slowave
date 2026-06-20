@@ -16,7 +16,7 @@ See Slowave in action:
 
 ![Demo](img/demo.gif)
 
-> Cold start discovers project facts. Rule stored in Claude. Recalled days later in Cline — same memory, different tool.
+> Cold start discovers project facts. Rule stored in Claude. Recalled days later in Cline — same memory, different sessions, different tools.
 
 ## What makes Slowave different?
 
