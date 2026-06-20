@@ -166,7 +166,7 @@ def _search_for_candidates(
 
     for term in search_terms:
         try:
-            schema_ids = schemas.search_fts(term, limit=10, include_inactive=False)
+            schema_ids = schemas.search_fts(term, limit=20, include_inactive=False)
 
             for old_schema_id in schema_ids:
                 if old_schema_id in seen_ids:
@@ -226,6 +226,47 @@ def _search_for_candidates(
                 )
         except Exception:
             continue
+
+    # Fallback: if FTS found nothing in the target scope, search directly
+    # by scope_id.  FTS ranking penalises short schemas (like remember()
+    # facts) against long page schemas; a broad term like "machine" can
+    # push the target schema hundreds of positions down the FTS rank order.
+    if scope_id and not candidates:
+        try:
+            for sc in schemas.list(limit=200, scope_id=scope_id, status="active"):
+                if sc.id in seen_ids:
+                    continue
+                seen_ids.add(sc.id)
+                old_content = sc.content_text or ""
+                if not old_content or old_content.lower() == new_content.lower():
+                    continue
+                old_content_lower = old_content.lower()
+                old_value_match = old_value and old_value.lower() in old_content_lower
+                subject_match = (
+                    subject_words
+                    and all(w in old_content_lower for w in subject_words)
+                    and (new_value is None or new_value.lower() not in old_content_lower)
+                )
+                if not old_value_match and not subject_match:
+                    continue
+                candidates.append(
+                    SupersessionCandidate(
+                        old_schema_id=sc.id,
+                        confidence=base_confidence,
+                        reason=_build_supersession_reason(
+                            pattern_idx=pattern_idx,
+                            subject=subject,
+                            old_value=old_value,
+                            new_value=new_value,
+                        ),
+                        old_subject=subject or "",
+                        new_subject=subject or "",
+                        old_value=old_value,
+                        new_value=new_value,
+                    )
+                )
+        except Exception:
+            pass
 
     return candidates
 

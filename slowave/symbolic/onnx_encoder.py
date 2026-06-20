@@ -1,8 +1,8 @@
 """ONNX Runtime-based text encoder for CPU-optimized inference.
 
-Uses bge-small-en-v1.5 ONNX model for semantic embeddings without torch.
-Provides identical embeddings to sentence-transformers but with better
-CPU performance and no heavy dependencies.
+Default model: paraphrase-multilingual-MiniLM-L12-v2 (384-dim, 50+ languages).
+Any model with a Xenova ONNX conversion on Hugging Face Hub can be used by
+passing model_name to ONNXTextEncoder or EncoderConfig.
 """
 from __future__ import annotations
 
@@ -23,20 +23,20 @@ class ONNXTextEncoder:
     - No torch required (only onnxruntime + transformers tokenizer)
     - ~750MB smaller footprint than torch + sentence-transformers
     - CPU-first inference with operator fusion
-    - Drop-in replacement for sentence-transformers backend
+    - Works with any model that has a Xenova ONNX conversion on HF Hub
     - Lazy loading to keep import costs low
     """
 
     def __init__(
         self,
-        model_name: str = "BAAI/bge-small-en-v1.5",
+        model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2",
         cache_dir: Optional[str] = None,
     ):
         self.model_name = model_name
         self.cache_dir = Path(cache_dir) if cache_dir else None
         self._session = None
         self._tokenizer = None
-        self._dim = 384  # bge-small-en-v1.5 always outputs 384 dimensions
+        self._dim = 384
 
     def _ensure_loaded(self) -> None:
         """Lazy load ONNX session and tokenizer on first use."""
@@ -81,11 +81,7 @@ class ONNXTextEncoder:
                     providers=["CPUExecutionProvider"],
                 )
 
-                # Load tokenizer from Hugging Face
-                # Use the standard bge-small tokenizer
-                self._tokenizer = AutoTokenizer.from_pretrained(
-                    "BAAI/bge-small-en-v1.5"
-                )
+                self._tokenizer = AutoTokenizer.from_pretrained(self.model_name)
 
             except (RuntimeError, ModuleNotFoundError, OSError) as e:
                 raise RuntimeError(
@@ -116,23 +112,22 @@ class ONNXTextEncoder:
                 )
             )
 
-        # Download ONNX model from Hugging Face Hub
-        # Use Xenova's community ONNX conversion of bge-small-en-v1.5
-        # (Official BAAI repo doesn't have ONNX conversion yet)
+        # Xenova hosts ONNX conversions of popular sentence-transformers models.
+        # Repo name is derived from the model's short name (last path component).
+        xenova_repo = "Xenova/" + self.model_name.split("/")[-1]
         try:
             model_file = hf_hub_download(
-                repo_id="Xenova/bge-small-en-v1.5",
+                repo_id=xenova_repo,
                 filename="onnx/model.onnx",
                 cache_dir=str(cache_dir),
             )
         except Exception as e:
-            # If Xenova's conversion fails, provide helpful guidance
             raise RuntimeError(
                 f"Failed to download ONNX model from Hugging Face Hub: {e}\n"
                 f"\nTroubleshooting steps:\n"
                 f"1. Check internet connection\n"
-                f"2. Verify you can access Hugging Face: https://huggingface.co/Xenova/bge-small-en-v1.5\n"
-                f"3. Try clearing the cache and retrying: rm -rf ~/.cache/huggingface/hub\n"
+                f"2. Verify you can access: https://huggingface.co/{xenova_repo}\n"
+                f"3. Try clearing the cache: rm -rf ~/.cache/huggingface/hub\n"
                 f"4. Or set a custom cache dir: export HF_HOME=/path/to/cache\n"
             ) from e
 
@@ -140,7 +135,7 @@ class ONNXTextEncoder:
 
     @property
     def dim(self) -> int:
-        """Embedding dimension (always 384 for bge-small-en-v1.5)."""
+        """Embedding dimension (384 for the default model)."""
         return self._dim
 
     def encode(self, text: str) -> np.ndarray:
@@ -190,11 +185,15 @@ class ONNXTextEncoder:
             "attention_mask": encoded["attention_mask"].astype(np.int64),
         }
 
-        # Add token_type_ids if the model expects it
-        if "token_type_ids" in encoded:
-            onnx_inputs["token_type_ids"] = encoded["token_type_ids"].astype(
-                np.int64
-            )
+        # Some ONNX models require token_type_ids even when the tokenizer
+        # (e.g. XLM-RoBERTa-based multilingual models) does not produce them.
+        # Check the model's required inputs and zero-fill if needed.
+        required_inputs = {inp.name for inp in self._session.get_inputs()}
+        if "token_type_ids" in required_inputs:
+            if "token_type_ids" in encoded:
+                onnx_inputs["token_type_ids"] = encoded["token_type_ids"].astype(np.int64)
+            else:
+                onnx_inputs["token_type_ids"] = np.zeros_like(onnx_inputs["input_ids"])
 
         # Run ONNX inference
         # Output is [batch_size, sequence_length, hidden_size] (last hidden state)

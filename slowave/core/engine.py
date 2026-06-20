@@ -25,7 +25,8 @@ from slowave.core.services.consolidation import ConsolidationService
 from slowave.core.services.feedback import FeedbackService
 from slowave.core.services.ingest import IngestService
 from slowave.core.services.retrieval import RecallResult, RetrievalService
-from slowave.core.supersession import AUTO_SUPERSEDE_THRESHOLD, find_superseded_candidates
+from slowave.core.supersession import AUTO_SUPERSEDE_THRESHOLD, SupersessionCandidate, find_superseded_candidates
+from slowave.core.supersession_manifold import SupersessionManifold  # available for future use
 from slowave.latent.episodic_store import EpisodicStore, EpisodicStoreConfig
 from slowave.latent.graph_manager import GraphManager
 from slowave.latent.replay_engine import ReplayEngine
@@ -193,6 +194,9 @@ class SlowaveEngine:
         else:
             self._encoder = TextEncoder(self.cfg.encoder)
 
+        # SupersessionManifold: lazy-computed SVD1 direction axis for P2.
+        self._manifold: SupersessionManifold | None = None
+
         # Latent consolidator: schemas are prototype geometry + lexical signatures.
         # Zero LLM calls in ingest, consolidation, and retrieval.
         from slowave.latent.schema import (
@@ -272,6 +276,8 @@ class SlowaveEngine:
     @encoder.setter
     def encoder(self, value: "TextEncoder | None") -> None:
         self._encoder = value
+        if self._manifold is not None:
+            self._manifold.invalidate()
         # Propagate to services that hold their own encoder reference so that
         # post-construction assignment (e.g. test monkey-patching) stays in sync.
         if hasattr(self, "_retrieval"):
@@ -480,6 +486,7 @@ class SlowaveEngine:
         # Pattern-based deterministic supersession (before geometric check).
         # Detects explicit update signals like "now uses", "switched from X to Y", etc.
         # Only applies to explicit_remember; doesn't interfere with geometric logic below.
+        pattern_candidates: list[SupersessionCandidate] = []
         try:
             pattern_candidates = find_superseded_candidates(
                 new_content=content,
@@ -504,12 +511,34 @@ class SlowaveEngine:
                 else:
                     # Below threshold: mark for review instead
                     try:
-                        self.schemas.set_needs_review(cand.old_schema_id, True)
+                        self.schemas.adjust_feedback_state(cand.old_schema_id, needs_review=True)
                     except (KeyError, Exception):
                         pass
         except Exception:
             # Graceful fallback: pattern supersession should never break remember()
             pass
+
+        # P2: Cosine-based supersession fallback — fires when regex P1 finds nothing.
+        # Two thresholds, both flag needs_review only (never auto-supersede):
+        #   ≥0.85: near-verbatim or very similar → almost certainly a value update
+        #   ≥0.50: moderately similar → plausible value update, worth human review
+        # Threshold calibrated for paraphrase-multilingual-MiniLM-L12-v2 cosine
+        # distribution: supersession mean ≈ 0.68, additive mean ≈ 0.36.
+        if not pattern_candidates and emb is not None:
+            try:
+                p1_ids = {c.old_schema_id for c in pattern_candidates}
+                for sid, cosine_score in self.schemas.search_embedding(
+                    emb, limit=10, scope_id=scope_id
+                ):
+                    if sid in p1_ids:
+                        continue
+                    if cosine_score >= 0.50:
+                        try:
+                            self.schemas.adjust_feedback_state(sid, needs_review=True)
+                        except (KeyError, Exception):
+                            continue
+            except Exception:
+                pass
 
         # Supersession: if this explicit memory contradicts an existing
         # active schema on the same topic, mark the old one superseded.

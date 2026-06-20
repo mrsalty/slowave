@@ -1,10 +1,7 @@
 """Text encoder: produces a dense embedding for a piece of text.
 
-Default backend: ONNX Runtime with bge-small-en-v1.5 (384-dim).
-
-This encoder uses ONNX Runtime for CPU-optimized inference without requiring
-torch or sentence-transformers. For users who want the old sentence-transformers
-backend, set EncoderConfig(use_onnx=False).
+Default backend: ONNX Runtime with paraphrase-multilingual-MiniLM-L12-v2
+(384-dim, 50+ languages). Swap via EncoderConfig(model_name=...).
 
 The encoder is loaded lazily on first use so that imports stay cheap and
 test runs that don't need embeddings (e.g. with synthetic vectors) don't
@@ -20,7 +17,7 @@ import numpy as np
 
 @dataclass(frozen=True)
 class EncoderConfig:
-    model_name: str = "BAAI/bge-small-en-v1.5"
+    model_name: str = "sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2"
     normalize: bool = True
     device: str = "cpu"  # Only CPU for ONNX
     use_onnx: bool = True  # Use ONNX Runtime (recommended) vs sentence-transformers
@@ -118,7 +115,7 @@ class TextEncoder:
 
     @property
     def dim(self) -> int:
-        """Embedding dimension (384 for bge-small-en-v1.5)."""
+        """Embedding dimension (384 for the default model)."""
         self._ensure_loaded()
         assert self._dim is not None
         return self._dim

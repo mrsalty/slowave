@@ -6,6 +6,7 @@ pipeline can be read, tested, and reasoned about independently.
 from __future__ import annotations
 
 import dataclasses
+import math
 import re
 import time
 from dataclasses import dataclass, field
@@ -64,6 +65,17 @@ def _normalize_episode_text(text: str) -> str:
     # Normalize whitespace
     text = re.sub(r"\s+", " ", text)
     return text
+
+
+def _norm_salience(s: float) -> float:
+    """Normalise raw salience [0, ∞) → [0, 1) via sigmoid.
+
+    Fixes P1: raw salience ranges 0.01–4.0+ so salience_weight
+    multiplication is unnormalised.  The sigmoid compresses the
+    range while preserving monotonicity, giving salience a
+    controlled contribution to the ranking score.
+    """
+    return 2.0 / (1.0 + math.exp(-s / 2.0)) - 1.0
 
 
 class RetrievalService:
@@ -267,7 +279,7 @@ class RetrievalService:
         
         schemas = sorted(
             filtered_schemas,
-            key=lambda s: schema_scores.get(s.id, 0.0) + 0.1 * s.salience,
+            key=lambda s: schema_scores.get(s.id, 0.0) + self._retrieval_cfg.salience_weight * _norm_salience(s.salience),
             reverse=True,
         )[:top_k]
         for s in schemas:
