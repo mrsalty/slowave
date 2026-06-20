@@ -77,7 +77,7 @@ One optional component has English-only defaults and falls back gracefully:
 ## Deployment limits
 
 - **Single-user, local only.** Slowave is designed for one user on one machine. The SQLite storage layer is not designed for concurrent multi-user writes or cloud deployment.
-- **English-first embeddings.** The default embedding model (`BAAI/bge-small-en-v1.5`) is trained primarily on English text. Non-English memory quality depends on the chosen embedding model.
+- **English-first embeddings.** The default embedding model (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`) is trained primarily on English text. Non-English memory quality depends on the chosen embedding model.
 - **No reasoning layer.** Slowave is a retrieval system. It surfaces relevant memories; it does not reason about them, synthesize answers, or draw conclusions.
 
 ---

@@ -1,0 +1,172 @@
+[
+  {
+    "scenario_id": "R-1",
+    "family": "retrieval",
+    "expected_keyword": "network",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: Fundamentally, deep learning refers to a class of machine learning algorithms in which a hierarchy of layers is used to transform input data into a progressively more abstract and composite representation. For example, in an image recognition model, the raw input may be an image (represented as a tensor of pixels). The first representational layer may attempt to identify basic shapes such as lines and circles, the second layer may compose and encode arrangements of edges, the ",
+    "detail": {
+      "n_Machine_learning": 112,
+      "n_Deep_learning": 119,
+      "n_Artificial_neural_network": 104,
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "R-2",
+    "family": "retrieval",
+    "expected_keyword": "military",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: Due to the Empire's extent and endurance, its institutions and culture had a lasting influence on the development of language, religion, art, architecture, literature, philosophy, law, and forms of government across its territories. Latin evolved into the Romance languages while Medieval Greek became the language of the East. The Empire's adoption of Christianity resulted in the formation of medieval Christendom. Roman and Greek art had a profound impact on the Italian Renaiss",
+    "detail": {
+      "n_Ancient_Rome": 135,
+      "n_Roman_Empire": 152,
+      "n_Julius_Caesar": 80,
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "R-3",
+    "family": "retrieval",
+    "expected_keyword": "improvisation",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: Although jazz is considered difficult to define, in part because it contains many subgenres, improvisation is one of its defining elements. The centrality of improvisation is attributed to the influence of earlier forms of music such as blues, a form of folk music which arose in part from the work songs and field hollers of African-American slaves on plantations. These work songs were commonly structured around a repetitive call-and-response pattern, but early blues was also i",
+    "detail": {
+      "n_Jazz": 164,
+      "n_Blues": 89,
+      "n_Improvisation": 16,
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "R-4",
+    "family": "retrieval",
+    "expected_keyword": "chlorophyll",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: Although all cells in the green parts of a plant have chloroplasts, the majority of those are found in specially adapted structures called leaves. Certain species adapted to conditions of strong sunlight and aridity, such as many Euphorbia and cactus species, have their main photosynthetic organs in their stems. The cells in the interior tissues of a leaf, called the mesophyll, can contain between 450,000 and 800,000 chloroplasts for every square millimeter of leaf. The surfac",
+    "detail": {
+      "n_Cell_(biology)": 79,
+      "n_Photosynthesis": 81,
+      "n_Quantum_mechanics": 70,
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "I-1",
+    "family": "isolation",
+    "expected_keyword": "network",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: Machine learning (ML) is a field of study in artificial intelligence concerned with the development and study of statistical algorithms that can learn from data and generalize to unseen data, and thus perform tasks without being explicitly programmed.&#91;1&#93; Advances in the field of deep learning have allowed neural networks, a class of statistical algorithms, to surpass many previous machine learning approaches in performance.\nUser: Statistics and mathematical optimisatio",
+    "detail": {
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "I-2",
+    "family": "isolation",
+    "expected_keyword": "province",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: An annexed territory became a Roman province in three steps: making a register of cities, taking a census, and surveying the land.&#91;216&#93; Further government recordkeeping included births and deaths, real estate transactions, taxes, and juridical proceedings.&#91;217&#93; In the 1st and 2nd centuries, the central government sent out around 160 officials annually to govern outside Italy.&#91;22&#93; Among these officials were the Roman governors: magistrates elected at Rom",
+    "detail": {
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "I-3",
+    "family": "isolation",
+    "expected_keyword": "blues",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: In Ohio and elsewhere in the mid-west the major influence was ragtime, until about 1919. Around 1912, when the four-string banjo and saxophone came in, musicians began to improvise the melody line, but the harmony and rhythm remained unchanged. A contemporary account states that blues could only be heard in jazz in the gut-bucket cabarets, which were generally looked down upon by the Black middle-class.&#91;84&#93;&#91;full citation needed&#93;\nUser: Blues is the name given to",
+    "detail": {
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "G-1",
+    "family": "generalization",
+    "expected_keyword": "layer",
+    "hit": true,
+    "hypothesis": "In machine learning, deep learning (DL) focuses on utilizing multilayered neural networks to perform tasks such as classification, regression, and representation learning. The field takes inspiration from biological neuroscience and revolves around stacking artificial neurons into layers and \"training\" them to process data. The adjective \"deep\" refers to the use of multiple layers (ranging from three to several hundred or thousands) in the network. Methods used can be supervised, semi-supervised",
+    "detail": {
+      "n_schemas": 67
+    }
+  },
+  {
+    "scenario_id": "G-2",
+    "family": "generalization",
+    "expected_keyword": "Senate",
+    "hit": true,
+    "hypothesis": "In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century&#160;BC to the collapse of the Western Roman Empire in the 5th century&#160;AD. It encompasses the Roman Kingdom (753\u2013509&#160;BC), the Roman Republic (509&#8205;&#8211;&#8205;27&#160;BC), and the Roman Empire (27&#160;BC&#160;&#8211;&#32;476&#160;AD) until the fall of the western empire.&#91;1&#93;&#91;a&#93;\nAncient Rome began as an Italic settlement, traditionally ",
+    "detail": {
+      "n_schemas": 104
+    }
+  },
+  {
+    "scenario_id": "G-3",
+    "family": "generalization",
+    "expected_keyword": "African",
+    "hit": true,
+    "hypothesis": "Blues is a music genre&#91;3&#93; and musical form that originated among African Americans in the Deep South of the United States around the 1860s.&#91;2&#93; Blues has incorporated spirituals, work songs, field hollers, shouts, chants, and rhymed simple narrative ballads from the African-American culture. The blues form is ubiquitous in jazz, rhythm and blues, and rock and roll, and is characterized by the call-and-response pattern, the blues scale, and specific chord progressions, of which the",
+    "detail": {
+      "n_schemas": 84
+    }
+  },
+  {
+    "scenario_id": "D-1",
+    "family": "decay",
+    "expected_keyword": "deep",
+    "hit": true,
+    "hypothesis": "[2025-01-31] User: In machine learning, deep learning (DL) focuses on utilizing multilayered neural networks to perform tasks such as classification, regression, and representation learning. The field takes inspiration from biological neuroscience and revolves around stacking artificial neurons into layers and \"training\" them to process data. The adjective \"deep\" refers to the use of multiple layers (ranging from three to several hundred or thousands) in the network. Methods used can be supervis",
+    "detail": {
+      "sal_expected": 0.41,
+      "sal_anti": 0.0,
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "D-2",
+    "family": "decay",
+    "expected_keyword": "Caesar",
+    "hit": true,
+    "hypothesis": "[2025-01-01] User: In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century&#160;BC to the collapse of the Western Roman Empire in the 5th century&#160;AD. It encompasses the Roman Kingdom (753\u2013509&#160;BC), the Roman Republic (509&#8205;&#8211;&#8205;27&#160;BC), and the Roman Empire (27&#160;BC&#160;&#8211;&#32;476&#160;AD) until the fall of the western empire.&#91;1&#93;&#91;a&#93;\nUser: Ancient Rome began as an Italic s",
+    "detail": {
+      "sal_expected": 0.41,
+      "sal_anti": 0.0,
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "D-3",
+    "family": "decay",
+    "expected_keyword": "jazz",
+    "hit": true,
+    "hypothesis": "[2025-01-15] User: Jazz is a music genre that originated in the African-American communities of New Orleans, Louisiana, in the late 19th and early 20th centuries. Its roots are in blues, ragtime, European harmony, African rhythmic rituals, spirituals, hymns, marches, vaudeville song, and dance music. Since the 1920s Jazz Age, it has been recognized as a major form of musical expression in traditional and popular music. Jazz is characterized by swing and blue notes, complex chords, call and respo",
+    "detail": {
+      "sal_expected": 0.41,
+      "sal_anti": 0.0,
+      "n_schemas": 0
+    }
+  },
+  {
+    "scenario_id": "S-1",
+    "family": "supersession",
+    "expected_keyword": "Adam",
+    "hit": true,
+    "hypothesis": "machine learning now uses gradient descent for optimisation Machine learning (ML) is a field of study in artificial intelligence concerned with the development and study of statistical algorithms that can learn from data and generalize to unseen data, and thus perform tasks without being explicitly programmed.&#91;1&#93; Advances in the field of deep learning have allowed neural networks, a class of statistical algorithms, to surpass many previous machine learning approaches in performance.\nStat",
+    "detail": {
+      "v1_kw_still_active": true,
+      "n_schemas": 69
+    }
+  },
+  {
+    "scenario_id": "S-2",
+    "family": "supersession",
+    "expected_keyword": "imperial",
+    "hit": true,
+    "hypothesis": "In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century&#160;BC to the collapse of the Western Roman Empire in the 5th century&#160;AD. It encompasses the Roman Kingdom (753\u2013509&#160;BC), the Roman Republic (509&#8205;&#8211;&#8205;27&#160;BC), and the Roman Empire (27&#160;BC&#160;&#8211;&#32;476&#160;AD) until the fall of the western empire.&#91;1&#93;&#91;a&#93;\nAncient Rome began as an Italic settlement, traditionally ",
+    "detail": {
+      "v1_kw_still_active": true,
+      "n_schemas": 103
+    }
+  }
+]

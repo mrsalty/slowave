@@ -739,7 +739,7 @@ def main() -> None:
 
     # Pre-load the encoder once; shared across all questions to avoid
     # reloading weights for every fresh per-question engine instance.
-    print("Loading encoder (bge-small-en-v1.5)...", end=" ", flush=True)
+    print("Loading encoder (paraphrase-multilingual-MiniLM-L12-v2)...", end=" ", flush=True)
     enc_cfg = EncoderConfig()
     shared_enc = TextEncoder(enc_cfg)
     _ = shared_enc.dim  # force model load now

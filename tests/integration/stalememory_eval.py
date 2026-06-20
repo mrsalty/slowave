@@ -426,7 +426,7 @@ def main() -> None:
         print(f"(capped at {args.limit} per attribute×pattern)")
     print(f"consolidate={not args.no_consolidate}  threshold={args.assignment_threshold}  top_k={args.top_k}")
 
-    print("Loading encoder (bge-small-en-v1.5)...", end=" ", flush=True)
+    print("Loading encoder (paraphrase-multilingual-MiniLM-L12-v2)...", end=" ", flush=True)
     enc_cfg = EncoderConfig()
     shared_enc = TextEncoder(enc_cfg)
     _ = shared_enc.dim
