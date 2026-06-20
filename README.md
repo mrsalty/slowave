@@ -56,7 +56,7 @@ Under the hood, Slowave has two layers:
 
 The LLM is an output channel — it verbalizes what memory already knows. It never operates on memory itself.
 
-[See the architecture →](docs/design.md) — [How consolidation works →](docs/architecture.md)
+[Design rationale →](docs/design.md) — [Architecture →](docs/architecture.md)
 
 ## The big picture
 ```
