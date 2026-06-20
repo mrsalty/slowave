@@ -13,7 +13,7 @@ Slowave gives Claude Code, Cline, Cursor, Claude Desktop, Windsurf, and other MC
 
 See Slowave in action: cold start → memory acquisition → cross-session recall across both Claude and Cline:
 
-<video src="https://raw.githubusercontent.com/mrsalty/slowave/main/img/demo.mp4" controls width="100%"></video>
+[![Demo video](https://img.shields.io/badge/▶%20Watch_demo-mp4-2f6f4e)](img/demo.mp4)
 
 > *The demo shows: (1) cold start on a fresh project — Slowave discovers and stores key facts from CLAUDE.md, (2) agent is told to remember a rule (run tests & lint before pushing), (3) new Claude session — builds a feature, pushes, and recalls the rule, (4) new Cline session — asked what it remembers, and surfaces all memories including the test-and-lint rule.*
 
