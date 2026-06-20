@@ -81,8 +81,22 @@ On **fact-recall benchmarks**, Slowave reaches scores competitive with LLM-based
 
 ## Install
 
+**macOS (Homebrew)**
+
+```bash
+brew tap mrsalty/slowave https://github.com/mrsalty/slowave
+brew install slowave
+```
+
+**All platforms (pipx)**
+
 ```bash
 pipx install slowave
+```
+
+Then run setup:
+
+```bash
 slowave setup --dry-run
 slowave setup
 slowave doctor
