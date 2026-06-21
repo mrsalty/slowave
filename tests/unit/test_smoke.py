@@ -80,7 +80,7 @@ def test_engine_latent_only_synthetic() -> None:
         assert "transition_loss" in replay_stats
 
         # Query: nearest to a perturbed embedding of an existing event.
-        q = events[-1].embedding + 0.05 * np.random.normal(size=(64,)).astype(np.float32)
+        q = events[-1].embedding + 0.05 * np.random.default_rng(42).normal(size=(64,)).astype(np.float32)
         q = q / (np.linalg.norm(q) + 1e-12)
         retrieved = eng.retrieval.retrieve(q)
         assert len(retrieved.episodic) > 0
