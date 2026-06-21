@@ -225,6 +225,140 @@ def backup_cmd(
         click.echo(f"     policy : keep last {result['keep_policy']}")
 
 
+@click.command("restore")
+@click.argument("backup_path", type=click.Path(exists=True, dir_okay=False))
+@click.option("--yes", is_flag=True, help="Skip confirmation prompt.")
+@click.option("--json", "as_json", is_flag=True, help="JSON output.")
+@click.pass_context
+def restore_cmd(
+    ctx: click.Context,
+    backup_path: str,
+    yes: bool,
+    as_json: bool,
+) -> None:
+    """Restore a Slowave database from a compressed backup.
+
+    \\b
+    BACKUP_PATH must be a slowave-*.db.gz file created by 'slowave backup'.
+
+    This stops the running worker, replaces the current database with the
+    backup, then restarts the worker. The previous database is backed up
+    in-place as slowave.db.bak before the swap.
+
+    \\b
+    Examples:
+      slowave restore ~/.slowave/backups/slowave-20260615_120000.db.gz
+      slowave restore ~/.slowave/backups/slowave-20260615_120000.db.gz --yes
+    """
+    db_path = ctx.obj["db"]
+    dest = Path(db_path).expanduser().resolve()
+    src = Path(backup_path).expanduser().resolve()
+
+    if not src.suffixes == [".db", ".gz"]:
+        raise click.BadParameter(
+            f"Expected a .db.gz backup file, got: {src.name}"
+        )
+
+    if not yes:
+        click.echo(click.style("  ⚠  Restore database backup", fg="yellow", bold=True))
+        click.echo(f"     from : {src}")
+        click.echo(f"     to   : {dest}")
+        click.echo(click.style(
+            f"\n  This will REPLACE your current database. Any data not in the\n"
+            f"  backup will be lost. A backup of the current database will be\n"
+            f"  saved to {dest}.bak before the swap.\n",
+            fg="yellow",
+        ))
+        click.confirm("  Continue?", abort=True, default=False)
+
+    started = time.monotonic()
+
+    # Stop the daemon so the DB isn't held open.
+    daemon_stopped = False
+    try:
+        from slowave.mcp.daemon import is_running as _daemon_running, stop_daemon as _stop_daemon
+        if _daemon_running():
+            _stop_daemon()
+            import time as _time; _time.sleep(0.5)
+            daemon_stopped = True
+    except Exception:
+        pass
+
+    # Backup current DB before overwriting.
+    bak_path = Path(str(dest) + ".bak")
+    if dest.exists():
+        try:
+            shutil.copy2(dest, bak_path)
+        except OSError as exc:
+            raise click.ClickException(
+                f"Could not backup current database: {exc}"
+            )
+
+    # Decompress and copy the backup into place.
+    try:
+        with gzip.open(src, "rb") as f_in:
+            with open(dest, "wb") as f_out:
+                shutil.copyfileobj(f_in, f_out, length=1024 * 1024)
+    except OSError as exc:
+        # Try to restore the .bak if the write failed part-way.
+        if bak_path.exists() and not dest.exists():
+            shutil.move(str(bak_path), str(dest))
+        elif bak_path.exists() and dest.exists():
+            shutil.move(str(bak_path), str(dest))
+        raise click.ClickException(f"Restore failed: {exc}")
+
+    # Verify the restored file is a valid SQLite database.
+    try:
+        conn = sqlite3.connect(f"file:{dest}?mode=ro", uri=True)
+        conn.execute("SELECT count(*) FROM sqlite_master").fetchone()
+        conn.close()
+    except sqlite3.Error as exc:
+        if bak_path.exists():
+            shutil.move(str(bak_path), str(dest))
+        raise click.ClickException(
+            f"Restored file is not a valid SQLite database: {exc}"
+        )
+
+    elapsed_ms = int((time.monotonic() - started) * 1000)
+    src_size = src.stat().st_size
+    dest_size = dest.stat().st_size
+
+    # Remove the .bak since the restore succeeded.
+    try:
+        if bak_path.exists():
+            bak_path.unlink()
+    except OSError:
+        pass
+
+    # Recreate the backups directory in case it was missing.
+    _default_backup_dir().mkdir(parents=True, exist_ok=True)
+
+    result = {
+        "restored_from": str(src),
+        "restored_to": str(dest),
+        "source_size_bytes": src_size,
+        "restored_size_bytes": dest_size,
+        "elapsed_ms": elapsed_ms,
+        "daemon_was_stopped": daemon_stopped,
+    }
+
+    if as_json:
+        import json as _json
+        click.echo(_json.dumps(result, ensure_ascii=False, indent=2, default=str))
+    else:
+        click.echo(click.style("  ✓ restore complete", fg="green", bold=True))
+        click.echo(f"     from : {src} ({_fmt_bytes(src_size)} compressed)")
+        click.echo(f"     to   : {dest} ({_fmt_bytes(dest_size)} restored)")
+        click.echo(f"     time : {elapsed_ms} ms")
+        if daemon_stopped:
+            click.echo(
+                click.style(
+                    "     note : daemon was stopped; run 'slowave serve start' to restart",
+                    fg="yellow",
+                )
+            )
+
+
 def _fmt_bytes(n: int) -> str:
     if n >= 1_000_000:
         return f"{n / 1_000_000:.1f} MB"
