@@ -193,6 +193,41 @@ Created via PowerShell. Triggers at user logon, restarts on failure.
 
 ---
 
+## Daily Database Backup
+
+`slowave setup` also installs a daily backup job that creates a gzip-compressed
+snapshot of the SQLite database. Backups use SQLite's online `.backup()` API —
+safe while the worker and MCP server are running.
+
+### macOS (launchd)
+
+**File:** `~/Library/LaunchAgents/com.slowave.backup.plist`
+
+Runs `slowave backup` once per day at 03:00 via `StartCalendarInterval`.
+
+**Verify:** `launchctl list com.slowave.backup`
+
+### Linux (systemd timer)
+
+**Files:**
+- `~/.config/systemd/user/slowave-backup.service` (oneshot)
+- `~/.config/systemd/user/slowave-backup.timer` (`OnCalendar=daily`)
+
+**Verify:** `systemctl --user status slowave-backup.timer`
+
+### Windows (Task Scheduler)
+
+**Task Name:** `SlowaveBackup`
+
+Runs `slowave backup` daily at 03:00.
+
+**Verify:** `Get-ScheduledTask -TaskName SlowaveBackup`
+
+Backups are stored in `~/.slowave/backups/` by default. The last 7 backups are
+kept (configurable via `SLOWAVE_BACKUP_KEEP` or `--keep`).
+
+---
+
 ## What Does NOT Get Modified
 
 | ❌ Never touched | Why |
