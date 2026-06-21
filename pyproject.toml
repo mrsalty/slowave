@@ -42,7 +42,13 @@ Issues = "https://github.com/mrsalty/slowave/issues"
 Changelog = "https://github.com/mrsalty/slowave/releases"
 
 [project.optional-dependencies]
-test = ["pytest>=9.0.3", "faiss-cpu>=1.7"]
+test = [
+    "pytest>=9.0.3",
+    "pytest-timeout>=2.3",
+    "pytest-randomly>=3.16",
+    "pytest-rerunfailures>=15.0",
+    "faiss-cpu>=1.7",
+]
 http = ["httpx>=0.25"]
 dev = ["pytest>=9.0.3", "black", "isort", "build", "twine", "faiss-cpu>=1.7"]
 
