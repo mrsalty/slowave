@@ -351,51 +351,76 @@ def _status_payload(db_path: str) -> dict[str, Any]:
 
 
 def _pulse_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
-    """Return raw-event counts bucketed over a configurable time window.
+    """Return three zero-filled bucket series for the EEG multi-channel view.
 
-    All buckets across the window are returned (zero-filled), so the
-    frontend always has a dense, evenly-spaced grid to render.
+    Channels:
+      - raw_events   : incoming observations (raw_events.ts)
+      - episodes     : consolidation pulses  (episodic_memories.ts)
+      - schemas      : durable memory writes (schemas.first_formed_ts)
+
+    All three share the same bucket grid so they can be overlaid on one canvas.
 
     Query params:
-        - hours: look-back window (default 2, max 24)
-        - bucket_m: bucket size in minutes (default 5, max 60)
+        - hours:    look-back window in hours  (default 2, max 24)
+        - bucket_m: bucket size in minutes     (default 5, max 60)
     """
     hours = min(max(_qs_int(qs, "hours", 2), 1), 24)
     bucket_m = min(max(_qs_int(qs, "bucket_m", 5), 1), 60)
     bucket_s = bucket_m * 60
     now = int(time.time())
     window_start = now - hours * 3600
-    # Align start to bucket boundary
     first_bucket = (window_start // bucket_s) * bucket_s
-    # Build an ordered list of all expected bucket timestamps
-    all_ts = []
+
+    all_ts: list[int] = []
     t = first_bucket
     while t <= now:
         all_ts.append(t)
         t += bucket_s
 
+    def _bucketize(rows: list) -> list[dict[str, int]]:
+        counts = {int(r["bucket_ts"]): int(r["n"]) for r in rows}
+        return [{"ts": ts, "n": counts.get(ts, 0)} for ts in all_ts]
+
     conn = _connect(db_path)
     try:
-        rows = conn.execute(
+        raw_rows = conn.execute(
             """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
-               FROM raw_events
-               WHERE ts >= ? AND ts <= ?
-               GROUP BY bucket_ts
-               ORDER BY bucket_ts""",
+               FROM raw_events WHERE ts >= ? AND ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
             (bucket_s, bucket_s, first_bucket, now),
         ).fetchall()
-        counts = {int(r["bucket_ts"]): int(r["n"]) for r in rows}
-        # Zero-fill every bucket in the window
-        buckets = [{"ts": t, "n": counts.get(t, 0)} for t in all_ts]
-        total_events = sum(b["n"] for b in buckets)
-        max_n = max((b["n"] for b in buckets), default=0)
+        epi_rows = conn.execute(
+            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM episodic_memories WHERE ts >= ? AND ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+        sch_rows = conn.execute(
+            """SELECT (first_formed_ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM schemas WHERE first_formed_ts >= ? AND first_formed_ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+
+        channels = {
+            "raw_events": _bucketize(raw_rows),
+            "episodes":   _bucketize(epi_rows),
+            "schemas":    _bucketize(sch_rows),
+        }
+        global_max = max(
+            (b["n"] for ch in channels.values() for b in ch),
+            default=0,
+        )
         return {
-            "buckets": buckets,
-            "total_events": total_events,
-            "max_n": max_n,
+            "channels": channels,
+            "global_max": global_max,
             "window_hours": hours,
             "bucket_minutes": bucket_m,
             "now_ts": now,
+            # legacy single-channel keys so old code doesn't break
+            "buckets": channels["raw_events"],
+            "total_events": sum(b["n"] for b in channels["raw_events"]),
+            "max_n": max((b["n"] for b in channels["raw_events"]), default=0),
         }
     finally:
         conn.close()
@@ -1677,7 +1702,6 @@ async function loadStatus(){
 async function renderPulse(){
   try{
     const d=await getJSON("/api/pulse?hours=2&bucket_m=5");
-    const buckets=d.buckets||[];
     const canvas=document.getElementById("pulseCanvas");
     const tooltip=document.getElementById("pulseTooltip");
     const stats=document.getElementById("pulseStats");
@@ -1685,7 +1709,7 @@ async function renderPulse(){
 
     const DPR=window.devicePixelRatio||1;
     const W=canvas.parentElement.clientWidth;
-    const H=100;
+    const H=110;
     canvas.width=Math.round(W*DPR);
     canvas.height=Math.round(H*DPR);
     canvas.style.width=W+"px";
@@ -1694,125 +1718,119 @@ async function renderPulse(){
     ctx.scale(DPR,DPR);
     ctx.clearRect(0,0,W,H);
 
-    if(!d.total_events){
-      const baseline=H-16;
-      ctx.strokeStyle="rgba(79,155,255,.2)";ctx.lineWidth=1.5;ctx.setLineDash([4,6]);
-      ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();ctx.setLineDash([]);
+    // ── channel definitions ───────────────────────────────────────────────────
+    const CHANNELS=[
+      {key:"raw_events",label:"raw events",color:"#4f9bff",gc:"rgba(79,155,255,"},
+      {key:"episodes",  label:"episodes",  color:"#a78bfa",gc:"rgba(167,139,250,"},
+      {key:"schemas",   label:"schemas",   color:"#3ecf6e",gc:"rgba(62,207,110,"},
+    ];
+    const channels=d.channels||{raw_events:d.buckets||[],episodes:[],schemas:[]};
+    const allBuckets=channels[CHANNELS[0].key]||[];
+    const N=allBuckets.length;
+
+    if(!N||!d.global_max){
+      const bl=H-18;
+      ctx.strokeStyle="rgba(79,155,255,.18)";ctx.lineWidth=0.8;ctx.setLineDash([4,7]);
+      ctx.beginPath();ctx.moveTo(0,bl);ctx.lineTo(W,bl);ctx.stroke();ctx.setLineDash([]);
       ctx.fillStyle="#3a4a6a";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
-      ctx.fillText("Flatline \u2014 no events in the last "+d.window_hours+"h",W/2,baseline-10);
+      ctx.fillText("Flatline \u2014 no events in the last "+d.window_hours+"h",W/2,bl-10);
       canvas.onmousemove=null;canvas.onmouseleave=null;stats.innerHTML="";return;
     }
 
     // ── layout ───────────────────────────────────────────────────────────────
-    const N=buckets.length;
-    const PAD_L=4,PAD_R=4,PAD_T=14,PAD_B=16;
+    const PAD_L=4,PAD_R=4,PAD_T=8,PAD_B=18;
     const IW=W-PAD_L-PAD_R;
     const IH=H-PAD_T-PAD_B;
     const baseline=H-PAD_B;
     const step=IW/(N-1||1);
-    const maxN=d.max_n||1;
-    const amp=v=>Math.sqrt(v/maxN)*IH*0.9;
+    const gmax=d.global_max||1;
+    const amp=v=>Math.sqrt(v/gmax)*IH*0.88;
 
-    // Build control points
-    const pts=buckets.map((b,i)=>({x:PAD_L+i*step,y:baseline-amp(b.n),n:b.n,ts:b.ts}));
-
-    // ── grid ─────────────────────────────────────────────────────────────────
-    ctx.strokeStyle="rgba(25,40,75,.7)";ctx.lineWidth=0.5;
-    [0.25,0.5,0.75,1].forEach(f=>{
-      const gy=baseline-Math.sqrt(f)*IH*0.9;
-      ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();
-    });
-
-    // ── zero baseline ─────────────────────────────────────────────────────────
-    ctx.strokeStyle="rgba(79,155,255,.15)";ctx.lineWidth=1;
-    ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
-
-    // ── Catmull-Rom spline helpers ────────────────────────────────────────────
-    function buildSpline(points){
-      const pp=[points[0],...points,points[points.length-1]];
+    // ── Catmull-Rom spline ────────────────────────────────────────────────────
+    function buildSpline(pts){
+      const pp=[pts[0],...pts,pts[pts.length-1]];
       ctx.moveTo(pp[1].x,pp[1].y);
       for(let i=1;i<pp.length-2;i++){
         const p0=pp[i-1],p1=pp[i],p2=pp[i+1],p3=pp[i+2];
         const d1=Math.hypot(p1.x-p0.x,p1.y-p0.y)||1;
         const d2=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
         const d3=Math.hypot(p3.x-p2.x,p3.y-p2.y)||1;
-        const b1x=p1.x+(p2.x-p0.x)/6*(d1/(d1+d2));
-        const b1y=p1.y+(p2.y-p0.y)/6*(d1/(d1+d2));
-        const b2x=p2.x-(p3.x-p1.x)/6*(d2/(d2+d3));
-        const b2y=p2.y-(p3.y-p1.y)/6*(d2/(d2+d3));
-        ctx.bezierCurveTo(b1x,b1y,b2x,b2y,p2.x,p2.y);
+        ctx.bezierCurveTo(
+          p1.x+(p2.x-p0.x)/6*(d1/(d1+d2)),p1.y+(p2.y-p0.y)/6*(d1/(d1+d2)),
+          p2.x-(p3.x-p1.x)/6*(d2/(d2+d3)),p2.y-(p3.y-p1.y)/6*(d2/(d2+d3)),
+          p2.x,p2.y);
       }
     }
 
-    // ── gradient fill under curve ─────────────────────────────────────────────
-    const grad=ctx.createLinearGradient(0,PAD_T,0,baseline);
-    grad.addColorStop(0,"rgba(79,155,255,.20)");
-    grad.addColorStop(0.7,"rgba(79,155,255,.04)");
-    grad.addColorStop(1,"rgba(79,155,255,0)");
-    ctx.beginPath();buildSpline(pts);
-    ctx.lineTo(pts[pts.length-1].x,baseline);ctx.lineTo(pts[0].x,baseline);ctx.closePath();
-    ctx.fillStyle=grad;ctx.fill();
+    // ── grid + baseline ───────────────────────────────────────────────────────
+    ctx.strokeStyle="rgba(20,35,65,.8)";ctx.lineWidth=0.5;
+    [0.25,0.5,0.75,1].forEach(f=>{
+      const gy=baseline-Math.sqrt(f)*IH*0.88;
+      ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();
+    });
+    ctx.strokeStyle="rgba(79,155,255,.10)";ctx.lineWidth=0.5;
+    ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
 
-    // ── glowing waveform line (blur pass + crisp pass) ────────────────────────
-    [{blur:10,w:3,a:.35},{blur:0,w:1.5,a:1}].forEach(({blur,w,a})=>{
-      ctx.save();
-      ctx.shadowColor="rgba(79,155,255,"+a+")";ctx.shadowBlur=blur;
-      ctx.strokeStyle="#4f9bff";ctx.lineWidth=w;ctx.lineJoin="round";
-      ctx.beginPath();buildSpline(pts);ctx.stroke();
-      ctx.restore();
+    // ── draw channels ─────────────────────────────────────────────────────────
+    const allPts={};
+    CHANNELS.forEach(ch=>{
+      const bkts=channels[ch.key]||[];
+      if(!bkts.length)return;
+      const pts=bkts.map((b,i)=>({x:PAD_L+i*step,y:baseline-amp(b.n),n:b.n,ts:b.ts}));
+      allPts[ch.key]=pts;
+      if(!bkts.some(b=>b.n>0))return;
+      // Faint area fill
+      const gr=ctx.createLinearGradient(0,PAD_T,0,baseline);
+      gr.addColorStop(0,ch.gc+"0.06)");gr.addColorStop(1,ch.gc+"0)");
+      ctx.beginPath();buildSpline(pts);
+      ctx.lineTo(pts[pts.length-1].x,baseline);ctx.lineTo(pts[0].x,baseline);ctx.closePath();
+      ctx.fillStyle=gr;ctx.fill();
+      // Thin lines: glow pass then crisp pass
+      [{blur:5,w:1.2,a:.5},{blur:0,w:0.8,a:1}].forEach(({blur,w,a})=>{
+        ctx.save();
+        ctx.shadowColor=ch.gc+a+")";ctx.shadowBlur=blur;
+        ctx.strokeStyle=ch.color;ctx.lineWidth=w;ctx.lineJoin="round";ctx.lineCap="round";
+        ctx.beginPath();buildSpline(pts);ctx.stroke();
+        ctx.restore();
+      });
     });
 
-    // ── peak dot + label ─────────────────────────────────────────────────────
-    const peakPt=pts.reduce((a,b)=>b.n>a.n?b:a,pts[0]);
-    if(peakPt.n>0){
-      ctx.save();
-      ctx.strokeStyle="rgba(62,207,110,.3)";ctx.lineWidth=1;ctx.setLineDash([3,4]);
-      ctx.beginPath();ctx.moveTo(peakPt.x,peakPt.y);ctx.lineTo(peakPt.x,baseline);ctx.stroke();
-      ctx.setLineDash([]);
-      ctx.shadowColor="rgba(62,207,110,.9)";ctx.shadowBlur=10;
-      ctx.fillStyle="#3ecf6e";
-      ctx.beginPath();ctx.arc(peakPt.x,peakPt.y,3.5,0,Math.PI*2);ctx.fill();
-      ctx.shadowBlur=0;
-      ctx.fillStyle="#3ecf6e";ctx.font="bold 10px system-ui,sans-serif";ctx.textAlign="center";
-      ctx.fillText(peakPt.n,Math.min(W-14,Math.max(14,peakPt.x)),peakPt.y-8);
-      ctx.restore();
-    }
-
-    // ── time axis labels ──────────────────────────────────────────────────────
-    ctx.fillStyle="rgba(90,110,145,.65)";
+    // ── time axis ─────────────────────────────────────────────────────────────
+    ctx.fillStyle="rgba(80,100,140,.6)";
     ctx.font="10px system-ui,sans-serif";ctx.textAlign="center";
     const labelStep=Math.ceil(N/6);
-    buckets.forEach((b,i)=>{
+    allBuckets.forEach((b,i)=>{
       if(i%labelStep!==0&&i!==N-1)return;
-      const lx=PAD_L+i*step;
       ctx.fillText(new Date(b.ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
-        Math.min(W-18,Math.max(18,lx)),H-2);
+        Math.min(W-18,Math.max(18,PAD_L+i*step)),H-3);
     });
 
-    // ── hover scrubber ────────────────────────────────────────────────────────
+    // ── hover ─────────────────────────────────────────────────────────────────
     canvas.onmousemove=function(e){
       const rect=canvas.getBoundingClientRect();
       const mx=e.clientX-rect.left;
-      let best=null,bestDx=Infinity;
-      pts.forEach(p=>{const dx=Math.abs(p.x-mx);if(dx<bestDx){bestDx=dx;best=p;}});
-      if(best&&bestDx<step*0.7){
-        const label=best.n===0?"flatline":best.n+" event"+(best.n!==1?"s":"");
-        const t2=new Date(best.ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
-        tooltip.style.display="block";
-        tooltip.style.left=Math.min(W-60,Math.max(30,best.x))+"px";
-        tooltip.style.top=Math.max(4,best.y-34)+"px";
-        tooltip.style.transform="translateX(-50%)";
-        tooltip.innerHTML=label+"<br><span style='color:var(--muted);font-size:10px'>"+t2+"</span>";
-      } else {tooltip.style.display="none";}
+      const idx=Math.min(N-1,Math.max(0,Math.round((mx-PAD_L)/step)));
+      const rows=CHANNELS.map(ch=>{
+        const b=(channels[ch.key]||[])[idx];
+        return`<span style='color:${ch.color}'>\u25cf</span> ${ch.label}: <b>${b?b.n:0}</b>`;
+      }).join("<br>");
+      const ts=allBuckets[idx]?.ts;
+      const t2=ts?new Date(ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
+      tooltip.style.display="block";
+      tooltip.style.left=Math.min(W-70,Math.max(40,PAD_L+idx*step))+"px";
+      tooltip.style.top="4px";
+      tooltip.style.transform="translateX(-50%)";
+      tooltip.innerHTML=`<div style='font-size:10px;color:var(--muted);margin-bottom:3px'>${t2}</div>${rows}`;
     };
     canvas.onmouseleave=function(){tooltip.style.display="none";};
 
     // ── stats footer ──────────────────────────────────────────────────────────
-    const nonZero=buckets.filter(b=>b.n>0);
-    stats.innerHTML="<span style='color:var(--muted)'>"+d.window_hours+"h &nbsp;\u00b7&nbsp; "+d.bucket_minutes+"m buckets</span>"
-      +"&nbsp;&nbsp;<b>"+d.total_events+"</b> events &nbsp;\u00b7&nbsp; peak <b>"+d.max_n
-      +"</b> &nbsp;\u00b7&nbsp; <b>"+nonZero.length+"</b>/"+(N)+" active buckets";
-  }catch(e){/* pulse silent */}
+    const totals=CHANNELS.map(ch=>{
+      const sum=(channels[ch.key]||[]).reduce((a,b)=>a+b.n,0);
+      return`<span style='color:${ch.color}'>\u25cf ${ch.label}</span> <b>${sum}</b>`;
+    }).join(" &nbsp;\u00b7&nbsp; ");
+    stats.innerHTML=`<span style='color:var(--muted)'>${d.window_hours}h &nbsp;\u00b7&nbsp; ${d.bucket_minutes}m buckets</span>&nbsp;&nbsp;${totals}`;
+  }catch(e){console.error("pulse",e);}
 }
 function statusBreakdown(by){
   const statusOrder=["active","needs_review","contradicted","superseded","archived"];
