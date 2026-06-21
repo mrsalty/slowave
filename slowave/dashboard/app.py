@@ -96,6 +96,8 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                     self._send_json(_status_payload(db_path))
                 elif path == "/api/daemon":
                     self._send_json(_daemon_health())
+                elif path == "/api/pulse":
+                    self._send_json(_pulse_payload(db_path, qs))
                 elif path == "/api/db/health":
                     self._send_json(_db_health(db_path))
                 elif path == "/api/schemas":
@@ -346,6 +348,65 @@ def _status_payload(db_path: str) -> dict[str, Any]:
     finally:
         if conn is not None:
             conn.close()
+
+
+def _pulse_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Return raw-event counts bucketed over a configurable time window.
+
+    All buckets across the window are returned (zero-filled), so the
+    frontend always has a dense, evenly-spaced grid to render.
+
+    Query params:
+        - hours: look-back window (default 2, max 24)
+        - bucket_m: bucket size in minutes (default 5, max 60)
+    """
+    hours = min(max(_qs_int(qs, "hours", 2), 1), 24)
+    bucket_m = min(max(_qs_int(qs, "bucket_m", 5), 1), 60)
+    bucket_s = bucket_m * 60
+    now = int(time.time())
+    window_start = now - hours * 3600
+    # Align start to bucket boundary
+    first_bucket = (window_start // bucket_s) * bucket_s
+    # Build an ordered list of all expected bucket timestamps
+    all_ts = []
+    t = first_bucket
+    while t <= now:
+        all_ts.append(t)
+        t += bucket_s
+
+    conn = _connect(db_path)
+    try:
+        rows = conn.execute(
+            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM raw_events
+               WHERE ts >= ? AND ts <= ?
+               GROUP BY bucket_ts
+               ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+        counts = {int(r["bucket_ts"]): int(r["n"]) for r in rows}
+        # Zero-fill every bucket in the window
+        buckets = [{"ts": t, "n": counts.get(t, 0)} for t in all_ts]
+        total_events = sum(b["n"] for b in buckets)
+        max_n = max((b["n"] for b in buckets), default=0)
+        return {
+            "buckets": buckets,
+            "total_events": total_events,
+            "max_n": max_n,
+            "window_hours": hours,
+            "bucket_minutes": bucket_m,
+            "now_ts": now,
+        }
+    finally:
+        conn.close()
+
+
+def _qs_int(qs: dict[str, list[str]], key: str, default: int) -> int:
+    """Extract a single int query-string param."""
+    try:
+        return int(qs.get(key, [str(default)])[0])
+    except (ValueError, IndexError):
+        return default
 
 
 def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -1176,6 +1237,14 @@ tr.expandable:hover td{background:var(--panel3)}
 .scope-reg-card:hover{border-color:rgba(30,45,74,.7);box-shadow:0 2px 4px rgba(0,0,0,.1)}
 .scope-reg-id{font-family:"SF Mono","Fira Code",monospace;font-size:12px;font-weight:600}
 .scope-reg-meta{font-size:11px;color:var(--muted)}
+
+/* ── PULSE GRAPH ── */
+.pulse-panel{position:relative}
+.pulse-canvas{display:block;width:100%;height:100px;border-radius:8px;image-rendering:crisp-edges}
+.pulse-stats{display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--muted)}
+.pulse-stats b{color:var(--text)}
+.pulse-bar-hover{cursor:crosshair}
+#pulseTooltip{position:absolute;background:rgba(8,14,28,.95);border:1px solid rgba(79,155,255,.5);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--text);pointer-events:none;white-space:nowrap;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,.5)}
 </style>
 </head>
 <body>
@@ -1209,6 +1278,14 @@ tr.expandable:hover td{background:var(--panel3)}
 <!-- OVERVIEW -->
 <section id="overview" class="section active">
   <div id="alertArea"></div>
+  <div class="panel pulse-panel" style="margin-bottom:10px">
+    <div class="panel-title">⚡ Event pulse <span style="font-weight:400;font-size:11px;color:var(--muted)">— raw event ingestion</span></div>
+    <div style="position:relative">
+      <canvas id="pulseCanvas" class="pulse-canvas pulse-bar-hover"></canvas>
+      <div id="pulseTooltip"></div>
+    </div>
+    <div class="pulse-stats" id="pulseStats"></div>
+  </div>
   <div class="stat-grid" id="statGrid"></div>
   <div class="two-col">
     <div class="panel">
@@ -1594,7 +1671,138 @@ async function loadStatus(){
     );
   }
 }
+// PULSE GRAPH
+  renderPulse();
 
+async function renderPulse(){
+  try{
+    const d=await getJSON("/api/pulse?hours=2&bucket_m=5");
+    const buckets=d.buckets||[];
+    const canvas=document.getElementById("pulseCanvas");
+    const tooltip=document.getElementById("pulseTooltip");
+    const stats=document.getElementById("pulseStats");
+    if(!canvas)return;
+
+    const DPR=window.devicePixelRatio||1;
+    const W=canvas.parentElement.clientWidth;
+    const H=80;
+    canvas.width=Math.round(W*DPR);
+    canvas.height=Math.round(H*DPR);
+    canvas.style.width=W+"px";
+    canvas.style.height=H+"px";
+    const ctx=canvas.getContext("2d");
+    ctx.scale(DPR,DPR);
+    ctx.clearRect(0,0,W,H);
+
+    if(!d.total_events){
+      ctx.fillStyle="#3a4a6a";
+      ctx.font="12px system-ui,sans-serif";
+      ctx.textAlign="center";
+      ctx.fillText("No events in the last "+d.window_hours+"h \u2014 data will appear as sessions are recorded.",W/2,H/2+4);
+      canvas.onmousemove=null;canvas.onmouseleave=null;
+      stats.innerHTML="";
+      return;
+    }
+
+    const N=buckets.length;
+    const PAD_B=4; // bottom padding
+    const PAD_T=8; // top padding
+    const INNER=H-PAD_T-PAD_B;
+    const gap=2;
+    const barW=Math.max(2,Math.floor((W-(N-1)*gap)/N));
+    const totalW=(barW+gap)*N-gap;
+    const offsetX=(W-totalW)/2;
+
+    // Use sqrt scale so small counts are still visible
+    const maxN=d.max_n||1;
+    const scale=v=>Math.sqrt(v/maxN);
+
+    // Subtle grid at 25%, 50%, 75%
+    ctx.strokeStyle="rgba(30,50,90,.5)";
+    ctx.lineWidth=0.5;
+    [0.25,0.5,0.75,1].forEach(f=>{
+      const y=H-PAD_B-Math.round(scale(maxN*f)*INNER);
+      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+    });
+
+    // Bars
+    const bars=[];
+    buckets.forEach((b,i)=>{
+      const x=offsetX+i*(barW+gap);
+      const isPeak=b.n>0&&b.n===maxN;
+      if(b.n===0){
+        // Draw a faint baseline tick
+        ctx.fillStyle="rgba(40,60,100,.4)";
+        ctx.fillRect(x,H-PAD_B-1,barW,1);
+        bars.push({x,y:H-PAD_B-1,w:barW,h:1,n:0,ts:b.ts});
+        return;
+      }
+      const barH=Math.max(2,Math.round(scale(b.n)*INNER));
+      const y=H-PAD_B-barH;
+      // Color gradient: dim blue for low, bright blue for mid, green glow for peak
+      let color;
+      const pct=b.n/maxN;
+      if(isPeak){
+        color="#3ecf6e";
+        ctx.shadowColor="rgba(62,207,110,.6)";
+        ctx.shadowBlur=6;
+      } else if(pct>0.6){
+        color="#6ac4ff";
+        ctx.shadowColor="transparent";ctx.shadowBlur=0;
+      } else {
+        color="#4f9bff";
+        ctx.shadowColor="transparent";ctx.shadowBlur=0;
+      }
+      ctx.fillStyle=color;
+      // Rounded top cap on taller bars
+      if(barH>4){
+        const r=Math.min(2,barW/2);
+        ctx.beginPath();
+        ctx.moveTo(x+r,y);
+        ctx.lineTo(x+barW-r,y);
+        ctx.quadraticCurveTo(x+barW,y,x+barW,y+r);
+        ctx.lineTo(x+barW,y+barH);
+        ctx.lineTo(x,y+barH);
+        ctx.lineTo(x,y+r);
+        ctx.quadraticCurveTo(x,y,x+r,y);
+        ctx.closePath();
+        ctx.fill();
+      } else {
+        ctx.fillRect(x,y,barW,barH);
+      }
+      ctx.shadowColor="transparent";ctx.shadowBlur=0;
+      bars.push({x,y,w:barW,h:barH,n:b.n,ts:b.ts});
+    });
+
+    // Hover
+    canvas.onmousemove=function(e){
+      const rect=canvas.getBoundingClientRect();
+      const mx=e.clientX-rect.left;
+      const found=bars.find(bar=>mx>=bar.x&&mx<=bar.x+bar.w);
+      if(found){
+        const label=found.n===0?"no events":found.n+" event"+(found.n!==1?"s":"");
+        const t2=new Date(found.ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+        tooltip.style.display="block";
+        const tipX=Math.min(W-60,Math.max(30,found.x+found.w/2));
+        tooltip.style.left=tipX+"px";
+        tooltip.style.top=Math.max(0,found.y-32)+"px";
+        tooltip.style.transform="translateX(-50%)";
+        tooltip.innerHTML=label+"<br><span style='color:var(--muted);font-size:10px'>"+t2+"</span>";
+      } else {
+        tooltip.style.display="none";
+      }
+    };
+    canvas.onmouseleave=function(){tooltip.style.display="none";};
+
+    // Stats bar
+    const nonZero=buckets.filter(b=>b.n>0);
+    const firstTs=nonZero[0]?new Date(nonZero[0].ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"\u2014";
+    const lastTs=nonZero.length?new Date(nonZero[nonZero.length-1].ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"\u2014";
+    const activeBuckets=nonZero.length;
+    stats.innerHTML="<span style='color:var(--muted)'>"+d.window_hours+"h window &nbsp;\u00b7&nbsp; "+d.bucket_minutes+"m buckets &nbsp;\u00b7&nbsp; "+firstTs+" \u2013 "+lastTs+"</span>"
+      +"&nbsp;&nbsp;<b>"+d.total_events+"</b> events in <b>"+activeBuckets+"</b> active"+(activeBuckets!==1?" buckets":" bucket");
+  }catch(e){/* pulse silent */}
+}
 function statusBreakdown(by){
   const statusOrder=["active","needs_review","contradicted","superseded","archived"];
   return statusOrder
