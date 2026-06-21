@@ -6,7 +6,7 @@ This document describes how to reproduce the benchmark numbers in [docs/benchmar
 
 | Requirement | Tested value |
 |---|---|
-| Python | 3.10+ |
+| Python | 3.11+ |
 | Slowave | latest (`pip install slowave`) |
 | Hardware | Mac M-series CPU; x86-64 Linux should work |
 | RAM | ≥ 8 GB recommended |

@@ -11,17 +11,26 @@ from __future__ import annotations
 
 
 class TestOldToolsDeleted:
-    def _get_tool_names(self) -> set[str]:
-        """Return the set of registered tool names from the FastMCP instance."""
+    _tool_names: set[str] | None = None
+
+    @classmethod
+    def _get_tool_names(cls) -> set[str]:
+        """Return the set of registered tool names from the FastMCP instance.
+
+        Cached at class level so we only construct the event loop once.
+        """
+        if cls._tool_names is not None:
+            return cls._tool_names
         import asyncio
         import slowave.mcp.server as srv
-        # FastMCP exposes list_tools() as an async method
         loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(loop)
         try:
             tools = loop.run_until_complete(srv.mcp.list_tools())
         finally:
             loop.close()
-        return {t.name for t in tools}
+        cls._tool_names = {t.name for t in tools}
+        return cls._tool_names
 
     def test_old_tools_absent(self) -> None:
         tool_names = self._get_tool_names()
