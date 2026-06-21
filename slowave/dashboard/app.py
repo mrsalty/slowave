@@ -1685,7 +1685,7 @@ async function renderPulse(){
 
     const DPR=window.devicePixelRatio||1;
     const W=canvas.parentElement.clientWidth;
-    const H=80;
+    const H=100;
     canvas.width=Math.round(W*DPR);
     canvas.height=Math.round(H*DPR);
     canvas.style.width=W+"px";
@@ -1695,112 +1695,123 @@ async function renderPulse(){
     ctx.clearRect(0,0,W,H);
 
     if(!d.total_events){
-      ctx.fillStyle="#3a4a6a";
-      ctx.font="12px system-ui,sans-serif";
-      ctx.textAlign="center";
-      ctx.fillText("No events in the last "+d.window_hours+"h \u2014 data will appear as sessions are recorded.",W/2,H/2+4);
-      canvas.onmousemove=null;canvas.onmouseleave=null;
-      stats.innerHTML="";
-      return;
+      const baseline=H-16;
+      ctx.strokeStyle="rgba(79,155,255,.2)";ctx.lineWidth=1.5;ctx.setLineDash([4,6]);
+      ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle="#3a4a6a";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
+      ctx.fillText("Flatline \u2014 no events in the last "+d.window_hours+"h",W/2,baseline-10);
+      canvas.onmousemove=null;canvas.onmouseleave=null;stats.innerHTML="";return;
     }
 
+    // ── layout ───────────────────────────────────────────────────────────────
     const N=buckets.length;
-    const PAD_B=4; // bottom padding
-    const PAD_T=8; // top padding
-    const INNER=H-PAD_T-PAD_B;
-    const gap=2;
-    const barW=Math.max(2,Math.floor((W-(N-1)*gap)/N));
-    const totalW=(barW+gap)*N-gap;
-    const offsetX=(W-totalW)/2;
-
-    // Use sqrt scale so small counts are still visible
+    const PAD_L=4,PAD_R=4,PAD_T=14,PAD_B=16;
+    const IW=W-PAD_L-PAD_R;
+    const IH=H-PAD_T-PAD_B;
+    const baseline=H-PAD_B;
+    const step=IW/(N-1||1);
     const maxN=d.max_n||1;
-    const scale=v=>Math.sqrt(v/maxN);
+    const amp=v=>Math.sqrt(v/maxN)*IH*0.9;
 
-    // Subtle grid at 25%, 50%, 75%
-    ctx.strokeStyle="rgba(30,50,90,.5)";
-    ctx.lineWidth=0.5;
+    // Build control points
+    const pts=buckets.map((b,i)=>({x:PAD_L+i*step,y:baseline-amp(b.n),n:b.n,ts:b.ts}));
+
+    // ── grid ─────────────────────────────────────────────────────────────────
+    ctx.strokeStyle="rgba(25,40,75,.7)";ctx.lineWidth=0.5;
     [0.25,0.5,0.75,1].forEach(f=>{
-      const y=H-PAD_B-Math.round(scale(maxN*f)*INNER);
-      ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W,y);ctx.stroke();
+      const gy=baseline-Math.sqrt(f)*IH*0.9;
+      ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();
     });
 
-    // Bars
-    const bars=[];
+    // ── zero baseline ─────────────────────────────────────────────────────────
+    ctx.strokeStyle="rgba(79,155,255,.15)";ctx.lineWidth=1;
+    ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
+
+    // ── Catmull-Rom spline helpers ────────────────────────────────────────────
+    function buildSpline(points){
+      const pp=[points[0],...points,points[points.length-1]];
+      ctx.moveTo(pp[1].x,pp[1].y);
+      for(let i=1;i<pp.length-2;i++){
+        const p0=pp[i-1],p1=pp[i],p2=pp[i+1],p3=pp[i+2];
+        const d1=Math.hypot(p1.x-p0.x,p1.y-p0.y)||1;
+        const d2=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
+        const d3=Math.hypot(p3.x-p2.x,p3.y-p2.y)||1;
+        const b1x=p1.x+(p2.x-p0.x)/6*(d1/(d1+d2));
+        const b1y=p1.y+(p2.y-p0.y)/6*(d1/(d1+d2));
+        const b2x=p2.x-(p3.x-p1.x)/6*(d2/(d2+d3));
+        const b2y=p2.y-(p3.y-p1.y)/6*(d2/(d2+d3));
+        ctx.bezierCurveTo(b1x,b1y,b2x,b2y,p2.x,p2.y);
+      }
+    }
+
+    // ── gradient fill under curve ─────────────────────────────────────────────
+    const grad=ctx.createLinearGradient(0,PAD_T,0,baseline);
+    grad.addColorStop(0,"rgba(79,155,255,.20)");
+    grad.addColorStop(0.7,"rgba(79,155,255,.04)");
+    grad.addColorStop(1,"rgba(79,155,255,0)");
+    ctx.beginPath();buildSpline(pts);
+    ctx.lineTo(pts[pts.length-1].x,baseline);ctx.lineTo(pts[0].x,baseline);ctx.closePath();
+    ctx.fillStyle=grad;ctx.fill();
+
+    // ── glowing waveform line (blur pass + crisp pass) ────────────────────────
+    [{blur:10,w:3,a:.35},{blur:0,w:1.5,a:1}].forEach(({blur,w,a})=>{
+      ctx.save();
+      ctx.shadowColor="rgba(79,155,255,"+a+")";ctx.shadowBlur=blur;
+      ctx.strokeStyle="#4f9bff";ctx.lineWidth=w;ctx.lineJoin="round";
+      ctx.beginPath();buildSpline(pts);ctx.stroke();
+      ctx.restore();
+    });
+
+    // ── peak dot + label ─────────────────────────────────────────────────────
+    const peakPt=pts.reduce((a,b)=>b.n>a.n?b:a,pts[0]);
+    if(peakPt.n>0){
+      ctx.save();
+      ctx.strokeStyle="rgba(62,207,110,.3)";ctx.lineWidth=1;ctx.setLineDash([3,4]);
+      ctx.beginPath();ctx.moveTo(peakPt.x,peakPt.y);ctx.lineTo(peakPt.x,baseline);ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.shadowColor="rgba(62,207,110,.9)";ctx.shadowBlur=10;
+      ctx.fillStyle="#3ecf6e";
+      ctx.beginPath();ctx.arc(peakPt.x,peakPt.y,3.5,0,Math.PI*2);ctx.fill();
+      ctx.shadowBlur=0;
+      ctx.fillStyle="#3ecf6e";ctx.font="bold 10px system-ui,sans-serif";ctx.textAlign="center";
+      ctx.fillText(peakPt.n,Math.min(W-14,Math.max(14,peakPt.x)),peakPt.y-8);
+      ctx.restore();
+    }
+
+    // ── time axis labels ──────────────────────────────────────────────────────
+    ctx.fillStyle="rgba(90,110,145,.65)";
+    ctx.font="10px system-ui,sans-serif";ctx.textAlign="center";
+    const labelStep=Math.ceil(N/6);
     buckets.forEach((b,i)=>{
-      const x=offsetX+i*(barW+gap);
-      const isPeak=b.n>0&&b.n===maxN;
-      if(b.n===0){
-        // Draw a faint baseline tick
-        ctx.fillStyle="rgba(40,60,100,.4)";
-        ctx.fillRect(x,H-PAD_B-1,barW,1);
-        bars.push({x,y:H-PAD_B-1,w:barW,h:1,n:0,ts:b.ts});
-        return;
-      }
-      const barH=Math.max(2,Math.round(scale(b.n)*INNER));
-      const y=H-PAD_B-barH;
-      // Color gradient: dim blue for low, bright blue for mid, green glow for peak
-      let color;
-      const pct=b.n/maxN;
-      if(isPeak){
-        color="#3ecf6e";
-        ctx.shadowColor="rgba(62,207,110,.6)";
-        ctx.shadowBlur=6;
-      } else if(pct>0.6){
-        color="#6ac4ff";
-        ctx.shadowColor="transparent";ctx.shadowBlur=0;
-      } else {
-        color="#4f9bff";
-        ctx.shadowColor="transparent";ctx.shadowBlur=0;
-      }
-      ctx.fillStyle=color;
-      // Rounded top cap on taller bars
-      if(barH>4){
-        const r=Math.min(2,barW/2);
-        ctx.beginPath();
-        ctx.moveTo(x+r,y);
-        ctx.lineTo(x+barW-r,y);
-        ctx.quadraticCurveTo(x+barW,y,x+barW,y+r);
-        ctx.lineTo(x+barW,y+barH);
-        ctx.lineTo(x,y+barH);
-        ctx.lineTo(x,y+r);
-        ctx.quadraticCurveTo(x,y,x+r,y);
-        ctx.closePath();
-        ctx.fill();
-      } else {
-        ctx.fillRect(x,y,barW,barH);
-      }
-      ctx.shadowColor="transparent";ctx.shadowBlur=0;
-      bars.push({x,y,w:barW,h:barH,n:b.n,ts:b.ts});
+      if(i%labelStep!==0&&i!==N-1)return;
+      const lx=PAD_L+i*step;
+      ctx.fillText(new Date(b.ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
+        Math.min(W-18,Math.max(18,lx)),H-2);
     });
 
-    // Hover
+    // ── hover scrubber ────────────────────────────────────────────────────────
     canvas.onmousemove=function(e){
       const rect=canvas.getBoundingClientRect();
       const mx=e.clientX-rect.left;
-      const found=bars.find(bar=>mx>=bar.x&&mx<=bar.x+bar.w);
-      if(found){
-        const label=found.n===0?"no events":found.n+" event"+(found.n!==1?"s":"");
-        const t2=new Date(found.ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+      let best=null,bestDx=Infinity;
+      pts.forEach(p=>{const dx=Math.abs(p.x-mx);if(dx<bestDx){bestDx=dx;best=p;}});
+      if(best&&bestDx<step*0.7){
+        const label=best.n===0?"flatline":best.n+" event"+(best.n!==1?"s":"");
+        const t2=new Date(best.ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
         tooltip.style.display="block";
-        const tipX=Math.min(W-60,Math.max(30,found.x+found.w/2));
-        tooltip.style.left=tipX+"px";
-        tooltip.style.top=Math.max(0,found.y-32)+"px";
+        tooltip.style.left=Math.min(W-60,Math.max(30,best.x))+"px";
+        tooltip.style.top=Math.max(4,best.y-34)+"px";
         tooltip.style.transform="translateX(-50%)";
         tooltip.innerHTML=label+"<br><span style='color:var(--muted);font-size:10px'>"+t2+"</span>";
-      } else {
-        tooltip.style.display="none";
-      }
+      } else {tooltip.style.display="none";}
     };
     canvas.onmouseleave=function(){tooltip.style.display="none";};
 
-    // Stats bar
+    // ── stats footer ──────────────────────────────────────────────────────────
     const nonZero=buckets.filter(b=>b.n>0);
-    const firstTs=nonZero[0]?new Date(nonZero[0].ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"\u2014";
-    const lastTs=nonZero.length?new Date(nonZero[nonZero.length-1].ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"\u2014";
-    const activeBuckets=nonZero.length;
-    stats.innerHTML="<span style='color:var(--muted)'>"+d.window_hours+"h window &nbsp;\u00b7&nbsp; "+d.bucket_minutes+"m buckets &nbsp;\u00b7&nbsp; "+firstTs+" \u2013 "+lastTs+"</span>"
-      +"&nbsp;&nbsp;<b>"+d.total_events+"</b> events in <b>"+activeBuckets+"</b> active"+(activeBuckets!==1?" buckets":" bucket");
+    stats.innerHTML="<span style='color:var(--muted)'>"+d.window_hours+"h &nbsp;\u00b7&nbsp; "+d.bucket_minutes+"m buckets</span>"
+      +"&nbsp;&nbsp;<b>"+d.total_events+"</b> events &nbsp;\u00b7&nbsp; peak <b>"+d.max_n
+      +"</b> &nbsp;\u00b7&nbsp; <b>"+nonZero.length+"</b>/"+(N)+" active buckets";
   }catch(e){/* pulse silent */}
 }
 function statusBreakdown(by){
