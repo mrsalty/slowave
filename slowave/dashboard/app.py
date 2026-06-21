@@ -1304,7 +1304,7 @@ tr.expandable:hover td{background:var(--panel3)}
 <section id="overview" class="section active">
   <div id="alertArea"></div>
   <div class="panel pulse-panel" style="margin-bottom:10px">
-    <div class="panel-title">⚡ Event pulse <span style="font-weight:400;font-size:11px;color:var(--muted)">— raw event ingestion</span></div>
+    <div class="panel-title">⚡ Event pulse</div>
     <div style="position:relative">
       <canvas id="pulseCanvas" class="pulse-canvas pulse-bar-hover"></canvas>
       <div id="pulseTooltip"></div>
@@ -1701,7 +1701,7 @@ async function loadStatus(){
 
 async function renderPulse(){
   try{
-    const d=await getJSON("/api/pulse?hours=2&bucket_m=5");
+    const d=await getJSON("/api/pulse?hours=12&bucket_m=15");
     const canvas=document.getElementById("pulseCanvas");
     const tooltip=document.getElementById("pulseTooltip");
     const stats=document.getElementById("pulseStats");
@@ -1720,9 +1720,9 @@ async function renderPulse(){
 
     // ── channel definitions ───────────────────────────────────────────────────
     const CHANNELS=[
-      {key:"raw_events",label:"raw events",color:"#4f9bff",gc:"rgba(79,155,255,"},
-      {key:"episodes",  label:"episodes",  color:"#a78bfa",gc:"rgba(167,139,250,"},
-      {key:"schemas",   label:"schemas",   color:"#3ecf6e",gc:"rgba(62,207,110,"},
+      {key:"raw_events",label:"raw events",color:"#38bdf8",gc:"rgba(56,189,248,"},
+      {key:"episodes",  label:"episodes",  color:"#fb923c",gc:"rgba(251,146,60,"},
+      {key:"schemas",   label:"schemas",   color:"#34d399",gc:"rgba(52,211,153,"},
     ];
     const channels=d.channels||{raw_events:d.buckets||[],episodes:[],schemas:[]};
     const allBuckets=channels[CHANNELS[0].key]||[];
@@ -1730,7 +1730,7 @@ async function renderPulse(){
 
     if(!N||!d.global_max){
       const bl=H-18;
-      ctx.strokeStyle="rgba(79,155,255,.18)";ctx.lineWidth=0.8;ctx.setLineDash([4,7]);
+      ctx.strokeStyle="rgba(56,189,248,.18)";ctx.lineWidth=0.8;ctx.setLineDash([4,7]);
       ctx.beginPath();ctx.moveTo(0,bl);ctx.lineTo(W,bl);ctx.stroke();ctx.setLineDash([]);
       ctx.fillStyle="#3a4a6a";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
       ctx.fillText("Flatline \u2014 no events in the last "+d.window_hours+"h",W/2,bl-10);
@@ -1768,7 +1768,7 @@ async function renderPulse(){
       const gy=baseline-Math.sqrt(f)*IH*0.88;
       ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();
     });
-    ctx.strokeStyle="rgba(79,155,255,.10)";ctx.lineWidth=0.5;
+    ctx.strokeStyle="rgba(56,189,248,.10)";ctx.lineWidth=0.5;
     ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
 
     // ── draw channels ─────────────────────────────────────────────────────────
