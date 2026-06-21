@@ -145,6 +145,71 @@ def _remove_worker_service(dry_run: bool) -> int:
     return 0
 
 
+def _remove_backup_service(dry_run: bool) -> int:
+    """Remove daily database backup service. Returns 1 if removed, 0 otherwise."""
+    if SYSTEM == "Darwin":
+        plist_path = _home() / "Library" / "LaunchAgents" / "com.slowave.backup.plist"
+        if plist_path.exists():
+            if dry_run:
+                _ok(f"Would stop and remove: {plist_path}")
+                return 0
+            try:
+                subprocess.run(["launchctl", "unload", str(plist_path)],
+                             check=False, capture_output=True)
+                plist_path.unlink()
+                _ok(f"Removed launchd backup service: {plist_path}")
+                return 1
+            except Exception as e:
+                _warn(f"Could not remove launchd backup service: {e}")
+        else:
+            _skip("No launchd backup service found")
+
+    elif SYSTEM == "Linux":
+        svc_dir = _home() / ".config" / "systemd" / "user"
+        timer_path = svc_dir / "slowave-backup.timer"
+        svc_path = svc_dir / "slowave-backup.service"
+        removed = 0
+        for p, name in [(timer_path, "timer"), (svc_path, "service")]:
+            if p.exists():
+                if dry_run:
+                    _ok(f"Would stop and remove: {p}")
+                    continue
+                try:
+                    subprocess.run(["systemctl", "--user", "stop", f"slowave-backup.{name}"],
+                                 check=False, capture_output=True)
+                    subprocess.run(["systemctl", "--user", "disable", f"slowave-backup.{name}"],
+                                 check=False, capture_output=True)
+                    p.unlink()
+                    _ok(f"Removed systemd backup {name}: {p}")
+                    removed = 1
+                except Exception as e:
+                    _warn(f"Could not remove systemd backup {name}: {e}")
+        if removed:
+            try:
+                subprocess.run(["systemctl", "--user", "daemon-reload"],
+                             check=False, capture_output=True)
+            except Exception:
+                pass
+        if not timer_path.exists() and not svc_path.exists() and removed == 0:
+            _skip("No systemd backup service found")
+        return removed
+
+    elif SYSTEM == "Windows":
+        if dry_run:
+            _ok("Would remove Task Scheduler task: SlowaveBackup")
+            return 0
+        try:
+            subprocess.run(
+                ["schtasks", "/Delete", "/TN", "SlowaveBackup", "/F"],
+                check=False, capture_output=True
+            )
+            _ok("Removed Task Scheduler task: SlowaveBackup")
+            return 1
+        except Exception as e:
+            _warn(f"Could not remove scheduled task: {e}")
+    else:
+        _skip(f"Unknown platform: {SYSTEM}")
+    return 0
 
 
 def _remove_lifecycle_blocks(dry_run: bool) -> int:
@@ -300,6 +365,7 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
     - MCP server configs (Claude Code, Claude Desktop, Cline, Cursor)
     - Lifecycle blocks (.clinerules, CLAUDE.md)
     - Background worker service
+    - Daily database backup service
     - Local database and data (~/.slowave)
     
     Use this before uninstalling slowave or when you want a fresh start.
@@ -323,16 +389,20 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
     _section("2. Background worker service")
     removed_count += _remove_worker_service(dry_run)
 
-    # 3. Remove lifecycle blocks
-    _section("3. Lifecycle instruction blocks")
+    # 3. Stop and remove daily backup service
+    _section("3. Daily database backup service")
+    removed_count += _remove_backup_service(dry_run)
+
+    # 4. Remove lifecycle blocks
+    _section("4. Lifecycle instruction blocks")
     removed_count += _remove_lifecycle_blocks(dry_run)
 
-    # 4. Remove MCP server configs
-    _section("4. MCP server configurations")
+    # 5. Remove MCP server configs
+    _section("5. MCP server configurations")
     removed_count += _remove_mcp_configs(dry_run)
 
-    # 5. Remove data directory
-    _section("5. Local data and database")
+    # 7. Remove data directory
+    _section("6. Local data and database")
     slowave_dir = _home() / ".slowave"
     if slowave_dir.exists():
         if dry_run:
@@ -368,8 +438,8 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
     else:
         _skip("No ~/.slowave directory found")
 
-    # 6. Remove setup backup files
-    _section("6. Setup backup files")
+    # 7. Remove setup backup files
+    _section("7. Setup backup files")
     removed_count += _remove_setup_backups(dry_run)
 
     # Summary

@@ -1479,9 +1479,11 @@ def uninstall_cmd(dry_run: bool) -> None:
 
 
 from slowave.cli.cleanup import cleanup_cmd
+from slowave.cli.backup import backup_cmd
 
 cli.add_command(setup_cmd)
 cli.add_command(cleanup_cmd)
+cli.add_command(backup_cmd)
 
 
 def main() -> None:

@@ -1427,8 +1427,43 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     else:
         _skip("Skipped (--no-worker). Run manually: slowave worker --interval 300")
 
-    # 9. Doctor
-    _section("8. Verification")
+    # Daily database backup service
+    _section("9. Daily database backup")
+    if worker:
+        if dry_run:
+            if SYSTEM == "Darwin":
+                _ok("Would install launchd service → ~/Library/LaunchAgents/com.slowave.backup.plist")
+            elif SYSTEM == "Linux":
+                _ok("Would install systemd timer → ~/.config/systemd/user/slowave-backup.timer")
+            elif SYSTEM == "Windows":
+                _ok("Would register Task Scheduler task: SlowaveBackup")
+            else:
+                _warn(f"Unknown platform '{SYSTEM}' — run manually: slowave backup")
+        else:
+            if SYSTEM == "Darwin":
+                path, changed = _install_backup_macos(slowave_bin)
+                if changed:
+                    _ok(f"launchd backup service installed → {path}")
+                else:
+                    _skip("launchd backup service already up-to-date")
+            elif SYSTEM == "Linux":
+                path, changed = _install_backup_linux(slowave_bin)
+                if changed:
+                    _ok(f"systemd backup timer installed → {path}")
+                    _ok("Verify:  systemctl --user status slowave-backup.timer")
+                else:
+                    _skip("systemd backup timer already up-to-date")
+            elif SYSTEM == "Windows":
+                task, _ = _install_backup_windows(slowave_bin)
+                _ok(f"Task Scheduler task registered: {task}")
+                _ok("Verify:  Get-ScheduledTask -TaskName SlowaveBackup")
+            else:
+                _warn(f"Unknown platform '{SYSTEM}'. Run manually: slowave backup")
+    else:
+        _skip("Skipped (--no-worker). Run manually: slowave backup")
+
+    # 10. Doctor
+    _section("10. Verification")
     if dry_run:
         _skip("Dry-run — skipping doctor check.")
     else:
@@ -1442,3 +1477,136 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     click.echo(click.style("Setup complete.", bold=True))
     if not dry_run:
         mark_setup_done()
+
+# ---------------------------------------------------------------------------
+# Backup service templates
+# ---------------------------------------------------------------------------
+
+_LAUNCHD_BACKUP_PLIST = """\
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+  <dict>
+    <key>Label</key><string>com.slowave.backup</string>
+    <key>ProgramArguments</key>
+    <array>
+      <string>{bin}</string>
+      <string>backup</string>
+    </array>
+    <key>StartCalendarInterval</key>
+    <dict>
+      <key>Hour</key><integer>3</integer>
+      <key>Minute</key><integer>0</integer>
+    </dict>
+    <key>StandardOutPath</key><string>/tmp/slowave-backup.log</string>
+    <key>StandardErrorPath</key><string>/tmp/slowave-backup.err</string>
+  </dict>
+</plist>
+"""
+
+_SYSTEMD_BACKUP_SERVICE = """\
+[Unit]
+Description=Slowave daily database backup
+
+[Service]
+Type=oneshot
+ExecStart={bin} backup
+"""
+
+_SYSTEMD_BACKUP_TIMER = """\
+[Unit]
+Description=Daily Slowave database backup timer
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
+"""
+
+
+def _install_backup_macos(slowave_bin: str) -> tuple[str, bool]:
+    """Install the daily database backup as a launchd user agent (macOS).
+
+    Uses StartCalendarInterval to run once per day at 03:00.
+    """
+    plist_dir = _home() / "Library" / "LaunchAgents"
+    plist_path = plist_dir / "com.slowave.backup.plist"
+    content = _LAUNCHD_BACKUP_PLIST.format(bin=slowave_bin)
+    if plist_path.exists() and plist_path.read_text(encoding="utf-8") == content:
+        return str(plist_path), False
+    plist_dir.mkdir(parents=True, exist_ok=True)
+    plist_path.write_text(content, encoding="utf-8")
+    try:
+        subprocess.run(["launchctl", "unload", str(plist_path)], capture_output=True, check=False)
+        subprocess.run(["launchctl", "load", str(plist_path)], capture_output=True, check=False)
+    except FileNotFoundError:
+        pass
+    return str(plist_path), True
+
+
+def _install_backup_linux(slowave_bin: str) -> tuple[str, bool]:
+    """Install the daily database backup as a systemd timer + oneshot service (Linux)."""
+    xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
+    svc_dir = Path(xdg) / "systemd" / "user"
+    svc_path = svc_dir / "slowave-backup.service"
+    timer_path = svc_dir / "slowave-backup.timer"
+    svc_content = _SYSTEMD_BACKUP_SERVICE.format(bin=slowave_bin)
+    timer_content = _SYSTEMD_BACKUP_TIMER
+    svc_changed = (not svc_path.exists() or svc_path.read_text(encoding="utf-8") != svc_content)
+    timer_changed = (not timer_path.exists() or timer_path.read_text(encoding="utf-8") != timer_content)
+    if not svc_changed and not timer_changed:
+        return str(timer_path), False
+    svc_dir.mkdir(parents=True, exist_ok=True)
+    svc_path.write_text(svc_content, encoding="utf-8")
+    timer_path.write_text(timer_content, encoding="utf-8")
+    try:
+        subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
+        subprocess.run(
+            ["systemctl", "--user", "enable", "--now", "slowave-backup.timer"],
+            capture_output=True, check=False,
+        )
+    except FileNotFoundError:
+        pass
+    return str(timer_path), True
+
+
+def _install_backup_windows(slowave_bin: str) -> tuple[str, bool]:
+    """Register a daily database backup as a Windows Scheduled Task."""
+    task_name = "SlowaveBackup"
+    already_registered = False
+    try:
+        check = subprocess.run(
+            ["powershell", "-NonInteractive", "-Command",
+             f"$t = Get-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
+             f"if ($t) {{ $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}"],
+            capture_output=True, text=True, check=False,
+        )
+        existing = check.stdout.strip()
+        if existing:
+            existing_exe, _, existing_args = existing.partition("|")
+            if existing_exe.strip().lower() == slowave_bin.lower() and "backup" in existing_args.lower():
+                already_registered = True
+    except FileNotFoundError:
+        pass
+
+    if already_registered:
+        return task_name, False
+
+    # Daily trigger at 03:00
+    ps = (
+        f"$a=New-ScheduledTaskAction -Execute '{slowave_bin}' -Argument 'backup';"
+        f"$t=New-ScheduledTaskTrigger -Daily -At 03:00;"
+        f"$s=New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0;"
+        f"$p=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;"
+        f"Register-ScheduledTask -TaskName '{task_name}' -Action $a -Trigger $t -Settings $s "
+        f"-Principal $p -Force"
+    )
+    try:
+        subprocess.run(["powershell", "-NonInteractive", "-Command", ps],
+                       capture_output=True, check=False)
+    except FileNotFoundError:
+        pass
+    return task_name, True
