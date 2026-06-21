@@ -96,6 +96,8 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                     self._send_json(_status_payload(db_path))
                 elif path == "/api/daemon":
                     self._send_json(_daemon_health())
+                elif path == "/api/pulse":
+                    self._send_json(_pulse_payload(db_path, qs))
                 elif path == "/api/db/health":
                     self._send_json(_db_health(db_path))
                 elif path == "/api/schemas":
@@ -346,6 +348,90 @@ def _status_payload(db_path: str) -> dict[str, Any]:
     finally:
         if conn is not None:
             conn.close()
+
+
+def _pulse_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Return three zero-filled bucket series for the EEG multi-channel view.
+
+    Channels:
+      - raw_events   : incoming observations (raw_events.ts)
+      - episodes     : consolidation pulses  (episodic_memories.ts)
+      - schemas      : durable memory writes (schemas.first_formed_ts)
+
+    All three share the same bucket grid so they can be overlaid on one canvas.
+
+    Query params:
+        - hours:    look-back window in hours  (default 2, max 24)
+        - bucket_m: bucket size in minutes     (default 5, max 60)
+    """
+    hours = min(max(_qs_int(qs, "hours", 2), 1), 24)
+    bucket_m = min(max(_qs_int(qs, "bucket_m", 5), 1), 60)
+    bucket_s = bucket_m * 60
+    now = int(time.time())
+    window_start = now - hours * 3600
+    first_bucket = (window_start // bucket_s) * bucket_s
+
+    all_ts: list[int] = []
+    t = first_bucket
+    while t <= now:
+        all_ts.append(t)
+        t += bucket_s
+
+    def _bucketize(rows: list) -> list[dict[str, int]]:
+        counts = {int(r["bucket_ts"]): int(r["n"]) for r in rows}
+        return [{"ts": ts, "n": counts.get(ts, 0)} for ts in all_ts]
+
+    conn = _connect(db_path)
+    try:
+        raw_rows = conn.execute(
+            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM raw_events WHERE ts >= ? AND ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+        epi_rows = conn.execute(
+            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM episodic_memories WHERE ts >= ? AND ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+        sch_rows = conn.execute(
+            """SELECT (first_formed_ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM schemas WHERE first_formed_ts >= ? AND first_formed_ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+
+        channels = {
+            "raw_events": _bucketize(raw_rows),
+            "episodes":   _bucketize(epi_rows),
+            "schemas":    _bucketize(sch_rows),
+        }
+        global_max = max(
+            (b["n"] for ch in channels.values() for b in ch),
+            default=0,
+        )
+        return {
+            "channels": channels,
+            "global_max": global_max,
+            "window_hours": hours,
+            "bucket_minutes": bucket_m,
+            "now_ts": now,
+            # legacy single-channel keys so old code doesn't break
+            "buckets": channels["raw_events"],
+            "total_events": sum(b["n"] for b in channels["raw_events"]),
+            "max_n": max((b["n"] for b in channels["raw_events"]), default=0),
+        }
+    finally:
+        conn.close()
+
+
+def _qs_int(qs: dict[str, list[str]], key: str, default: int) -> int:
+    """Extract a single int query-string param."""
+    try:
+        return int(qs.get(key, [str(default)])[0])
+    except (ValueError, IndexError):
+        return default
 
 
 def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
@@ -1176,6 +1262,14 @@ tr.expandable:hover td{background:var(--panel3)}
 .scope-reg-card:hover{border-color:rgba(30,45,74,.7);box-shadow:0 2px 4px rgba(0,0,0,.1)}
 .scope-reg-id{font-family:"SF Mono","Fira Code",monospace;font-size:12px;font-weight:600}
 .scope-reg-meta{font-size:11px;color:var(--muted)}
+
+/* ── PULSE GRAPH ── */
+.pulse-panel{position:relative}
+.pulse-canvas{display:block;width:100%;height:100px;border-radius:8px;image-rendering:crisp-edges}
+.pulse-stats{display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--muted)}
+.pulse-stats b{color:var(--text)}
+.pulse-bar-hover{cursor:crosshair}
+#pulseTooltip{position:absolute;background:rgba(8,14,28,.95);border:1px solid rgba(79,155,255,.5);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--text);pointer-events:none;white-space:nowrap;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,.5)}
 </style>
 </head>
 <body>
@@ -1209,6 +1303,14 @@ tr.expandable:hover td{background:var(--panel3)}
 <!-- OVERVIEW -->
 <section id="overview" class="section active">
   <div id="alertArea"></div>
+  <div class="panel pulse-panel" style="margin-bottom:10px">
+    <div class="panel-title">⚡ Event pulse</div>
+    <div style="position:relative">
+      <canvas id="pulseCanvas" class="pulse-canvas pulse-bar-hover"></canvas>
+      <div id="pulseTooltip"></div>
+    </div>
+    <div class="pulse-stats" id="pulseStats"></div>
+  </div>
   <div class="stat-grid" id="statGrid"></div>
   <div class="two-col">
     <div class="panel">
@@ -1594,7 +1696,142 @@ async function loadStatus(){
     );
   }
 }
+// PULSE GRAPH
+  renderPulse();
 
+async function renderPulse(){
+  try{
+    const d=await getJSON("/api/pulse?hours=3&bucket_m=15");
+    const canvas=document.getElementById("pulseCanvas");
+    const tooltip=document.getElementById("pulseTooltip");
+    const stats=document.getElementById("pulseStats");
+    if(!canvas)return;
+
+    const DPR=window.devicePixelRatio||1;
+    const W=canvas.parentElement.clientWidth;
+    const H=110;
+    canvas.width=Math.round(W*DPR);
+    canvas.height=Math.round(H*DPR);
+    canvas.style.width=W+"px";
+    canvas.style.height=H+"px";
+    const ctx=canvas.getContext("2d");
+    ctx.scale(DPR,DPR);
+    ctx.clearRect(0,0,W,H);
+
+    // ── channel definitions ───────────────────────────────────────────────────
+    const CHANNELS=[
+      {key:"raw_events",label:"raw events",color:"#10b981",gc:"rgba(16,185,129,"},
+      {key:"episodes",  label:"episodes",  color:"#fbbf24",gc:"rgba(251,191,36,"},
+      {key:"schemas",   label:"schemas",   color:"#3b82f6",gc:"rgba(59,130,246,"},
+    ];
+    const channels=d.channels||{raw_events:d.buckets||[],episodes:[],schemas:[]};
+    const allBuckets=channels[CHANNELS[0].key]||[];
+    const N=allBuckets.length;
+
+    if(!N||!d.global_max){
+      const bl=H-18;
+      ctx.strokeStyle="rgba(56,189,248,.18)";ctx.lineWidth=0.8;ctx.setLineDash([4,7]);
+      ctx.beginPath();ctx.moveTo(0,bl);ctx.lineTo(W,bl);ctx.stroke();ctx.setLineDash([]);
+      ctx.fillStyle="#3a4a6a";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
+      ctx.fillText("Flatline \u2014 no events in the last "+d.window_hours+"h",W/2,bl-10);
+      canvas.onmousemove=null;canvas.onmouseleave=null;stats.innerHTML="";return;
+    }
+
+    // ── layout ───────────────────────────────────────────────────────────────
+    const PAD_L=4,PAD_R=4,PAD_T=8,PAD_B=18;
+    const IW=W-PAD_L-PAD_R;
+    const IH=H-PAD_T-PAD_B;
+    const baseline=H-PAD_B;
+    const step=IW/(N-1||1);
+    const gmax=d.global_max||1;
+    const amp=v=>Math.sqrt(v/gmax)*IH*0.88;
+
+    // ── Catmull-Rom spline ────────────────────────────────────────────────────
+    function buildSpline(pts){
+      const pp=[pts[0],...pts,pts[pts.length-1]];
+      ctx.moveTo(pp[1].x,pp[1].y);
+      for(let i=1;i<pp.length-2;i++){
+        const p0=pp[i-1],p1=pp[i],p2=pp[i+1],p3=pp[i+2];
+        const d1=Math.hypot(p1.x-p0.x,p1.y-p0.y)||1;
+        const d2=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
+        const d3=Math.hypot(p3.x-p2.x,p3.y-p2.y)||1;
+        ctx.bezierCurveTo(
+          p1.x+(p2.x-p0.x)/6*(d1/(d1+d2)),p1.y+(p2.y-p0.y)/6*(d1/(d1+d2)),
+          p2.x-(p3.x-p1.x)/6*(d2/(d2+d3)),p2.y-(p3.y-p1.y)/6*(d2/(d2+d3)),
+          p2.x,p2.y);
+      }
+    }
+
+    // ── grid + baseline ───────────────────────────────────────────────────────
+    ctx.strokeStyle="rgba(20,35,65,.8)";ctx.lineWidth=0.5;
+    [0.25,0.5,0.75,1].forEach(f=>{
+      const gy=baseline-Math.sqrt(f)*IH*0.88;
+      ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();
+    });
+    ctx.strokeStyle="rgba(56,189,248,.10)";ctx.lineWidth=0.5;
+    ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
+
+    // ── draw channels ─────────────────────────────────────────────────────────
+    const allPts={};
+    CHANNELS.forEach(ch=>{
+      const bkts=channels[ch.key]||[];
+      if(!bkts.length)return;
+      const pts=bkts.map((b,i)=>({x:PAD_L+i*step,y:baseline-amp(b.n),n:b.n,ts:b.ts}));
+      allPts[ch.key]=pts;
+      if(!bkts.some(b=>b.n>0))return;
+      // Faint area fill
+      const gr=ctx.createLinearGradient(0,PAD_T,0,baseline);
+      gr.addColorStop(0,ch.gc+"0.06)");gr.addColorStop(1,ch.gc+"0)");
+      ctx.beginPath();buildSpline(pts);
+      ctx.lineTo(pts[pts.length-1].x,baseline);ctx.lineTo(pts[0].x,baseline);ctx.closePath();
+      ctx.fillStyle=gr;ctx.fill();
+      // Thin lines: glow pass then crisp pass
+      [{blur:5,w:1.2,a:.5},{blur:0,w:0.8,a:1}].forEach(({blur,w,a})=>{
+        ctx.save();
+        ctx.shadowColor=ch.gc+a+")";ctx.shadowBlur=blur;
+        ctx.strokeStyle=ch.color;ctx.lineWidth=w;ctx.lineJoin="round";ctx.lineCap="round";
+        ctx.beginPath();buildSpline(pts);ctx.stroke();
+        ctx.restore();
+      });
+    });
+
+    // ── time axis ─────────────────────────────────────────────────────────────
+    ctx.fillStyle="rgba(80,100,140,.6)";
+    ctx.font="10px system-ui,sans-serif";ctx.textAlign="center";
+    const labelStep=Math.ceil(N/6);
+    allBuckets.forEach((b,i)=>{
+      if(i%labelStep!==0&&i!==N-1)return;
+      ctx.fillText(new Date(b.ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
+        Math.min(W-18,Math.max(18,PAD_L+i*step)),H-3);
+    });
+
+    // ── hover ─────────────────────────────────────────────────────────────────
+    canvas.onmousemove=function(e){
+      const rect=canvas.getBoundingClientRect();
+      const mx=e.clientX-rect.left;
+      const idx=Math.min(N-1,Math.max(0,Math.round((mx-PAD_L)/step)));
+      const rows=CHANNELS.map(ch=>{
+        const b=(channels[ch.key]||[])[idx];
+        return`<span style='color:${ch.color}'>\u25cf</span> ${ch.label}: <b>${b?b.n:0}</b>`;
+      }).join("<br>");
+      const ts=allBuckets[idx]?.ts;
+      const t2=ts?new Date(ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}):"";
+      tooltip.style.display="block";
+      tooltip.style.left=Math.min(W-70,Math.max(40,PAD_L+idx*step))+"px";
+      tooltip.style.top="4px";
+      tooltip.style.transform="translateX(-50%)";
+      tooltip.innerHTML=`<div style='font-size:10px;color:var(--muted);margin-bottom:3px'>${t2}</div>${rows}`;
+    };
+    canvas.onmouseleave=function(){tooltip.style.display="none";};
+
+    // ── stats footer ──────────────────────────────────────────────────────────
+    const totals=CHANNELS.map(ch=>{
+      const sum=(channels[ch.key]||[]).reduce((a,b)=>a+b.n,0);
+      return`<span style='color:${ch.color}'>\u25cf ${ch.label}</span> <b>${sum}</b>`;
+    }).join(" &nbsp;\u00b7&nbsp; ");
+    stats.innerHTML=`<span style='color:var(--muted)'>${d.window_hours}h &nbsp;\u00b7&nbsp; ${d.bucket_minutes}m buckets</span>&nbsp;&nbsp;${totals}`;
+  }catch(e){console.error("pulse",e);}
+}
 function statusBreakdown(by){
   const statusOrder=["active","needs_review","contradicted","superseded","archived"];
   return statusOrder
