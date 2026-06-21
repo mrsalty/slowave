@@ -87,25 +87,29 @@ class TestScopeHandling:
         This verifies the behaviour contract without inspecting string prefixes.
         The gate in context.py: if cue.mode == 'strict_scope' and cue.scope is set,
         hard-block non-matching scopes. When scope is None, strict_scope == default.
+
+        Uses type="fact" (memory_layer="domain") so the strict_scope gate applies.
+        Types mapped to memory_layer="profile" (constraint, preference, etc.) are
+        intentionally exempt from scope filtering in all modes.
         """
         eng = engine_with_encoder
 
-        # Store two scoped facts
-        fact_a = eng.remember(content="Alpha-only constraint", type="constraint", scope="alpha")
-        fact_b = eng.remember(content="Beta-only constraint", type="constraint", scope="beta")
+        # Store two scoped facts (type="fact" → memory_layer="domain", not profile)
+        fact_a = eng.remember(content="Alpha-only fact", type="fact", scope="alpha")
+        fact_b = eng.remember(content="Beta-only fact", type="fact", scope="beta")
         # Use .schema_id explicitly — RememberResult is an int subclass whose integer
         # value is the event_id, NOT the schema_id; comparing to schema ids requires .schema_id.
         fact_a_sid = fact_a.schema_id
         fact_b_sid = fact_b.schema_id
 
         # strict_scope with scope="alpha" must exclude beta
-        ctx = eng.context_brief(query="constraint", scope="alpha", mode="strict_scope")
+        ctx = eng.context_brief(query="fact", scope="alpha", mode="strict_scope")
         ids = {s.id for s in ctx.schemas}
         assert fact_a_sid in ids, "same-scope fact must appear"
         assert fact_b_sid not in ids, "other-scope fact must be excluded in strict_scope"
 
         # strict_scope with scope=None must behave like default (no hard exclusion)
-        ctx_no_scope = eng.context_brief(query="constraint", scope=None, mode="strict_scope")
+        ctx_no_scope = eng.context_brief(query="fact", scope=None, mode="strict_scope")
         ids_no_scope = {s.id for s in ctx_no_scope.schemas}
         # Both facts may appear when no scope is set (no hard block fires)
         assert fact_a_sid in ids_no_scope or fact_b_sid in ids_no_scope, (
