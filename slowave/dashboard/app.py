@@ -1701,7 +1701,7 @@ async function loadStatus(){
 
 async function renderPulse(){
   try{
-    const d=await getJSON("/api/pulse?hours=12&bucket_m=15");
+    const d=await getJSON("/api/pulse?hours=3&bucket_m=15");
     const canvas=document.getElementById("pulseCanvas");
     const tooltip=document.getElementById("pulseTooltip");
     const stats=document.getElementById("pulseStats");
@@ -1720,9 +1720,9 @@ async function renderPulse(){
 
     // ── channel definitions ───────────────────────────────────────────────────
     const CHANNELS=[
-      {key:"raw_events",label:"raw events",color:"#38bdf8",gc:"rgba(56,189,248,"},
-      {key:"episodes",  label:"episodes",  color:"#fb923c",gc:"rgba(251,146,60,"},
-      {key:"schemas",   label:"schemas",   color:"#34d399",gc:"rgba(52,211,153,"},
+      {key:"raw_events",label:"raw events",color:"#10b981",gc:"rgba(16,185,129,"},
+      {key:"episodes",  label:"episodes",  color:"#fbbf24",gc:"rgba(251,191,36,"},
+      {key:"schemas",   label:"schemas",   color:"#3b82f6",gc:"rgba(59,130,246,"},
     ];
     const channels=d.channels||{raw_events:d.buckets||[],episodes:[],schemas:[]};
     const allBuckets=channels[CHANNELS[0].key]||[];
