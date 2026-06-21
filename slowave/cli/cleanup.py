@@ -425,16 +425,40 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
                 except Exception:
                     pass
 
+            # Preserve the backups/ subdirectory if it exists and has content.
+            backups_dir = slowave_dir / "backups"
+            backups_exist = backups_dir.is_dir() and any(backups_dir.iterdir())
+            if backups_exist:
+                backup_files = sorted(backups_dir.glob("slowave-????????_??????.db.gz"))
+                backup_list = "\n    ".join(p.name for p in backup_files[-5:])
+                if len(backup_files) > 5:
+                    backup_list = f"... and {len(backup_files) - 5} more\n    " + backup_list
+
             try:
-                shutil.rmtree(slowave_dir)
-                _ok(f"Removed: {slowave_dir}")
-                removed_count += 1
+                # Remove content selectively: delete everything except backups/.
+                for item in sorted(slowave_dir.iterdir()):
+                    if item.name == "backups" and backups_exist:
+                        continue
+                    if item.is_dir():
+                        shutil.rmtree(item)
+                    else:
+                        item.unlink()
             except OSError as exc:
                 _warn(
-                    f"Could not remove {slowave_dir}: {exc.strerror}.\n"
+                    f"Could not clean {slowave_dir}: {exc.strerror}.\n"
                     "  The database may still be in use by a running worker or MCP process.\n"
                     "  Stop those processes, then re-run 'slowave cleanup'."
                 )
+            else:
+                if backups_exist:
+                    _warn(
+                        f"Preserved {len(backup_files)} database backup(s) in {backups_dir}:\n"
+                        f"    {backup_list}\n"
+                        f"  To remove them, delete the directory manually:\n"
+                        f"    rm -rf {backups_dir}"
+                    )
+                _ok(f"Cleaned: {slowave_dir}")
+                removed_count += 1
     else:
         _skip("No ~/.slowave directory found")
 
