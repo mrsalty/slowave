@@ -1,5 +1,29 @@
 # Changelog
 
+## [0.5.10](https://github.com/mrsalty/slowave/compare/slowave-v0.5.9...slowave-v0.5.10) (2026-06-21)
+
+
+### Features
+
+* add daily SQLite backup with gzip compression and auto-rotation ([3c643e9](https://github.com/mrsalty/slowave/commit/3c643e97f5f03b5e9adaccb8c8370e63287be2dd))
+* add daily SQLite backup with gzip compression and auto-rotation ([87d3ef6](https://github.com/mrsalty/slowave/commit/87d3ef68db033a411bc9715f1759b11d08a3ad28))
+* **dashboard:** 3-channel EEG waveform — thin lines, multi-signal ([7061d58](https://github.com/mrsalty/slowave/commit/7061d58c0964e9993098aef9bc974206663ffbbb))
+* **dashboard:** add brain pulse graph to overview ([bd42a03](https://github.com/mrsalty/slowave/commit/bd42a03e26326abd1796649a32c124e844f43dda))
+* **dashboard:** EEG-style waveform pulse graph ([14e3625](https://github.com/mrsalty/slowave/commit/14e3625a660be7aa47905cb3b99c05971467afee))
+* **dashboard:** pulse panel polish ([d27a300](https://github.com/mrsalty/slowave/commit/d27a300dc2927855654a7f32a4e3d145a3b2b9c3))
+* preserve backups during cleanup, add restore command ([80fd2e9](https://github.com/mrsalty/slowave/commit/80fd2e964867cfe225bd5840698f107bbfd7c29f))
+
+
+### Bug Fixes
+
+* resolve CI flakiness (Python version matrix, DB isolation, test determinism) ([c1a180d](https://github.com/mrsalty/slowave/commit/c1a180db37a9081540763d63b9e79f432b0c53e2))
+
+
+### Documentation
+
+* add Homebrew install option to README ([a1f7600](https://github.com/mrsalty/slowave/commit/a1f760099533c6b6e9657b624e59782203b2013b))
+* pipx first in install section, drop macOS label from Homebrew ([b67e823](https://github.com/mrsalty/slowave/commit/b67e8231a6cdf439ca90e709d3fc7df9681c75fa))
+
 ## [0.5.9](https://github.com/mrsalty/slowave/compare/slowave-v0.5.8...slowave-v0.5.9) (2026-06-20)
 
 
