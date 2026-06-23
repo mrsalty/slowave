@@ -102,6 +102,9 @@ def test_procedure_can_transfer_across_related_scopes() -> None:
             status="active",
         )
 
+        # Promote to stage 1 to enable cross-scope transfer
+        eng.procedures.set_generalization_stage(pid, 1)
+
         matches = eng.retrieve_procedures(
             scope="project:other-tool",
             goal="oss_documentation_positioning",
@@ -114,7 +117,8 @@ def test_procedure_can_transfer_across_related_scopes() -> None:
 
         assert matches
         assert matches[0].procedure.id == pid
-        assert matches[0].components["scope_affinity"] == eng.cfg.procedural.related_scope_affinity
+        # Stage 1 procedures with same scope kind get cfg.stage1_cross_affinity
+        assert matches[0].components["scope_affinity"] == eng.cfg.procedural.stage1_cross_affinity
     finally:
         eng.close()
         _cleanup(path)

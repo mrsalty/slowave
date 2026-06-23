@@ -133,7 +133,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
 
         try:
             eng = build_engine(disable_encoder=not bool(query or topics or entities))
-            sid = eng.session_start(agent="mcp", scope=scope)
+            sid = eng.session_start(agent="mcp", scope=scope, goal=goal)
             session_resolver.bind(scope, sid)
             brief = eng.context_brief(
                 query=query,
@@ -528,7 +528,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 _bg_log_event(eng, resolved_sid, "task_complete", f"outcome={outcome_str}")
             )
             await asyncio.sleep(0.05)
-            result = eng.session_end(resolved_sid, consolidate=False)
+            result = eng.session_end(resolved_sid, consolidate=False, outcome=outcome_str)
             session_resolver.clear(scope)
             return {
                 "session_id": resolved_sid,
