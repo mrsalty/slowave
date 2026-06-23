@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.12](https://github.com/mrsalty/slowave/compare/slowave-v0.5.11...slowave-v0.5.12) (2026-06-23)
+
+
+### Documentation
+
+* add SECURITY.md, fix Windows support caveat, link security policy from CONTRIBUTING ([6588bd4](https://github.com/mrsalty/slowave/commit/6588bd45303a29673b97187bbb5f10a9629d6325))
+
 ## [0.5.11](https://github.com/mrsalty/slowave/compare/slowave-v0.5.10...slowave-v0.5.11) (2026-06-23)
 
 
