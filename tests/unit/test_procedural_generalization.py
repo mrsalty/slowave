@@ -117,19 +117,21 @@ def test_set_generalization_stage() -> None:
 
 def test_encode_never_in_procedural() -> None:
     """Verify slowave/core/procedural.py never calls encode() or imports numpy."""
-    procedural_path = "/Users/matteo/repos/personal/slowave/slowave/core/procedural.py"
-    
-    with open(procedural_path) as f:
-        tree = ast.parse(f.read())
-    
+    from pathlib import Path
+
+    procedural_path = Path(__file__).parent.parent.parent / "slowave" / "core" / "procedural.py"
+    assert procedural_path.exists(), f"Could not find {procedural_path}"
+
+    source = procedural_path.read_text()
+    tree = ast.parse(source)
+
     # Check for encode() calls
     for node in ast.walk(tree):
         if isinstance(node, ast.Call):
             if isinstance(node.func, ast.Attribute):
                 if node.func.attr == "encode":
                     raise AssertionError(f"Found encode() call in {procedural_path}")
-    
+
     # Check for numpy imports
-    source = open(procedural_path).read()
-    assert "import numpy" not in source, "Found 'import numpy' in " + procedural_path
-    assert "from numpy" not in source, "Found 'from numpy' in " + procedural_path
+    assert "import numpy" not in source, f"Found 'import numpy' in {procedural_path}"
+    assert "from numpy" not in source, f"Found 'from numpy' in {procedural_path}"
