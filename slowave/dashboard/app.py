@@ -1585,9 +1585,7 @@ async function loadStatus(){
     {icon:"⚡",label:"Raw events",val:num(s.raw_events),sub:"logged",accent:"var(--blue)"},
     {icon:"🎞",label:"Episodes",val:num(s.episodes),sub:"formed",accent:"var(--blue)"},
     {icon:"🔵",label:"Prototypes",val:num(s.prototypes),sub:"semantic",accent:"var(--purple)"},
-    {icon:"📖",label:"Schemas",val:num(s.schemas),sub:h.schemas_by_status?statusBreakdown(h.schemas_by_status):"",accent:"var(--green)",raw:true},
-    {icon:"🟢",label:"Active",val:num(h.active_schemas),sub:`avg sal ${Number(h?.active_salience?.avg||0).toFixed(2)}`,accent:"var(--green)"},
-    {icon:"🟡",label:"Needs review",val:num(h.needs_review_schemas),sub:h.needs_review_schemas>0?"⚠️ action needed":"clean",accent:h.needs_review_schemas>0?"var(--amber)":"var(--green)"},
+    {icon:"📖",label:"Schemas",val:num(s.schemas),sub:`<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:var(--text)">${num(h.active_schemas)} active</span></span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:var(--text)">${num(h.needs_review_schemas)} needs review</span></span></span>`,accent:"var(--green)",raw:true},
     {icon:"🧭",label:"Procedures",val:num(s.procedures),sub:"stored",accent:"var(--cyan)"},
     {icon:"🕸",label:"Edges",val:num(s.edges),sub:"prototype",accent:"var(--purple)"},
     {icon:"🔗",label:"Relations",val:num(s.schema_relations),sub:"schema",accent:"var(--purple)"},
@@ -1616,7 +1614,7 @@ async function loadStatus(){
     // Update badge
     
   } else {
-    alertHtml=`<div class="alert alert-ok"><span class="alert-icon">✅</span><div><b>All systems healthy</b> — no warnings detected.</div></div>`;
+    alertHtml=`<div class="alert alert-ok" style="align-items:center"><span class="alert-icon" style="display:flex;align-items:center;justify-content:center;width:16px;height:16px"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:block;flex-shrink:0"></span></span><div><b>All systems healthy</b></div></div>`;
     
   }
   document.getElementById("alertArea").innerHTML=alertHtml;
@@ -2053,7 +2051,7 @@ async function loadWorker(){
         ?`<span class="pill pill-contradicted" title="${esc(r.error_text)}">error</span>`
         :`<span class="pill pill-active">ok</span>`,
     ]);
-    const rawCols=[4,8,10];
+    const rawCols=[4,7,8,10];
     tbl.innerHTML=table(heads,rows,rawCols);
   }finally{ld.classList.remove("show");}
 }
