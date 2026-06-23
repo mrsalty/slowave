@@ -2003,8 +2003,7 @@ async function loadProcedures(){
 async function loadWorker(){
   const ld=document.getElementById("workerLoading");
   const tbl=document.getElementById("workerTable");
-  const chart=document.getElementById("workerChart");
-  ld.classList.add("show");tbl.innerHTML="";chart.innerHTML="";
+  ld.classList.add("show");tbl.innerHTML="";
   try{
     const lim=document.getElementById("workerLimit").value;
     const d=await getJSON(`/api/worker/runs?limit=${lim}`);
