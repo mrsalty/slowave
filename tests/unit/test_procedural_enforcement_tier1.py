@@ -108,7 +108,15 @@ def test_coverage_exact_match() -> None:
         )
 
         # This should not raise an error
-        eng.session_end(session_id, outcome="success")
+        result = eng.session_end(session_id, outcome="success")
+
+        # Verify enforcement actually computed coverage > 0
+        assert "procedural_enforcement" in result, "Enforcement tracking not returned"
+        enforcement_result = result["procedural_enforcement"]
+        assert "results" in enforcement_result, "No enforcement results"
+        assert len(enforcement_result["results"]) > 0, "No procedures tracked"
+        proc_result = enforcement_result["results"][0]
+        assert proc_result["coverage"] > 0.0, f"Coverage was 0.0; embeddings may not have loaded"
 
         # Verify the procedure exists
         retrieved = eng.retrieve_procedures(goal="impl_oauth", limit=5)
@@ -181,9 +189,10 @@ def test_feedback_routing_success() -> None:
             (proc_id,),
         ).fetchone()
 
-        if row:  # If coverage >= 0.5
-            assert row["feedback"] == "useful"
-            assert row["outcome"] == "success"
+        # Evidence row must exist (coverage >= 0.5)
+        assert row is not None, "No evidence written; coverage must have been < 0.5"
+        assert row["feedback"] == "useful"
+        assert row["outcome"] == "success"
 
     finally:
         eng.close()
@@ -218,9 +227,10 @@ def test_feedback_routing_failure() -> None:
             (proc_id,),
         ).fetchone()
 
-        if row:  # If coverage >= 0.5
-            assert row["feedback"] == "wrong"
-            assert row["outcome"] == "failure"
+        # Evidence row must exist (coverage >= 0.5)
+        assert row is not None, "No evidence written; coverage must have been < 0.5"
+        assert row["feedback"] == "wrong"
+        assert row["outcome"] == "failure"
 
     finally:
         eng.close()

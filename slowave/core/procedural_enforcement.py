@@ -216,7 +216,7 @@ class ProceduralEnforcement:
                 emb = None
                 if row["embedding"] is not None and row["dim"] is not None:
                     try:
-                        emb = unpack_f32(bytes(row["embedding"]))
+                        emb = unpack_f32(bytes(row["embedding"]), int(row["dim"]))
                     except Exception:
                         pass
                 events.append(
