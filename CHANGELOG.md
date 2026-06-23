@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.6.1](https://github.com/mrsalty/slowave/compare/slowave-v0.6.0...slowave-v0.6.1) (2026-06-23)
+
+
+### Bug Fixes
+
+* update PyPI classifier from alpha to beta ([fe669ec](https://github.com/mrsalty/slowave/commit/fe669ec63b1252ef4307ff73c8511e2b0a1890a0))
+
 ## [0.6.0](https://github.com/mrsalty/slowave/compare/slowave-v0.5.11...slowave-v0.6.0) (2026-06-23)
 
 
