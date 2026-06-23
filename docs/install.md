@@ -60,7 +60,7 @@ pipx uninstall slowave  # remove package
 ## Requirements
 
 - Python 3.10+
-- macOS, Linux, or Windows (still under test
+- macOS, Linux, or Windows
 - 8GB+ RAM recommended
 - CPU is enough — no GPU, Ollama, OpenRouter, or cloud service required
 
