@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.6.0](https://github.com/mrsalty/slowave/compare/slowave-v0.5.11...slowave-v0.6.0) (2026-06-23)
+
+
+### Bug Fixes
+
+* disable bump-patch-for-minor-pre-major so feat commits correctly bump minor ([4de95de](https://github.com/mrsalty/slowave/commit/4de95dec3b0f335fb38ee9046cf6130860eb57db))
+
+
+### Documentation
+
+* add SECURITY.md, fix Windows support caveat, link security policy from CONTRIBUTING ([6588bd4](https://github.com/mrsalty/slowave/commit/6588bd45303a29673b97187bbb5f10a9629d6325))
+
 ## [0.5.11](https://github.com/mrsalty/slowave/compare/slowave-v0.5.10...slowave-v0.5.11) (2026-06-23)
 
 
