@@ -20,12 +20,17 @@ from slowave.core.config import SlowaveConfig
 from slowave.core.consolidation import Consolidator
 from slowave.core.context import WorkingMemoryGate, WorkingMemoryState
 from slowave.core.procedural import ProceduralMemoryStore
+from slowave.core.procedural_enforcement import ProceduralEnforcement
 from slowave.core.scope import normalize_scope, scope_kind
 from slowave.core.services.consolidation import ConsolidationService
 from slowave.core.services.feedback import FeedbackService
 from slowave.core.services.ingest import IngestService
 from slowave.core.services.retrieval import RecallResult, RetrievalService
-from slowave.core.supersession import AUTO_SUPERSEDE_THRESHOLD, SupersessionCandidate, find_superseded_candidates
+from slowave.core.supersession import (
+    AUTO_SUPERSEDE_THRESHOLD,
+    SupersessionCandidate,
+    find_superseded_candidates,
+)
 from slowave.core.supersession_manifold import SupersessionManifold  # available for future use
 from slowave.latent.episodic_store import EpisodicStore, EpisodicStoreConfig
 from slowave.latent.graph_manager import GraphManager
@@ -59,12 +64,12 @@ def _prefix_date(text: str, ts: int) -> str:
     breaks recall.
     """
     from datetime import datetime, timezone
+
     try:
         date_str = datetime.fromtimestamp(ts, tz=timezone.utc).strftime("%Y-%m-%d")
         return f"[{date_str}] {text}" if text else f"[{date_str}]"
     except Exception:
         return text
-
 
 
 def _default_memory_layer(schema_type: str) -> str:
@@ -142,7 +147,11 @@ class SlowaveEngine:
         # is no cost during the first session before any graph edges exist.
         # An explicit cfg.transition lets callers override dim or other params;
         # the default auto-derives dim from cfg.dim.
-        _transition_cfg = self.cfg.transition if self.cfg.transition is not None else TransitionModelConfig(dim=self.cfg.dim)
+        _transition_cfg = (
+            self.cfg.transition
+            if self.cfg.transition is not None
+            else TransitionModelConfig(dim=self.cfg.dim)
+        )
         self.transition_model = TransitionModel(_transition_cfg)
         # Attach graph and semantic stores for graph-based prediction
         self.transition_model.attach_stores(self.graph, self.semantic)
@@ -242,6 +251,8 @@ class SlowaveEngine:
             consolidator=self.consolidator,
             schemas=self.schemas,
             ingest=self._ingest,
+            procedures=self.procedures,
+            encoder=self.encoder,
         )
         self._retrieval = RetrievalService(
             episodic=self.episodic,
@@ -263,6 +274,11 @@ class SlowaveEngine:
             schemas=self.schemas,
             procedures=self.procedures,
             cfg=self.cfg.feedback,
+        )
+
+        # Procedural memory enforcement (Tier 1)
+        self._procedural_enforcement = ProceduralEnforcement(
+            store=self.procedures, encoder=self.encoder, db=self.db
         )
 
         # rebuild FAISS indices from DB
@@ -302,6 +318,7 @@ class SlowaveEngine:
         agent: str,
         scope: str | None = None,
         ts: int | None = None,
+        goal: str | None = None,
     ) -> str:
         sid = f"sess_{uuid.uuid4().hex[:12]}"
         scope_id = normalize_scope(scope=scope)
@@ -311,16 +328,22 @@ class SlowaveEngine:
             scope_id=scope_id,
             scope_kind=scope_kind(scope_id),
             ts=ts,
+            goal=goal,
         )
         # Record the scope in the registry so the generalization denominator
         # (total_active_scopes) stays current without expensive table scans.
         if scope_id:
-            self.schemas.scope_registry.record(
-                scope_id, scope_kind(scope_id), is_recall=False
-            )
+            self.schemas.scope_registry.record(scope_id, scope_kind(scope_id), is_recall=False)
         return sid
 
-    def session_end(self, session_id: str, *, consolidate: bool = False, ts: int | None = None) -> dict[str, Any]:
+    def session_end(
+        self,
+        session_id: str,
+        *,
+        consolidate: bool = False,
+        ts: int | None = None,
+        outcome: str | None = None,
+    ) -> dict[str, Any]:
         """End a session: form episodes from raw events.
 
         consolidate=False (default): fast path — only encodes the session into
@@ -332,10 +355,29 @@ class SlowaveEngine:
         invocations. In production, leave consolidate=False and run the
         background worker (slowave worker start) or call
         `slowave worker` or `slowave consolidate` on a schedule.
+
+        Args:
+            outcome: "success", "failure", "partial", or None
         """
-        self.raw_log.end_session(session_id, ts=ts)
+        self.raw_log.end_session(session_id, ts=ts, outcome=outcome)
+
+        # Fetch the session's goal for procedural enforcement tracking
+        conn = self.db.connect()
+        session_row = conn.execute(
+            "SELECT goal FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        goal = session_row["goal"] if session_row else None
+
         episode_ids = self._ingest.form_episodes(session_id)
         stats: dict[str, Any] = {"session_id": session_id, "episodes_formed": len(episode_ids)}
+
+        # Tier 1 enforcement: track procedure execution & record evidence
+        if outcome:
+            enforcement_result = self._procedural_enforcement.track(
+                session_id=session_id, goal=goal, outcome=outcome
+            )
+            stats["procedural_enforcement"] = enforcement_result
+
         if consolidate:
             replay_stats = self.replay_engine.replay_once()
             stats["replay"] = replay_stats
@@ -371,7 +413,10 @@ class SlowaveEngine:
         content_stripped = str(content).strip() if content else ""
         if not content_stripped:
             content_stripped = "[empty content]"
-            log.warning("event_append called with empty content for session %s, using placeholder", session_id)
+            log.warning(
+                "event_append called with empty content for session %s, using placeholder",
+                session_id,
+            )
 
         # Graceful degradation: if the session_id doesn't exist in the sessions
         # table (e.g. the caller used "placeholder" or forgot to call
@@ -497,7 +542,9 @@ class SlowaveEngine:
                 if cand.confidence >= AUTO_SUPERSEDE_THRESHOLD:
                     # Auto-supersede: high confidence pattern match
                     try:
-                        self.schemas.update_status(cand.old_schema_id, status="superseded", salience=0.05)
+                        self.schemas.update_status(
+                            cand.old_schema_id, status="superseded", salience=0.05
+                        )
                         self.schemas.add_relation(
                             src_schema_id=new_schema_id,
                             dst_schema_id=cand.old_schema_id,
@@ -562,9 +609,7 @@ class SlowaveEngine:
                 if candidate.status not in ("active", "needs_review"):
                     continue
                 if candidate.last_updated_ts < int(time.time()):
-                    self.schemas.update_status(
-                        candidate_id, status="superseded", salience=0.05
-                    )
+                    self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
                     self.schemas.add_relation(
                         src_schema_id=new_schema_id,
                         dst_schema_id=candidate_id,
@@ -589,6 +634,7 @@ class SlowaveEngine:
     # ---- consolidation ----------------------------------------------------
     def consolidate_once(self, *, triggered_by: str = "worker") -> dict[str, Any]:
         return self._consolidation.consolidate_once(triggered_by=triggered_by)
+
     def refresh_indices(self) -> None:
         self._retrieval.refresh_indices()
 
@@ -712,4 +758,3 @@ class SlowaveEngine:
 
     def context_feedback(self, *, context_id: str, **kwargs: Any) -> dict[str, Any]:
         return self._feedback.context_feedback(context_id=context_id, **kwargs)
-
