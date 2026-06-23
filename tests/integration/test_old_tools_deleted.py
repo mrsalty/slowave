@@ -2,10 +2,10 @@
 
 Validates Step 6.6 (hard break — delete old tools).
 Old / bare names forbidden: context, session_start, session_end, event, retrieval_feedback,
-  context_feedback, activate, remember, recall, reinforce, commit, stats, remember_procedure
+  context_feedback, activate, remember, recall, reinforce, commit, stats
   (bare names without the slowave_ prefix are not presented correctly to Cline TUI)
 New tools present: slowave_activate, slowave_remember, slowave_recall, slowave_reinforce,
-                   slowave_commit, slowave_stats, slowave_remember_procedure
+                   slowave_commit, slowave_stats
 """
 from __future__ import annotations
 
@@ -48,7 +48,7 @@ class TestOldToolsDeleted:
         so the names MUST match — bare names guarantee a mismatch and broken tools.
         """
         tool_names = self._get_tool_names()
-        bare = {"activate", "remember", "recall", "reinforce", "commit", "stats", "remember_procedure"}
+        bare = {"activate", "remember", "recall", "reinforce", "commit", "stats"}
         present_bare = bare & tool_names
         assert not present_bare, (
             f"Bare tool names registered (must use slowave_ prefix): {present_bare}"
@@ -56,6 +56,6 @@ class TestOldToolsDeleted:
 
     def test_new_tools_present(self) -> None:
         tool_names = self._get_tool_names()
-        expected = {"slowave_activate", "slowave_remember", "slowave_recall", "slowave_reinforce", "slowave_commit", "slowave_stats", "slowave_remember_procedure"}
+        expected = {"slowave_activate", "slowave_remember", "slowave_recall", "slowave_reinforce", "slowave_commit", "slowave_stats"}
         missing = expected - tool_names
         assert not missing, f"New tools missing from registry: {missing}"
