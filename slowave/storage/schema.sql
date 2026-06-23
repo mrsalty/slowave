@@ -72,7 +72,9 @@ CREATE TABLE IF NOT EXISTS sessions (
   scope_id    TEXT,
   scope_kind  TEXT,
   started_ts  INTEGER NOT NULL,
-  ended_ts    INTEGER
+  ended_ts    INTEGER,
+  goal        TEXT,
+  outcome     TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_sessions_scope ON sessions(scope_id);
 
@@ -358,7 +360,10 @@ CREATE TABLE IF NOT EXISTS procedural_memories (
   dim                        INTEGER,
   created_at                 INTEGER NOT NULL,
   updated_at                 INTEGER NOT NULL,
-  last_used_at               INTEGER
+  last_used_at               INTEGER,
+  source                     TEXT NOT NULL DEFAULT 'implicit', -- implicit/explicit
+  superseded_by_id           INTEGER,
+  generalization_stage       INTEGER NOT NULL DEFAULT 0 -- 0=scoped, 1=portable, 2=contextual, 3=global
 );
 CREATE INDEX IF NOT EXISTS idx_procedural_origin_scope ON procedural_memories(origin_scope_id);
 CREATE INDEX IF NOT EXISTS idx_procedural_goal ON procedural_memories(goal);

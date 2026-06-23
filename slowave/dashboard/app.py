@@ -1521,7 +1521,8 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   b.classList.add("active");
   document.getElementById(b.dataset.tab).classList.add("active");
   const tab=b.dataset.tab;
-  if(tab==="schemas")loadSchemas();
+  if(tab==="overview")renderPulse();
+  else if(tab==="schemas")loadSchemas();
   else if(tab==="procedures")loadProcedures();
   else if(tab==="graph")loadGraph();
   else if(tab==="worker")loadWorker();
@@ -1709,6 +1710,7 @@ async function renderPulse(){
 
     const DPR=window.devicePixelRatio||1;
     const W=canvas.parentElement.clientWidth;
+    if(W<=0)return;
     const H=110;
     canvas.width=Math.round(W*DPR);
     canvas.height=Math.round(H*DPR);
@@ -1732,7 +1734,7 @@ async function renderPulse(){
       const bl=H-18;
       ctx.strokeStyle="rgba(56,189,248,.18)";ctx.lineWidth=0.8;ctx.setLineDash([4,7]);
       ctx.beginPath();ctx.moveTo(0,bl);ctx.lineTo(W,bl);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle="#3a4a6a";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
+      ctx.fillStyle="#5a7ab5";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
       ctx.fillText("Flatline \u2014 no events in the last "+d.window_hours+"h",W/2,bl-10);
       canvas.onmousemove=null;canvas.onmouseleave=null;stats.innerHTML="";return;
     }
@@ -2431,7 +2433,9 @@ async function loadGeneralization(){
 
 // ── INIT ──
 loadStatus();
+renderPulse();
 setInterval(loadStatus,REFRESH_MS);
+setInterval(renderPulse,REFRESH_MS);
 </script>
 </body>
 </html>'''
