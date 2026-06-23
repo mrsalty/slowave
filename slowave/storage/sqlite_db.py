@@ -130,6 +130,11 @@ class SQLiteDB:
             ("procedural_memories", "generalization_stage", "INTEGER NOT NULL DEFAULT 0"),
 
             ("schemas", "generalization_stage", "INTEGER NOT NULL DEFAULT 0"),
+
+            # Worker run log: additional tracking columns
+            ("worker_runs", "procedures_promoted", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_runs", "procedures_generalized", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_runs", "schemas_decayed", "INTEGER NOT NULL DEFAULT 0"),
         ]
 
         for table, column, type_spec in missing_columns:

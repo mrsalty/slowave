@@ -914,6 +914,9 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
             "SELECT COUNT(*) AS n, MAX(started_ts) AS last_ts,"
             " SUM(schemas_created) AS schemas_created,"
             " SUM(schemas_reinforced) AS schemas_reinforced,"
+            " SUM(procedures_promoted) AS procedures_promoted,"
+            " SUM(procedures_generalized) AS procedures_generalized,"
+            " SUM(schemas_decayed) AS schemas_decayed,"
             " AVG(duration_ms) AS avg_ms"
             " FROM worker_runs WHERE error_text IS NULL"
         ).fetchone()
@@ -924,6 +927,9 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
                 "last_run_ts": total_row["last_ts"] if total_row else None,
                 "total_schemas_created": int(total_row["schemas_created"] or 0) if total_row else 0,
                 "total_schemas_reinforced": int(total_row["schemas_reinforced"] or 0) if total_row else 0,
+                "total_procedures_promoted": int(total_row["procedures_promoted"] or 0) if total_row else 0,
+                "total_procedures_generalized": int(total_row["procedures_generalized"] or 0) if total_row else 0,
+                "total_schemas_decayed": int(total_row["schemas_decayed"] or 0) if total_row else 0,
                 "avg_duration_ms": round(float(total_row["avg_ms"] or 0), 1) if total_row else 0,
             },
         }
@@ -2007,6 +2013,9 @@ async function loadWorker(){
       {icon:"📖",label:"Schemas created",val:num(sum.total_schemas_created),accent:"var(--green)"},
       {icon:"🔁",label:"Reinforced",val:num(sum.total_schemas_reinforced),accent:"var(--cyan)"},
       {icon:"⏱",label:"Avg duration",val:(sum.avg_duration_ms||0).toFixed(0)+"ms",accent:"var(--amber)"},
+      {icon:"🧭",label:"Procedures +",val:num(sum.total_procedures_promoted),accent:"var(--amber)"},
+      {icon:"🔄",label:"Procs generalized",val:num(sum.total_procedures_generalized),accent:"var(--cyan)"},
+      {icon:"📉",label:"Decayed",val:num(sum.total_schemas_decayed),accent:"var(--red)"},
       {icon:"🕐",label:"Last run",val:fmtTsCompact(sum.last_run_ts),sub:fmtTsCompactSub(sum.last_run_ts),accent:"var(--muted)",raw:true},
     ];
     document.getElementById("workerStatGrid").innerHTML=cards.map(c=>
@@ -2018,20 +2027,34 @@ async function loadWorker(){
       </div>`
     ).join("");
 
-    // Mini bar chart: schemas created per run (last 20)
+    // Mini bar chart: schemas created / procedures promoted / schemas decayed per run (last 20)
     const chartRuns=runs.slice(0,20).reverse();
     if(chartRuns.length){
-      const maxCreated=Math.max(1,...chartRuns.map(r=>r.schemas_created||0));
+      const maxV=Math.max(1,...chartRuns.map(r=>Math.max(r.schemas_created||0,r.procedures_promoted||0,r.schemas_decayed||0)));
       chart.innerHTML=`
-        <div style="display:flex;align-items:flex-end;gap:3px;height:48px;padding:0 2px">
+        <div style="display:flex;align-items:flex-end;gap:3px;height:52px;padding:0 2px">
           ${chartRuns.map(r=>{
-            const h=Math.round(((r.schemas_created||0)/maxCreated)*44)+4;
-            const color=r.error_text?"var(--red)":"var(--blue)";
-            return `<div title="${fmtTs(r.started_ts)}: +${r.schemas_created||0} schemas"
-              style="flex:1;height:${h}px;background:${color};border-radius:2px 2px 0 0;min-width:4px;opacity:.8"></div>`;
+            const h1=Math.round(((r.schemas_created||0)/maxV)*44)+4;
+            const h2=Math.round(((r.procedures_promoted||0)/maxV)*44)+4;
+            const h3=Math.round(((r.schemas_decayed||0)/maxV)*44)+4;
+            const err=r.error_text?"var(--red)":"";
+            return `<div style="flex:1;display:flex;flex-direction:column;gap:1px;justify-content:flex-end">
+              <div title="${fmtTs(r.started_ts)}: -${r.schemas_decayed||0} decayed"
+                style="height:${h3}px;background:var(--red);border-radius:2px 2px 0 0;min-height:${h3>0?2:0}px;opacity:.6"></div>
+              <div title="${fmtTs(r.started_ts)}: +${r.procedures_promoted||0} procedures"
+                style="height:${h2}px;background:var(--amber);border-radius:2px 2px 0 0;min-height:${h2>0?2:0}px;opacity:.8"></div>
+              <div title="${fmtTs(r.started_ts)}: +${r.schemas_created||0} schemas"
+                style="height:${h1}px;background:${err||"var(--blue)"};border-radius:2px 2px 0 0;min-height:${h1>0?2:0}px;opacity:.8"></div>
+            </div>`;
           }).join("")}
         </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:3px">schemas created per pass (last ${chartRuns.length})</div>`;
+        <div style="font-size:10px;color:var(--muted);margin-top:3px;display:flex;gap:12px;justify-content:center">
+          <span><span style="color:var(--blue)">▇</span> schemas</span>
+          <span><span style="color:var(--amber)">▇</span> procedures</span>
+          <span><span style="color:var(--red)">▇</span> decayed</span>
+          <span style="color:var(--muted)">(last ${chartRuns.length} passes)</span>
+        </div>`;
+    }
     }
 
     // Table
@@ -2039,7 +2062,7 @@ async function loadWorker(){
       tbl.innerHTML=emptyState("No worker runs recorded yet. Start the worker with: slowave worker","🧠");
       return;
     }
-    const heads=["#","Started","Duration","Trigger","Schemas +","~Reinf.","Protos","Status"];
+    const heads=["#","Started","Duration","Trigger","Schemas +","~Reinf.","Protos","Procs +","Decayed","Eps proc","Status"];
     const rows=runs.map(r=>[
       r.id,
       fmtTs(r.started_ts),
@@ -2048,11 +2071,14 @@ async function loadWorker(){
       `<b style="color:var(--green)">+${r.schemas_created||0}</b>`,
       num(r.schemas_reinforced||0),
       num(r.prototypes_processed||0),
+      `<b style="color:var(--amber)">+${r.procedures_promoted||0}</b>`,
+      `<span style="color:var(--red)">-${r.schemas_decayed||0}</span>`,
+      num(r.episodes_processed||0),
       r.error_text
         ?`<span class="pill pill-contradicted" title="${esc(r.error_text)}">error</span>`
         :`<span class="pill pill-active">ok</span>`,
     ]);
-    const rawCols=[4,7];
+    const rawCols=[4,8,10];
     tbl.innerHTML=table(heads,rows,rawCols);
   }finally{ld.classList.remove("show");}
 }
