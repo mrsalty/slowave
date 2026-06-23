@@ -6,7 +6,7 @@ all 7 cognitive-cycle tools to any FastMCP instance.  Both the stdio server
 is no duplication of tool logic.
 
 Tools registered:
-  activate, remember, recall, reinforce, commit, stats, remember_procedure
+  activate, remember, recall, reinforce, commit, stats
 """
 
 from __future__ import annotations
@@ -76,7 +76,7 @@ async def _bg_log_event(eng, session_id: str, event_type: str, content: str) -> 
 
 
 def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
-    """Register all 7 Slowave cognitive-cycle tools onto *mcp*.
+    """Register all 6 Slowave cognitive-cycle tools onto *mcp*.
 
     Args:
         mcp: A FastMCP instance (stdio or HTTP).
@@ -133,7 +133,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
 
         try:
             eng = build_engine(disable_encoder=not bool(query or topics or entities))
-            sid = eng.session_start(agent="mcp", scope=scope)
+            sid = eng.session_start(agent="mcp", scope=scope, goal=goal)
             session_resolver.bind(scope, sid)
             brief = eng.context_brief(
                 query=query,
@@ -398,52 +398,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
             log.error("slowave_remember failed: %s", e, exc_info=True)
             return {"stored": False, "error": str(e), "type": type, "scope": scope}
 
-    @mcp.tool(name="slowave_remember_procedure")
-    async def slowave_remember_procedure(
-        procedure_steps: list[str],
-        goal: str | None = None,
-        task_type: str | None = None,
-        scope: str | None = None,
-        situation: dict[str, Any] | None = None,
-        requirements: list[str] | None = None,
-        trigger_pattern: list[str] | None = None,
-        confidence: float = 0.7,
-        status: str = "active",
-    ) -> dict[str, Any]:
-        """Store a deterministic procedural memory / reusable workflow.
-
-        This is a no-LLM seed path for learned or explicit workflows.
-        Pass ``scope='project:<name>'`` for project-specific procedures.
-        """
-        try:
-            eng = build_engine(disable_encoder=True)
-            pid = eng.remember_procedure(
-                procedure_steps=procedure_steps,
-                goal=goal,
-                task_type=task_type,
-                scope=scope,
-                situation=situation or {},
-                requirements=requirements or [],
-                trigger_pattern=trigger_pattern or [],
-                confidence=confidence,
-                status=status,
-            )
-            return {
-                "procedure_id": f"proc_{pid}",
-                "goal": goal,
-                "task_type": task_type,
-                "scope": scope,
-            }
-        except Exception as e:
-            log.error("slowave_remember_procedure failed: %s", e, exc_info=True)
-            return {
-                "procedure_id": None,
-                "error": str(e),
-                "goal": goal,
-                "task_type": task_type,
-                "scope": scope,
-            }
-
     @mcp.tool(name="slowave_reinforce")
     async def slowave_reinforce(
         retrieval_id: str,
@@ -528,7 +482,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 _bg_log_event(eng, resolved_sid, "task_complete", f"outcome={outcome_str}")
             )
             await asyncio.sleep(0.05)
-            result = eng.session_end(resolved_sid, consolidate=False)
+            result = eng.session_end(resolved_sid, consolidate=False, outcome=outcome_str)
             session_resolver.clear(scope)
             return {
                 "session_id": resolved_sid,

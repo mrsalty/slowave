@@ -3,6 +3,7 @@
 Every observation passes through here first. Episodes and schemas cite back
 to raw_events.id for provenance.
 """
+
 from __future__ import annotations
 
 import time
@@ -33,9 +34,16 @@ class RawLog:
     def __init__(self, db: SQLiteDB):
         self.db = db
 
-    def append(self, *, session_id: str, type: str, content: str,
-               ts: int | None = None, metadata: dict[str, Any] | None = None,
-               embedding: np.ndarray | None = None) -> int:
+    def append(
+        self,
+        *,
+        session_id: str,
+        type: str,
+        content: str,
+        ts: int | None = None,
+        metadata: dict[str, Any] | None = None,
+        embedding: np.ndarray | None = None,
+    ) -> int:
         if ts is None:
             ts = int(time.time())
         meta = metadata or {}
@@ -46,8 +54,15 @@ class RawLog:
             cur = conn.execute(
                 "INSERT INTO raw_events (session_id, ts, type, content, metadata_json, embedding, dim) "
                 "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                (str(session_id), int(ts), str(type), str(content),
-                 dumps_json(meta), pack_f32(emb), dim),
+                (
+                    str(session_id),
+                    int(ts),
+                    str(type),
+                    str(content),
+                    dumps_json(meta),
+                    pack_f32(emb),
+                    dim,
+                ),
             )
         else:
             cur = conn.execute(
@@ -137,23 +152,35 @@ class RawLog:
         scope_id: str | None = None,
         scope_kind: str | None = None,
         ts: int | None = None,
+        goal: str | None = None,
     ) -> None:
         conn = self.db.connect()
         conn.execute(
-            "INSERT INTO sessions (id, agent, scope_id, scope_kind, started_ts) VALUES (?, ?, ?, ?, ?)",
-            (str(session_id), str(agent), scope_id, scope_kind, int(ts) if ts is not None else int(time.time())),
+            "INSERT INTO sessions (id, agent, scope_id, scope_kind, started_ts, goal) VALUES (?, ?, ?, ?, ?, ?)",
+            (
+                str(session_id),
+                str(agent),
+                scope_id,
+                scope_kind,
+                int(ts) if ts is not None else int(time.time()),
+                goal,
+            ),
         )
         conn.commit()
 
-    def end_session(self, session_id: str, ts: int | None = None) -> None:
+    def end_session(
+        self, session_id: str, ts: int | None = None, outcome: str | None = None
+    ) -> None:
         conn = self.db.connect()
         conn.execute(
-            "UPDATE sessions SET ended_ts = ? WHERE id = ?",
-            (int(ts) if ts is not None else int(time.time()), str(session_id)),
+            "UPDATE sessions SET ended_ts = ?, outcome = ? WHERE id = ?",
+            (int(ts) if ts is not None else int(time.time()), outcome, str(session_id)),
         )
         conn.commit()
 
-    def list_session_ids(self, *, scope_id: str | None = None, since: int | None = None) -> list[str]:
+    def list_session_ids(
+        self, *, scope_id: str | None = None, since: int | None = None
+    ) -> list[str]:
         conn = self.db.connect()
         sql = "SELECT id FROM sessions WHERE 1=1"
         args: list[Any] = []

@@ -13,7 +13,6 @@ Tools exposed (5-verb cognitive cycle):
   - slowave_reinforce   : strengthen/suppress memories (feedback)
   - slowave_commit      : close the task; form episodes
   - slowave_stats       : return system counts
-  - slowave_remember_procedure : store a deterministic workflow
 
 Deleted (hard break from old surface):
   slowave_context, slowave_session_start, slowave_session_end,
@@ -104,7 +103,7 @@ def _build_engine(disable_encoder: bool = False) -> SlowaveEngine:
 # ---------------------------------------------------------------------------
 mcp = FastMCP("slowave")
 
-# Register all 7 cognitive-cycle tools from the shared module
+# Register all 6 cognitive-cycle tools from the shared module
 register_tools(mcp, _build_engine)
 
 
