@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.5.11](https://github.com/mrsalty/slowave/compare/slowave-v0.5.10...slowave-v0.5.11) (2026-06-23)
+
+
+### Bug Fixes
+
+* **dashboard:** wire renderPulse into refresh loop so pulse graph updates on every poll cycle ([0ed0960](https://github.com/mrsalty/slowave/commit/0ed0960d8e40499994b9db09eeff2dad898260c6))
+
 ## [0.5.10](https://github.com/mrsalty/slowave/compare/slowave-v0.5.9...slowave-v0.5.10) (2026-06-21)
 
 
