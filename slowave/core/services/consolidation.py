@@ -132,23 +132,33 @@ class ConsolidationService:
             if run_id is not None:
                 ended_ts = int(time.time())
                 cs = result.get("consolidation", {})
+                replay_stats = result.get("replay", {})
+                decay = result.get("decay", {})
+                procedures_result = result.get("procedures", {})
                 try:
                     conn.execute(
                         """
                         UPDATE worker_runs SET
                           ended_ts=?, duration_ms=?, prototypes_processed=?,
+                          episodes_processed=?,
                           schemas_created=?, schemas_reinforced=?,
-                          schemas_contradicted=?, schemas_skipped=?, error_text=?
+                          schemas_contradicted=?, schemas_skipped=?,
+                          procedures_promoted=?, procedures_generalized=?,
+                          schemas_decayed=?, error_text=?
                         WHERE id=?
                         """,
                         (
                             ended_ts,
                             (ended_ts - started_ts) * 1000,
                             cs.get("prototypes_processed", 0),
+                            replay_stats.get("replay_sampled", 0),
                             cs.get("schemas_created", 0),
                             cs.get("schemas_reinforced", 0),
                             cs.get("schemas_contradicted", 0),
                             cs.get("schemas_skipped", 0),
+                            len(procedures_result.get("promotion", {}).get("created", [])),
+                            len(procedures_result.get("generalization", {}).get("promoted", {})),
+                            decay.get("decayed", 0),
                             error_text,
                             run_id,
                         ),

@@ -210,6 +210,9 @@ CREATE TABLE IF NOT EXISTS worker_runs (
   schemas_reinforced    INTEGER NOT NULL DEFAULT 0,
   schemas_contradicted  INTEGER NOT NULL DEFAULT 0,
   schemas_skipped       INTEGER NOT NULL DEFAULT 0,
+  procedures_promoted   INTEGER NOT NULL DEFAULT 0,
+  procedures_generalized INTEGER NOT NULL DEFAULT 0,
+  schemas_decayed       INTEGER NOT NULL DEFAULT 0,
   error_text            TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_worker_runs_started ON worker_runs(started_ts DESC);
