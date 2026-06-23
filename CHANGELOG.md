@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.5.11](https://github.com/mrsalty/slowave/compare/slowave-v0.5.10...slowave-v0.5.11) (2026-06-23)
+
+
+### Features
+
+* implement procedural memory v4 (Tier 2 enrichment + generalization) ([922e3bd](https://github.com/mrsalty/slowave/commit/922e3bd9eba4df3b1eb4eb62111a2fd3278fff56))
+* procedural memory consolidation ([1051c23](https://github.com/mrsalty/slowave/commit/1051c23e78ad824d844184bf867dd430cc0ed282))
+
+
+### Bug Fixes
+
+* correct backwards LoCoMo hot/cold comment and update uv.lock ([50dfe33](https://github.com/mrsalty/slowave/commit/50dfe3306ec82804c3d434c4257125de69f8dd97))
+* critical bug in Tier 1 enforcement — embedding deserialization ([e873f12](https://github.com/mrsalty/slowave/commit/e873f12d7b6d5cdff27294e3dcc88e9fa0c489d3))
+* **dashboard:** wire renderPulse into refresh loop so pulse graph updates on every poll cycle ([0ed0960](https://github.com/mrsalty/slowave/commit/0ed0960d8e40499994b9db09eeff2dad898260c6))
+* replace hardcoded absolute path in test_encode_never_in_procedural with pathlib relative path ([ab68f1d](https://github.com/mrsalty/slowave/commit/ab68f1db5ef9b2dc92886befb49f7effdb3ed41f))
+
 ## [0.5.10](https://github.com/mrsalty/slowave/compare/slowave-v0.5.9...slowave-v0.5.10) (2026-06-21)
 
 
