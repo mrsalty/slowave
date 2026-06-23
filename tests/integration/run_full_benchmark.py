@@ -122,10 +122,12 @@ def main() -> None:
     results: dict[str, dict] = {}
     suite_start = time.time()
 
-    # LoCoMo runs FIRST — must be cold (no prior large benchmark in the same OS session).
-    # Running LongMemEval first degrades LoCoMo by ~5-6 pp due to OS memory pressure /
-    # ONNX/FAISS process-state contamination across subprocess boundaries.
-    # Confirmed Jun 12 2026: standalone LoCoMo = 83-84%, post-LME LoCoMo = 77.5%.
+    # LoCoMo runs FIRST (before LME) to keep the run order consistent across benchmarks.
+    # NOTE: empirical data (Jun 2026, 14 runs) shows LoCoMo scores HIGHER when LME ran
+    # just before it in the same OS session (~81-83%) than when it runs cold (~76-81%,
+    # mean 78.8%, stdev 2.3%). The earlier comment claiming post-LME hurts LoCoMo was
+    # incorrect — the effect is the opposite, likely ONNX/encoder warmup benefits.
+    # Cold-run variance of ~5 pp is normal; don't treat it as a regression signal.
     if "locomo" not in skip:
         ds = REPO_ROOT / "data" / "locomo" / "locomo10.json"
         if not ds.exists():
