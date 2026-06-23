@@ -1695,9 +1695,10 @@ async function loadStatus(){
       scopes.map(r=>[r.scope,num(r.sessions)])
     );
   }
-}
-// PULSE GRAPH
+
+  // PULSE GRAPH — refresh on every status poll cycle
   renderPulse();
+}
 
 async function renderPulse(){
   try{
