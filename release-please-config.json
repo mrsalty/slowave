@@ -6,7 +6,8 @@
       "release-type": "python",
       "package-name": "slowave",
       "changelog-path": "CHANGELOG.md",
-      "bump-minor-pre-major": true
+      "bump-minor-pre-major": true,
+      "bump-patch-for-minor-pre-major": true
     }
   }
 }

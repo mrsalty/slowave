@@ -1,34 +1,5 @@
 # Changelog
 
-## [0.6.0b1](https://github.com/mrsalty/slowave/compare/slowave-v0.5.11...slowave-v0.6.0b1) (2026-06-23)
-
-
-### Features
-
-* first beta release — procedural memory v4 (Tier 1 enforcement + Tier 2 enrichment/generalization)
-* supersession manifold (SVD1-based latent supersession direction)
-* HTTP MCP daemon (streamable-HTTP transport, single-instance PID guard)
-* local dashboard web UI (dependency-free, port 8765)
-* daily SQLite backup with gzip compression and auto-rotation
-* feedback system with brain-inspired numeric learning signals
-* working-memory gating for token-budget-aware context
-* session-idle reaper and per-scope implicit session resolver
-* WikiScenarios: 18 ablation scenarios for systematic evaluation
-
-
-### Bug Fixes
-
-* critical bug in Tier 1 enforcement — embedding deserialization ([e873f12](https://github.com/mrsalty/slowave/commit/e873f12d7b6d5cdff27294e3dcc88e9fa0c489d3))
-* **dashboard:** wire renderPulse into refresh loop ([0ed0960](https://github.com/mrsalty/slowave/commit/0ed0960d8e40499994b9db09eeff2dad898260c6))
-* replace hardcoded absolute path in test with pathlib relative path ([ab68f1d](https://github.com/mrsalty/slowave/commit/ab68f1db5ef9b2dc92886befb49f7effdb3ed41f))
-* correct backwards LoCoMo hot/cold comment and update uv.lock ([50dfe33](https://github.com/mrsalty/slowave/commit/50dfe3306ec82804c3d434c4257125de69f8dd97))
-
-
-### Chores
-
-* remove deprecated MCP tools: slowave_context, slowave_session_start/session_end/event, slowave_retrieval_feedback, slowave_context_feedback
-* disable bump-patch-for-minor-pre-major in release-please so future feat commits correctly produce minor bumps
-
 ## [0.5.11](https://github.com/mrsalty/slowave/compare/slowave-v0.5.10...slowave-v0.5.11) (2026-06-23)
 
 
