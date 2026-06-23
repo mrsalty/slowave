@@ -190,16 +190,7 @@ By submitting a pull request, you confirm that:
 
 Please do not open public issues for security-sensitive problems.
 
-Security-sensitive examples include:
-
-- memory data exposure;
-- unsafe file permissions;
-- path traversal;
-- prompt or context leakage;
-- unsafe default storage behavior;
-- accidental logging of private memory content.
-
-Until a dedicated security policy is available, please open a minimal issue saying that you found a security-sensitive problem and request a private contact channel.
+See [SECURITY.md](./SECURITY.md) for the full security policy and reporting instructions.
 
 ## Code of conduct
 
