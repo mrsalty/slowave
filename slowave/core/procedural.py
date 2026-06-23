@@ -56,6 +56,11 @@ class ProceduralMemoryConfig:
     related_scope_affinity: float = 0.5
     different_scope_affinity: float = 0.0
 
+    # Generalization stage-aware affinity (v4 §5)
+    stage1_cross_affinity: float = 0.5
+    stage2_cross_affinity: float = 0.3
+    stage3_cross_affinity: float = 1.0
+
     # Learning
     success_alpha: float = 0.10
     partial_success_alpha: float = 0.04
@@ -107,6 +112,7 @@ class ProceduralMemory:
     created_at: int
     updated_at: int
     last_used_at: int | None
+    generalization_stage: int = 0  # 0=scope-locked, 1/2/3=progressively generalized
 
 
 @dataclass(frozen=True)
@@ -275,7 +281,7 @@ class ProceduralMemoryStore:
         total = proc.success_count + proc.failure_count
         success_rate = (proc.success_count / total) if total else confidence
         failure_risk = (proc.failure_count / total) if total else 0.0
-        scope_affinity = self._scope_affinity(scope_id, proc.origin_scope_id)
+        scope_affinity = self._scope_affinity(scope_id, proc)
         recency = _recency_score(proc.last_used_at or proc.updated_at)
 
         # Penalize only for requirements the caller explicitly asked for that the
@@ -464,12 +470,18 @@ class ProceduralMemoryStore:
         conn.commit()
         return self.get(procedure_id)
 
-    def promote_candidates_from_feedback(self) -> dict[str, Any]:
+    def promote_candidates_from_feedback(
+        self, *, enriched_steps_map: dict[tuple[str, str], list[str]] | None = None
+    ) -> dict[str, Any]:
         """Create candidate procedures from repeated successful feedback groups.
 
         Deterministic v1: group successful/useful feedback by goal + task_type,
         aggregate scopes/requirements/used memory IDs, and create a candidate
         procedure when the group exceeds configured thresholds. No LLM.
+
+        Args:
+            enriched_steps_map: optional pre-computed enriched steps, keyed by (goal, task_type).
+                                If provided, use these instead of generating generic steps.
         """
         if not self.cfg.replay_enabled:
             return {"enabled": False, "created": []}
@@ -511,12 +523,10 @@ class ProceduralMemoryStore:
             origin_scope = scopes[0] if scopes else None
             situation = _merge_dict_values(r["situation_json"] for r in group)
 
-            steps = []
-            if used_memory_ids:
-                steps.append("Reuse the memory cluster that was useful before: " + ", ".join(used_memory_ids[:6]) + ".")
-            if requirements:
-                steps.append("Preserve recurring requirements: " + ", ".join(requirements[:6]) + ".")
-            steps.append(f"Apply this workflow for goal '{goal}'" + (f" and task type '{task_type}'" if task_type else "") + ".")
+            # Determine steps: use enriched if available, else fall back to generic
+            steps = (enriched_steps_map or {}).get((goal, task_type or ""))
+            if not steps:
+                steps = self._legacy_generic_steps(used_memory_ids, requirements, goal, task_type)
 
             pid = self.create(
                 origin_scope_id=origin_scope,
@@ -534,19 +544,166 @@ class ProceduralMemoryStore:
             )
             created.append({"procedure_id": f"proc_{pid}", "goal": goal, "task_type": task_type, "success_count": len(group)})
         return {"enabled": True, "created": created}
+    def _legacy_generic_steps(
+        self, used_memory_ids: list[str], requirements: list[str], goal: str, task_type: str | None
+    ) -> list[str]:
+        """Generate generic placeholder steps (fallback when enrichment unavailable)."""
+        steps = []
+        if used_memory_ids:
+            steps.append(
+                "Reuse the memory cluster that was useful before: "
+                + ", ".join(used_memory_ids[:6])
+                + "."
+            )
+        if requirements:
+            steps.append("Preserve recurring requirements: " + ", ".join(requirements[:6]) + ".")
+        steps.append(
+            f"Apply this workflow for goal '{goal}'"
+            + (f" and task type '{task_type}'" if task_type else "")
+            + "."
+        )
+        return steps
 
-    def _scope_affinity(self, current: str | None, origin: str | None) -> float:
-        if not current or not origin:
+    def _scope_affinity(self, current_scope: str | None, proc: ProceduralMemory) -> float:
+        """Compute scope affinity for a procedure, stage-aware (v4 §5).
+
+        Args:
+            current_scope: the requester's scope.
+            proc: the procedure to score.
+
+        Returns:
+            Affinity score [0.0, 1.0], stage-aware.
+        """
+        if not current_scope or not proc.origin_scope_id:
             return 0.0
-        if current == origin:
-            return self.cfg.same_scope_affinity
-        if not self.cfg.allow_cross_scope_transfer:
+        if current_scope == proc.origin_scope_id:
+            return self.cfg.same_scope_affinity  # 1.0
+        
+        # Stage-aware cross-scope affinity
+        gs = proc.generalization_stage
+        if gs == 0:
+            # Stage 0: scope-locked, no cross-scope transfer
             return 0.0
-        if scope_kind(current) == scope_kind(origin):
-            return self.cfg.related_scope_affinity
-        return self.cfg.different_scope_affinity
+        if gs == 3:
+            # Stage 3: universal (learned across all scope kinds)
+            return self.cfg.stage3_cross_affinity  # 1.0
+        
+        # Stages 1–2: depend on scope kind alignment
+        same_kind = scope_kind(current_scope) == proc.origin_scope_kind
+        if gs == 1:
+            return self.cfg.stage1_cross_affinity if same_kind else 0.0
+        # gs == 2
+        return self.cfg.stage2_cross_affinity
+
+    def set_generalization_stage(self, proc_id: int, stage: int) -> None:
+        """Update the generalization stage of a procedure."""
+        now = int(time.time())
+        conn = self.db.connect()
+        conn.execute(
+            "UPDATE procedural_memories SET generalization_stage=?, updated_at=? WHERE id=?",
+            (int(stage), now, int(proc_id)),
+        )
+        conn.commit()
+
+    def promote_generalization(self, registry: Any) -> dict[str, Any]:
+        """Promote procedures across generalization stages based on evidence.
+
+        Uses procedure-specific thresholds (lower than schema thresholds).
+        Requires a ScopeRegistry for active scope counts.
+
+        Args:
+            registry: ScopeRegistry instance with scope tracking.
+
+        Returns:
+            Dict with promotion stats.
+        """
+        # Procedure-specific generalization thresholds (v4 §5.3)
+        stage1_min_scopes = 2
+        stage1_min_sessions = 2
+        stage2_min_scopes = 3
+        stage2_min_sessions = 2
+        stage2_min_breadth = 0.40
+        stage3_min_scopes = 4
+        stage3_min_sessions = 3
+        stage3_min_breadth = 0.60
+
+        conn = self.db.connect()
+        procedures = self.list(status="active", limit=10000)
+        promoted: dict[int, int] = {}  # proc_id -> new_stage
+        
+        try:
+            total_scopes, total_kinds = registry.active_counts()
+        except Exception:
+            # Fallback if registry unavailable
+            total_scopes = 1
+            total_kinds = 1
+
+        for proc in procedures:
+            current_stage = proc.generalization_stage
+            if current_stage >= 3:
+                # Already at max stage
+                continue
+
+            # Query cross-scope evidence for this procedure
+            evidence_row = conn.execute(
+                """
+                SELECT COUNT(DISTINCT scope_id) AS distinct_scopes,
+                       COUNT(DISTINCT scope_kind) AS distinct_scope_kinds,
+                       COUNT(DISTINCT session_id) AS distinct_sessions
+                FROM procedural_memory_evidence
+                WHERE procedure_id = ? AND outcome = 'success' AND scope_id != ?
+                """,
+                (proc.id, proc.origin_scope_id),
+            ).fetchone()
+
+            if not evidence_row:
+                continue
+
+            distinct_scopes = int(evidence_row["distinct_scopes"] or 0)
+            distinct_kinds = int(evidence_row["distinct_scope_kinds"] or 0)
+            distinct_sessions = int(evidence_row["distinct_sessions"] or 0)
+
+            new_stage = current_stage
+            
+            # Stage 0 -> 1
+            if (
+                current_stage == 0
+                and distinct_scopes >= stage1_min_scopes
+                and distinct_sessions >= stage1_min_sessions
+            ):
+                new_stage = 1
+
+            # Stage 1 -> 2
+            if (
+                new_stage == 1
+                and distinct_scopes >= stage2_min_scopes
+                and distinct_sessions >= stage2_min_sessions
+            ):
+                breadth = distinct_kinds / max(1, total_kinds)
+                if breadth >= stage2_min_breadth:
+                    new_stage = 2
+
+            # Stage 2 -> 3
+            if (
+                new_stage == 2
+                and distinct_scopes >= stage3_min_scopes
+                and distinct_sessions >= stage3_min_sessions
+            ):
+                breadth = distinct_kinds / max(1, total_kinds)
+                if breadth >= stage3_min_breadth:
+                    new_stage = 3
+
+            if new_stage > current_stage:
+                promoted[proc.id] = new_stage
+                self.set_generalization_stage(proc.id, new_stage)
+
+        return {
+            "promoted_count": len(promoted),
+            "promoted_map": promoted,
+        }
 
     def _row_to_procedure(self, row: Any) -> ProceduralMemory:
+
         return ProceduralMemory(
             id=int(row["id"]),
             origin_scope_id=row["origin_scope_id"],
@@ -565,6 +722,7 @@ class ProceduralMemoryStore:
             created_at=int(row["created_at"]),
             updated_at=int(row["updated_at"]),
             last_used_at=int(row["last_used_at"]) if row["last_used_at"] is not None else None,
+            generalization_stage=int(row["generalization_stage"] or 0),
         )
 
 

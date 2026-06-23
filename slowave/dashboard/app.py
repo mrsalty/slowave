@@ -914,6 +914,9 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
             "SELECT COUNT(*) AS n, MAX(started_ts) AS last_ts,"
             " SUM(schemas_created) AS schemas_created,"
             " SUM(schemas_reinforced) AS schemas_reinforced,"
+            " SUM(procedures_promoted) AS procedures_promoted,"
+            " SUM(procedures_generalized) AS procedures_generalized,"
+            " SUM(schemas_decayed) AS schemas_decayed,"
             " AVG(duration_ms) AS avg_ms"
             " FROM worker_runs WHERE error_text IS NULL"
         ).fetchone()
@@ -924,6 +927,9 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
                 "last_run_ts": total_row["last_ts"] if total_row else None,
                 "total_schemas_created": int(total_row["schemas_created"] or 0) if total_row else 0,
                 "total_schemas_reinforced": int(total_row["schemas_reinforced"] or 0) if total_row else 0,
+                "total_procedures_promoted": int(total_row["procedures_promoted"] or 0) if total_row else 0,
+                "total_procedures_generalized": int(total_row["procedures_generalized"] or 0) if total_row else 0,
+                "total_schemas_decayed": int(total_row["schemas_decayed"] or 0) if total_row else 0,
                 "avg_duration_ms": round(float(total_row["avg_ms"] or 0), 1) if total_row else 0,
             },
         }
@@ -1456,7 +1462,11 @@ tr.expandable:hover td{background:var(--panel3)}
       </div>
     </div>
     <div id="workerLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
-    <div id="workerChart" style="margin-bottom:12px"></div>
+    <div style="position:relative;margin-bottom:12px">
+      <canvas id="workerCanvas" style="display:block;width:100%;border-radius:6px"></canvas>
+      <div id="workerTooltip" style="position:absolute;pointer-events:none;display:none;background:#101828;border:1px solid var(--line2);border-radius:var(--radius);padding:8px 12px;font-size:12px;max-width:260px;box-shadow:0 8px 32px rgba(0,0,0,.5);line-height:1.6;z-index:10"></div>
+    </div>
+    <div id="workerChartStats" style="display:flex;gap:12px;justify-content:center;font-size:10px;color:var(--muted);margin-bottom:12px"></div>
     <div class="table-wrap" id="workerTable"></div>
   </div>
 </section>
@@ -1521,7 +1531,8 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   b.classList.add("active");
   document.getElementById(b.dataset.tab).classList.add("active");
   const tab=b.dataset.tab;
-  if(tab==="schemas")loadSchemas();
+  if(tab==="overview")renderPulse();
+  else if(tab==="schemas")loadSchemas();
   else if(tab==="procedures")loadProcedures();
   else if(tab==="graph")loadGraph();
   else if(tab==="worker")loadWorker();
@@ -1574,9 +1585,7 @@ async function loadStatus(){
     {icon:"⚡",label:"Raw events",val:num(s.raw_events),sub:"logged",accent:"var(--blue)"},
     {icon:"🎞",label:"Episodes",val:num(s.episodes),sub:"formed",accent:"var(--blue)"},
     {icon:"🔵",label:"Prototypes",val:num(s.prototypes),sub:"semantic",accent:"var(--purple)"},
-    {icon:"📖",label:"Schemas",val:num(s.schemas),sub:h.schemas_by_status?statusBreakdown(h.schemas_by_status):"",accent:"var(--green)",raw:true},
-    {icon:"🟢",label:"Active",val:num(h.active_schemas),sub:`avg sal ${Number(h?.active_salience?.avg||0).toFixed(2)}`,accent:"var(--green)"},
-    {icon:"🟡",label:"Needs review",val:num(h.needs_review_schemas),sub:h.needs_review_schemas>0?"⚠️ action needed":"clean",accent:h.needs_review_schemas>0?"var(--amber)":"var(--green)"},
+    {icon:"📖",label:"Schemas",val:num(s.schemas),sub:`<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:var(--text)">${num(h.active_schemas)} active</span></span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:var(--text)">${num(h.needs_review_schemas)} needs review</span></span></span>`,accent:"var(--green)",raw:true},
     {icon:"🧭",label:"Procedures",val:num(s.procedures),sub:"stored",accent:"var(--cyan)"},
     {icon:"🕸",label:"Edges",val:num(s.edges),sub:"prototype",accent:"var(--purple)"},
     {icon:"🔗",label:"Relations",val:num(s.schema_relations),sub:"schema",accent:"var(--purple)"},
@@ -1605,7 +1614,7 @@ async function loadStatus(){
     // Update badge
     
   } else {
-    alertHtml=`<div class="alert alert-ok"><span class="alert-icon">✅</span><div><b>All systems healthy</b> — no warnings detected.</div></div>`;
+    alertHtml=`<div class="alert alert-ok" style="align-items:center"><span class="alert-icon" style="display:flex;align-items:center;justify-content:center;width:16px;height:16px"><span style="width:10px;height:10px;border-radius:50%;background:var(--green);display:block;flex-shrink:0"></span></span><div><b>All systems healthy</b></div></div>`;
     
   }
   document.getElementById("alertArea").innerHTML=alertHtml;
@@ -1710,6 +1719,7 @@ async function renderPulse(){
 
     const DPR=window.devicePixelRatio||1;
     const W=canvas.parentElement.clientWidth;
+    if(W<=0)return;
     const H=110;
     canvas.width=Math.round(W*DPR);
     canvas.height=Math.round(H*DPR);
@@ -1733,7 +1743,7 @@ async function renderPulse(){
       const bl=H-18;
       ctx.strokeStyle="rgba(56,189,248,.18)";ctx.lineWidth=0.8;ctx.setLineDash([4,7]);
       ctx.beginPath();ctx.moveTo(0,bl);ctx.lineTo(W,bl);ctx.stroke();ctx.setLineDash([]);
-      ctx.fillStyle="#3a4a6a";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
+      ctx.fillStyle="#5a7ab5";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
       ctx.fillText("Flatline \u2014 no events in the last "+d.window_hours+"h",W/2,bl-10);
       canvas.onmousemove=null;canvas.onmouseleave=null;stats.innerHTML="";return;
     }
@@ -1991,8 +2001,7 @@ async function loadProcedures(){
 async function loadWorker(){
   const ld=document.getElementById("workerLoading");
   const tbl=document.getElementById("workerTable");
-  const chart=document.getElementById("workerChart");
-  ld.classList.add("show");tbl.innerHTML="";chart.innerHTML="";
+  ld.classList.add("show");tbl.innerHTML="";
   try{
     const lim=document.getElementById("workerLimit").value;
     const d=await getJSON(`/api/worker/runs?limit=${lim}`);
@@ -2005,6 +2014,9 @@ async function loadWorker(){
       {icon:"📖",label:"Schemas created",val:num(sum.total_schemas_created),accent:"var(--green)"},
       {icon:"🔁",label:"Reinforced",val:num(sum.total_schemas_reinforced),accent:"var(--cyan)"},
       {icon:"⏱",label:"Avg duration",val:(sum.avg_duration_ms||0).toFixed(0)+"ms",accent:"var(--amber)"},
+      {icon:"🧭",label:"Procedures +",val:num(sum.total_procedures_promoted),accent:"var(--amber)"},
+      {icon:"🔄",label:"Procs generalized",val:num(sum.total_procedures_generalized),accent:"var(--cyan)"},
+      {icon:"📉",label:"Decayed",val:num(sum.total_schemas_decayed),accent:"var(--red)"},
       {icon:"🕐",label:"Last run",val:fmtTsCompact(sum.last_run_ts),sub:fmtTsCompactSub(sum.last_run_ts),accent:"var(--muted)",raw:true},
     ];
     document.getElementById("workerStatGrid").innerHTML=cards.map(c=>
@@ -2016,28 +2028,14 @@ async function loadWorker(){
       </div>`
     ).join("");
 
-    // Mini bar chart: schemas created per run (last 20)
-    const chartRuns=runs.slice(0,20).reverse();
-    if(chartRuns.length){
-      const maxCreated=Math.max(1,...chartRuns.map(r=>r.schemas_created||0));
-      chart.innerHTML=`
-        <div style="display:flex;align-items:flex-end;gap:3px;height:48px;padding:0 2px">
-          ${chartRuns.map(r=>{
-            const h=Math.round(((r.schemas_created||0)/maxCreated)*44)+4;
-            const color=r.error_text?"var(--red)":"var(--blue)";
-            return `<div title="${fmtTs(r.started_ts)}: +${r.schemas_created||0} schemas"
-              style="flex:1;height:${h}px;background:${color};border-radius:2px 2px 0 0;min-width:4px;opacity:.8"></div>`;
-          }).join("")}
-        </div>
-        <div style="font-size:10px;color:var(--muted);margin-top:3px">schemas created per pass (last ${chartRuns.length})</div>`;
-    }
+    renderWorkerChart(runs);
 
     // Table
     if(!runs.length){
       tbl.innerHTML=emptyState("No worker runs recorded yet. Start the worker with: slowave worker","🧠");
       return;
     }
-    const heads=["#","Started","Duration","Trigger","Schemas +","~Reinf.","Protos","Status"];
+    const heads=["#","Started","Duration","Trigger","Schemas +","~Reinf.","Protos","Procs +","Decayed","Eps proc","Status"];
     const rows=runs.map(r=>[
       r.id,
       fmtTs(r.started_ts),
@@ -2046,13 +2044,127 @@ async function loadWorker(){
       `<b style="color:var(--green)">+${r.schemas_created||0}</b>`,
       num(r.schemas_reinforced||0),
       num(r.prototypes_processed||0),
+      `<b style="color:var(--amber)">+${r.procedures_promoted||0}</b>`,
+      `<span style="color:var(--red)">-${r.schemas_decayed||0}</span>`,
+      num(r.episodes_processed||0),
       r.error_text
         ?`<span class="pill pill-contradicted" title="${esc(r.error_text)}">error</span>`
         :`<span class="pill pill-active">ok</span>`,
     ]);
-    const rawCols=[4,7];
+    const rawCols=[4,7,8,10];
     tbl.innerHTML=table(heads,rows,rawCols);
   }finally{ld.classList.remove("show");}
+}
+
+// ── WORKER CHART ──
+function renderWorkerChart(runs){
+  const canvas=document.getElementById("workerCanvas");
+  const tooltip=document.getElementById("workerTooltip");
+  const stats=document.getElementById("workerChartStats");
+  if(!canvas)return;
+  const pts_runs=runs.slice(0,50).reverse();
+  const N=pts_runs.length;
+  const DPR=window.devicePixelRatio||1;
+  const W=canvas.parentElement.clientWidth||600;
+  const H=120;
+  canvas.width=Math.round(W*DPR);canvas.height=Math.round(H*DPR);
+  canvas.style.width=W+"px";canvas.style.height=H+"px";
+  const ctx=canvas.getContext("2d");
+  ctx.scale(DPR,DPR);ctx.clearRect(0,0,W,H);
+  const CHANNELS=[
+    {key:"schemas_created",    label:"schemas +",  color:"#3b82f6",gc:"rgba(59,130,246,"},
+    {key:"schemas_reinforced", label:"reinforced", color:"#10b981",gc:"rgba(16,185,129,"},
+    {key:"procedures_promoted",label:"procs +",    color:"#f5b942",gc:"rgba(245,185,66,"},
+    {key:"schemas_decayed",    label:"decayed",    color:"#f04e6a",gc:"rgba(240,78,106,"},
+  ];
+  const gmax=Math.max(1,...pts_runs.flatMap(r=>CHANNELS.map(ch=>r[ch.key]||0)));
+  const PAD_L=4,PAD_R=4,PAD_T=8,PAD_B=18;
+  const IW=W-PAD_L-PAD_R,IH=H-PAD_T-PAD_B;
+  const baseline=H-PAD_B;
+  const step=N>1?IW/(N-1):IW;
+  const amp=v=>Math.sqrt(v/gmax)*IH*0.88;
+  if(!N){
+    ctx.strokeStyle="rgba(56,189,248,.18)";ctx.lineWidth=0.8;ctx.setLineDash([4,7]);
+    ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle="#5a7ab5";ctx.font="12px system-ui,sans-serif";ctx.textAlign="center";
+    ctx.fillText("No consolidation runs yet",W/2,baseline-10);
+    stats.innerHTML="";return;
+  }
+  function buildSpline(pts){
+    const pp=[pts[0],...pts,pts[pts.length-1]];
+    ctx.moveTo(pp[1].x,pp[1].y);
+    for(let i=1;i<pp.length-2;i++){
+      const p0=pp[i-1],p1=pp[i],p2=pp[i+1],p3=pp[i+2];
+      const d1=Math.hypot(p1.x-p0.x,p1.y-p0.y)||1;
+      const d2=Math.hypot(p2.x-p1.x,p2.y-p1.y)||1;
+      const d3=Math.hypot(p3.x-p2.x,p3.y-p2.y)||1;
+      ctx.bezierCurveTo(
+        p1.x+(p2.x-p0.x)/6*(d1/(d1+d2)),p1.y+(p2.y-p0.y)/6*(d1/(d1+d2)),
+        p2.x-(p3.x-p1.x)/6*(d2/(d2+d3)),p2.y-(p3.y-p1.y)/6*(d2/(d2+d3)),
+        p2.x,p2.y);
+    }
+  }
+  function drawBase(){
+    ctx.strokeStyle="rgba(20,35,65,.8)";ctx.lineWidth=0.5;
+    [0.25,0.5,0.75,1].forEach(f=>{
+      const gy=baseline-Math.sqrt(f)*IH*0.88;
+      ctx.beginPath();ctx.moveTo(0,gy);ctx.lineTo(W,gy);ctx.stroke();
+    });
+    ctx.strokeStyle="rgba(56,189,248,.10)";ctx.lineWidth=0.5;
+    ctx.beginPath();ctx.moveTo(0,baseline);ctx.lineTo(W,baseline);ctx.stroke();
+  }
+  const allPts={};
+  CHANNELS.forEach(ch=>{
+    allPts[ch.key]=pts_runs.map((r,i)=>({x:PAD_L+i*step,y:baseline-amp(r[ch.key]||0),n:r[ch.key]||0}));
+  });
+  function drawChannels(hoverIdx){
+    CHANNELS.forEach(ch=>{
+      const pts=allPts[ch.key]||[];
+      if(!pts.some(p=>p.n>0))return;
+      const gr=ctx.createLinearGradient(0,PAD_T,0,baseline);
+      gr.addColorStop(0,ch.gc+"0.06)");gr.addColorStop(1,ch.gc+"0)");
+      ctx.beginPath();buildSpline(pts);
+      ctx.lineTo(pts[pts.length-1].x,baseline);ctx.lineTo(pts[0].x,baseline);ctx.closePath();
+      ctx.fillStyle=gr;ctx.fill();
+      [{blur:5,w:1.2,a:.5},{blur:0,w:0.8,a:1}].forEach(({blur,w,a})=>{
+        ctx.save();ctx.shadowColor=ch.gc+a+")";ctx.shadowBlur=blur;
+        ctx.strokeStyle=ch.color;ctx.lineWidth=w;ctx.lineJoin="round";ctx.lineCap="round";
+        ctx.beginPath();buildSpline(pts);ctx.stroke();ctx.restore();
+      });
+      if(hoverIdx!=null){const p=pts[hoverIdx];if(p&&p.n>0){ctx.beginPath();ctx.arc(p.x,p.y,3,0,2*Math.PI);ctx.fillStyle=ch.color;ctx.fill();}}
+    });
+  }
+  const labelStep=Math.ceil(N/6);
+  function drawLabels(){
+    ctx.fillStyle="rgba(80,100,140,.6)";ctx.font="10px system-ui,sans-serif";ctx.textAlign="center";
+    pts_runs.forEach((r,i)=>{
+      if(i%labelStep!==0&&i!==N-1)return;
+      ctx.fillText(new Date(r.started_ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"}),
+        Math.min(W-18,Math.max(18,PAD_L+i*step)),H-3);
+    });
+  }
+  function fullRedraw(hi){
+    ctx.clearRect(0,0,W,H);drawBase();
+    if(hi!=null){ctx.save();ctx.strokeStyle="rgba(255,255,255,.08)";ctx.lineWidth=1;ctx.setLineDash([3,5]);ctx.beginPath();ctx.moveTo(PAD_L+hi*step,PAD_T);ctx.lineTo(PAD_L+hi*step,baseline);ctx.stroke();ctx.setLineDash([]);ctx.restore();}
+    drawChannels(hi);drawLabels();
+  }
+  fullRedraw(null);
+  canvas.onmousemove=function(e){
+    const rect=canvas.getBoundingClientRect();
+    const mx=(e.clientX-rect.left)*(W/rect.width);
+    const idx=Math.min(N-1,Math.max(0,Math.round((mx-PAD_L)/step)));
+    const r=pts_runs[idx];if(!r){tooltip.style.display="none";return;}
+    const time=new Date(r.started_ts*1000).toLocaleTimeString([],{hour:"2-digit",minute:"2-digit"});
+    const dur=r.duration_ms!=null?r.duration_ms+"ms":"—";
+    const rows=CHANNELS.map(ch=>"<span style='color:"+ch.color+"'>&#9679;</span> "+ch.label+": <b>"+(r[ch.key]||0)+"</b>").join("<br>");
+    const errRow=r.error_text?"<br><span style='color:var(--red)'>&#9888; "+esc(r.error_text.slice(0,60))+"</span>":"";
+    tooltip.style.display="block";tooltip.style.left=Math.min(W-80,Math.max(40,PAD_L+idx*step))+"px";tooltip.style.top="4px";tooltip.style.transform="translateX(-50%)";
+    tooltip.innerHTML="<div style='font-size:10px;color:var(--muted);margin-bottom:3px'>"+time+" &nbsp;·&nbsp; "+dur+"</div>"+rows+errRow;
+    fullRedraw(idx);
+  };
+  canvas.onmouseleave=function(){tooltip.style.display="none";fullRedraw(null);};
+  const totals=CHANNELS.map(ch=>{const sum=pts_runs.reduce((a,r)=>a+(r[ch.key]||0),0);return "<span style='color:"+ch.color+"'>&#9679; "+ch.label+"</span> <b>"+sum+"</b>";}).join(" &nbsp;·&nbsp; ");
+  stats.innerHTML="<span style='color:var(--muted)'>"+N+" passes</span>&nbsp;&nbsp;"+totals;
 }
 
 // ── GRAPH ──
@@ -2432,7 +2544,9 @@ async function loadGeneralization(){
 
 // ── INIT ──
 loadStatus();
+renderPulse();
 setInterval(loadStatus,REFRESH_MS);
+setInterval(renderPulse,REFRESH_MS);
 </script>
 </body>
 </html>'''

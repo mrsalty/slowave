@@ -122,7 +122,19 @@ class SQLiteDB:
             # source_content: raw event content joined without role prefix; used as schema claim
             ("episode_text", "source_content", "TEXT"),
             # generalization_stage: cross-scope generalization level (Stage 11)
+            # Procedural memory Tier 1 (v4 §7: schema migrations for enforcement)
+            ("sessions", "goal", "TEXT"),
+            ("sessions", "outcome", "TEXT"),
+            ("procedural_memories", "source", "TEXT NOT NULL DEFAULT 'implicit'"),
+            ("procedural_memories", "superseded_by_id", "INTEGER"),
+            ("procedural_memories", "generalization_stage", "INTEGER NOT NULL DEFAULT 0"),
+
             ("schemas", "generalization_stage", "INTEGER NOT NULL DEFAULT 0"),
+
+            # Worker run log: additional tracking columns
+            ("worker_runs", "procedures_promoted", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_runs", "procedures_generalized", "INTEGER NOT NULL DEFAULT 0"),
+            ("worker_runs", "schemas_decayed", "INTEGER NOT NULL DEFAULT 0"),
         ]
 
         for table, column, type_spec in missing_columns:
