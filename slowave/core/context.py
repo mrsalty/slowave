@@ -275,6 +275,7 @@ class WorkingMemoryGate:
             key=lambda i: (i.activation, i.schema.salience, i.schema.last_updated_ts),
             reverse=True,
         )
+        items = _mmr_deduplicate(items, cos_threshold=0.92)
         selected = _apply_budget(items[: max(policy.max_items * 3, policy.max_items)], policy)
         return WorkingMemoryState(
             items=selected,
@@ -559,6 +560,42 @@ def _schema_terms(schema: Schema) -> set[str]:
 
 def _looks_like_transcript_summary(text: str) -> bool:
     return "User:" in text and "Assistant:" in text
+
+
+def _mmr_deduplicate(
+    items: list[WorkingMemoryItem], cos_threshold: float = 0.92
+) -> list[WorkingMemoryItem]:
+    """Remove near-duplicate schemas from the ranked item list.
+
+    Iterates in activation order (highest first). Each candidate is kept only
+    if its cosine similarity to every already-kept schema is below cos_threshold.
+    Schemas without embeddings are always kept.
+
+    This is context compression, not brain-faithful lateral inhibition. It
+    prevents two near-identical schemas from both occupying token budget.
+    """
+    kept: list[WorkingMemoryItem] = []
+    kept_embs: list[np.ndarray] = []
+    for item in items:
+        emb = item.schema.embedding
+        if emb is None or not kept_embs:
+            kept.append(item)
+            if emb is not None:
+                kept_embs.append(np.asarray(emb, dtype=np.float32))
+            continue
+        v = np.asarray(emb, dtype=np.float32)
+        vn = float(np.linalg.norm(v)) + 1e-12
+        duplicate = False
+        for kv in kept_embs:
+            kvn = float(np.linalg.norm(kv)) + 1e-12
+            sim = float(v.dot(kv) / (vn * kvn))
+            if sim >= cos_threshold:
+                duplicate = True
+                break
+        if not duplicate:
+            kept.append(item)
+            kept_embs.append(v)
+    return kept
 
 
 def _compact(text: str, max_chars: int) -> str:

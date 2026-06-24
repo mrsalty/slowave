@@ -571,6 +571,31 @@ class SchemaStore:
         conn.commit()
         self._update_utility_scores(schema_id, recall_hit=True)
 
+    def increment_cross_scope_reinforcement(self, schema_id: int) -> None:
+        """Increment cross_scope_reinforcement_count in facets for a schema.
+
+        Called by the consolidation path when a new latent schema from a
+        different scope reinforces an existing schema. This is a distinct
+        signal from observed recall — offline reinforcement carries lower
+        weight in generalization stage promotion.
+        """
+        conn = self.db.connect()
+        row = conn.execute(
+            "SELECT facets_json FROM schemas WHERE id = ?", (int(schema_id),)
+        ).fetchone()
+        if row is None:
+            return
+        facets = loads_json(row["facets_json"])
+        if not isinstance(facets, dict):
+            facets = {}
+        facets["cross_scope_reinforcement_count"] = int(facets.get("cross_scope_reinforcement_count", 0)) + 1
+        conn.execute(
+            "UPDATE schemas SET facets_json = ?, last_updated_ts = ? WHERE id = ?",
+            (dumps_json(facets), int(time.time()), int(schema_id)),
+        )
+        conn.commit()
+        self._update_utility_scores(schema_id, recall_hit=False)
+
     def adjust_feedback_state(
         self,
         schema_id: int,
@@ -730,6 +755,13 @@ class SchemaStore:
         distinct_scopes = int(union_row["distinct_scopes"] or 0) if union_row else 0
         distinct_scope_kinds = recall_kinds  # scope_kind only tracked via recall path
         distinct_sessions = int(union_row["distinct_sessions"] or 0) if union_row else 0
+
+        # Offline reinforcement bonus: each cross-scope reinforcement from
+        # consolidation counts as 0.5 equivalent observed-recall scope.
+        # Observed recall (context_recall_items) is the ground-truth signal;
+        # offline reinforcement is weaker evidence and carries half the weight.
+        reinforcement_count = int(facets.get("cross_scope_reinforcement_count", 0))
+        distinct_scopes += reinforcement_count // 2  # integer, conservative
 
         total_active_scopes, total_active_scope_kinds = \
             self.scope_registry.active_counts(self._gen_cfg.active_window_days)
