@@ -166,9 +166,9 @@ class TestSameScopeGeometry:
         assert old_schema.needs_review, "Ambiguous dir_score should flag needs_review"
         eng.close()
 
-    def test_cosine_below_same_scope_threshold_no_action(self, tmp_db: str) -> None:
-        """cos in [0.78, 0.85) same scope → no action even with high dir_score."""
-        v_old, v_new = _make_pair(0.81)
+    def test_cosine_below_extended_threshold_no_action(self, tmp_db: str) -> None:
+        """cos < 0.70 (EXTENDED_SAME_SCOPE_COS_THRESHOLD) → no action at all."""
+        v_old, v_new = _make_pair(0.60)
         enc = _ControlledEncoder({"old": v_old, "new": v_new})
         eng = _eng(tmp_db, enc, _MockManifold(score=0.30))
 
@@ -176,8 +176,37 @@ class TestSameScopeGeometry:
         _remember(eng, "new", scope="project:test")
 
         assert eng.schemas.get(old_id).status == "active", (
-            "cos < SAME_SCOPE_COS_THRESHOLD must not trigger same-scope action"
+            "cos < EXTENDED_SAME_SCOPE_COS_THRESHOLD must not trigger any action"
         )
+        eng.close()
+
+    def test_extended_range_high_dir_score_supersedes(self, tmp_db: str) -> None:
+        """cos in [0.70, 0.85) AND dir_score >= 0.10 → supersede (Gap 3)."""
+        v_old, v_new = _make_pair(0.81)
+        enc = _ControlledEncoder({"old": v_old, "new": v_new})
+        eng = _eng(tmp_db, enc, _MockManifold(score=0.25))
+
+        old_id = _remember(eng, "old", scope="project:test")
+        _remember(eng, "new", scope="project:test")
+
+        assert eng.schemas.get(old_id).status == "superseded", (
+            "cos in extended range + high dir_score should supersede (Gap 3)"
+        )
+        eng.close()
+
+    def test_extended_range_low_dir_score_no_action(self, tmp_db: str) -> None:
+        """cos in [0.70, 0.85) AND dir_score < 0.10 → no action (too ambiguous)."""
+        v_old, v_new = _make_pair(0.81)
+        enc = _ControlledEncoder({"old": v_old, "new": v_new})
+        eng = _eng(tmp_db, enc, _MockManifold(score=0.02))
+
+        old_id = _remember(eng, "old", scope="project:test")
+        salience_before = eng.schemas.get(old_id).salience
+        _remember(eng, "new", scope="project:test")
+
+        old_schema = eng.schemas.get(old_id)
+        assert old_schema.status == "active", "Low dir_score in extended range must not supersede"
+        assert old_schema.salience == salience_before, "Low dir_score in extended range must not reinforce"
         eng.close()
 
     def test_cosine_below_cross_scope_threshold_no_action(self, tmp_db: str) -> None:

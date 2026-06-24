@@ -30,6 +30,7 @@ from slowave.core.supersession_manifold import (
     CROSS_SCOPE_COS_THRESHOLD,
     DIR_REVIEW_BAND,
     DIRECTION_THRESHOLD,
+    EXTENDED_SAME_SCOPE_COS_THRESHOLD,
     SAME_SCOPE_COS_THRESHOLD,
     SupersessionManifold,
 )
@@ -591,7 +592,7 @@ class SlowaveEngine:
                         continue
 
                     is_same_scope = candidate.scope_id == scope_id
-                    if is_same_scope and score < SAME_SCOPE_COS_THRESHOLD:
+                    if is_same_scope and score < EXTENDED_SAME_SCOPE_COS_THRESHOLD:
                         continue
 
                     candidate_emb = self._fetch_schema_embedding(candidate_id)
@@ -602,26 +603,44 @@ class SlowaveEngine:
                     )
 
                     if is_same_scope:
-                        if dir_score >= DIRECTION_THRESHOLD:
-                            self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
-                            self.schemas.add_relation(
-                                src_schema_id=new_schema_id,
-                                dst_schema_id=candidate_id,
-                                relation="supersedes",
-                                confidence=1.0,
-                            )
-                            superseded_schema_ids.append(candidate_id)
-                            seen_ids.add(candidate_id)
-                        elif dir_score >= DIR_REVIEW_BAND:
-                            try:
-                                self.schemas.adjust_feedback_state(candidate_id, needs_review=True)
-                            except (KeyError, Exception):
-                                pass
+                        if score >= SAME_SCOPE_COS_THRESHOLD:
+                            # High-confidence topical match: full three-way decision
+                            if dir_score >= DIRECTION_THRESHOLD:
+                                self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
+                                self.schemas.add_relation(
+                                    src_schema_id=new_schema_id,
+                                    dst_schema_id=candidate_id,
+                                    relation="supersedes",
+                                    confidence=1.0,
+                                )
+                                superseded_schema_ids.append(candidate_id)
+                                seen_ids.add(candidate_id)
+                            elif dir_score >= DIR_REVIEW_BAND:
+                                try:
+                                    self.schemas.adjust_feedback_state(candidate_id, needs_review=True)
+                                except (KeyError, Exception):
+                                    pass
+                            else:
+                                try:
+                                    self.schemas.reinforce_schema(candidate_id, salience_delta=0.1)
+                                except (KeyError, Exception):
+                                    pass
                         else:
-                            try:
-                                self.schemas.reinforce_schema(candidate_id, salience_delta=0.1)
-                            except (KeyError, Exception):
-                                pass
+                            # Extended range (0.70–0.85): direction_score-only supersession.
+                            # Cosine is too weak to act on ambiguous cases — only clear
+                            # value substitutions (dir_score >= threshold) are superseded.
+                            # Catches explicit fact updates like wiki S-1/S-2 (cos ~0.80)
+                            # that were previously unhandled. No reinforce/review at this range.
+                            if dir_score >= DIRECTION_THRESHOLD:
+                                self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
+                                self.schemas.add_relation(
+                                    src_schema_id=new_schema_id,
+                                    dst_schema_id=candidate_id,
+                                    relation="supersedes",
+                                    confidence=score,
+                                )
+                                superseded_schema_ids.append(candidate_id)
+                                seen_ids.add(candidate_id)
                     else:
                         if dir_score < DIRECTION_THRESHOLD:
                             try:

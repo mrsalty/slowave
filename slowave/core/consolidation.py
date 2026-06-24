@@ -251,6 +251,16 @@ class Consolidator:
                 src_schema_id=new_schema_id, dst_schema_id=related.id,
                 relation="reinforces", confidence=schema.confidence,
             )
+            # Cross-scope offline reinforcement: when consolidation finds that a
+            # newly-formed schema reinforces an existing schema from a different
+            # scope, record it as a distinct signal (not as fabricated recall).
+            # This breaks the bootstrap deadlock where stage-0 schemas can never
+            # accumulate cross-scope evidence without already being promoted.
+            if scope_id and related.scope_id and scope_id != related.scope_id:
+                try:
+                    self.schemas.increment_cross_scope_reinforcement(related.id)
+                except Exception:
+                    pass
             return "reinforced", new_schema_id
         if verdict.verdict == "refines":
             self.schemas.add_relation(
