@@ -50,7 +50,12 @@ class IngestService:
         Returns a list of the new episode IDs (empty if no embeddable events).
         """
         events = self.raw_log.list_session(session_id)
-        embeddable = [e for e in events if e.embedding is not None]
+        # Exclude context_query events (activate calls) from episode formation.
+        # Retrieval queries are cues, not memories — encoding them as episodes
+        # causes consolidation to produce episodic summaries whose central text
+        # is the query itself ("remember Karpathy Guidelines...") blended with
+        # project-specific content from the same session.
+        embeddable = [e for e in events if e.embedding is not None and e.type != "context_query"]
         if not embeddable:
             return []
 

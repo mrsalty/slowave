@@ -219,12 +219,14 @@ Default `SlowaveConfig` with all retrieval parameters at defaults:
 | Benchmark | Config | Expected score |
 |---|---|---|
 | LongMemEval (oracle) | episode-only, `--no-consolidate` | ~60.2% |
-| LongMemEval (oracle) | `--no-consolidate --assignment-threshold 0.85 --top-k 10` | **~87.8%** |
-| LongMemEval (full haystack) | `--assignment-threshold 0.85 --top-k 10` | **~93.4%** |
+| LongMemEval (oracle) | default (`--assignment-threshold 0.85 --top-k 10`) | **~87.8%** |
+| LongMemEval (full haystack) | `--assignment-threshold 0.85 --top-k 10` | not maintained† |
 | LoCoMo | `--no-consolidate` (episode-only) | ~74.6% |
-| LoCoMo | `--assignment-threshold 0.85` (with consolidation) | **~81%** |
-| DMR | default | **~86–87%** |
-| StaleMemory | full, ts-injected | **~46% detection** |
+| LoCoMo | `--assignment-threshold 0.85` (with consolidation) | **~76%** |
+| DMR | default | **~93–94%** |
+| StaleMemory | full, ts-injected | **~45% detection overall; 86–99% concrete prefs** |
+
+† Full haystack runs were previously used to produce the 93.4% headline figure, but are not part of the standard CI run (takes ~2.3 h) and results were affected by a consolidation artefact in some categories. The oracle split (87.8%) is the canonical reproducible number.
 
 ---
 
