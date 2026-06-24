@@ -108,7 +108,7 @@ Memory is stored at `~/.slowave/slowave.db`. No Ollama, no vector database, no c
 
 ## Benchmarks
 
-**93.4%** LongMemEval · **81%** LoCoMo · **86–89%** stale-memory detection — all with **zero LLM calls**, fully local. [Full benchmarks →](docs/benchmarks.md)
+**87.8%** LongMemEval · **76%** LoCoMo · **86–89%** stale-memory detection — all with **zero LLM calls**, fully local. [Full benchmarks →](docs/benchmarks.md)
 
 ## What Slowave remembers
 
