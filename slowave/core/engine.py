@@ -26,12 +26,13 @@ from slowave.core.services.consolidation import ConsolidationService
 from slowave.core.services.feedback import FeedbackService
 from slowave.core.services.ingest import IngestService
 from slowave.core.services.retrieval import RecallResult, RetrievalService
-from slowave.core.supersession import (
-    AUTO_SUPERSEDE_THRESHOLD,
-    SupersessionCandidate,
-    find_superseded_candidates,
+from slowave.core.supersession_manifold import (
+    CROSS_SCOPE_COS_THRESHOLD,
+    DIR_REVIEW_BAND,
+    DIRECTION_THRESHOLD,
+    SAME_SCOPE_COS_THRESHOLD,
+    SupersessionManifold,
 )
-from slowave.core.supersession_manifold import DIRECTION_THRESHOLD, SupersessionManifold
 from slowave.latent.episodic_store import EpisodicStore, EpisodicStoreConfig
 from slowave.latent.graph_manager import GraphManager
 from slowave.latent.replay_engine import ReplayEngine
@@ -548,147 +549,89 @@ class SlowaveEngine:
 
         superseded_schema_ids: list[int] = []
 
-        # Pattern-based deterministic supersession (before geometric check).
-        # Detects explicit update signals like "now uses", "switched from X to Y", etc.
-        # Only applies to explicit_remember; doesn't interfere with geometric logic below.
-        pattern_candidates: list[SupersessionCandidate] = []
-        try:
-            pattern_candidates = find_superseded_candidates(
-                new_content=content,
-                scope_id=scope_id,
-                schemas=self.schemas,
-            )
-            for cand in pattern_candidates:
-                if cand.confidence >= AUTO_SUPERSEDE_THRESHOLD:
-                    # Auto-supersede: high confidence pattern match
-                    try:
-                        self.schemas.update_status(
-                            cand.old_schema_id, status="superseded", salience=0.05
-                        )
-                        self.schemas.add_relation(
-                            src_schema_id=new_schema_id,
-                            dst_schema_id=cand.old_schema_id,
-                            relation="supersedes",
-                            confidence=cand.confidence,
-                        )
-                        if cand.old_schema_id not in superseded_schema_ids:
-                            superseded_schema_ids.append(cand.old_schema_id)
-                    except (KeyError, Exception):
-                        pass
-                else:
-                    # Below threshold: mark for review instead
-                    try:
-                        self.schemas.adjust_feedback_state(cand.old_schema_id, needs_review=True)
-                    except (KeyError, Exception):
-                        pass
-        except Exception:
-            # Graceful fallback: pattern supersession should never break remember()
-            pass
-
-        # P2: Cosine-based supersession fallback — fires when regex P1 finds nothing.
-        # Two thresholds, both flag needs_review only (never auto-supersede):
-        #   ≥0.85: near-verbatim or very similar → almost certainly a value update
-        #   ≥0.50: moderately similar → plausible value update, worth human review
-        # Threshold calibrated for paraphrase-multilingual-MiniLM-L12-v2 cosine
-        # distribution: supersession mean ≈ 0.68, additive mean ≈ 0.36.
-        if not pattern_candidates and emb is not None:
-            try:
-                p1_ids = {c.old_schema_id for c in pattern_candidates}
-                for sid, cosine_score in self.schemas.search_embedding(
-                    emb, limit=10, scope_id=scope_id
-                ):
-                    if sid in p1_ids:
-                        continue
-                    if cosine_score >= 0.50:
-                        try:
-                            self.schemas.adjust_feedback_state(sid, needs_review=True)
-                        except (KeyError, Exception):
-                            continue
-            except Exception:
-                pass
-
-        # P3: Direction-score-gated same-scope supersession.
-        # cosine >= 0.85 means same topic; direction_score distinguishes whether
-        # the change is a value substitution (supersede) or a restatement (reinforce).
-        # The SupersessionManifold SVD1 axis was calibrated for this: behavioral
-        # guidelines and preferences score negatively (anti-aligned), so they
-        # reinforce instead of supersede. Concrete value updates (SQLite→DuckDB,
-        # $50k→$75k) score positively and are correctly superseded.
+        # Geometry-based supersession and cross-scope reinforcement.
+        #
+        # Single pass over all scopes. Two cosine gates:
+        #   SAME_SCOPE_COS_THRESHOLD  (0.85) — for same-scope supersede/reinforce/review
+        #   CROSS_SCOPE_COS_THRESHOLD (0.78) — for cross-scope generalization linking
+        #
+        # direction_score from SupersessionManifold SVD1 axis determines action:
+        #   >= DIRECTION_THRESHOLD (0.10) → value substitution
+        #   in [DIR_REVIEW_BAND (0.05), DIRECTION_THRESHOLD) → ambiguous
+        #   < DIR_REVIEW_BAND (0.05) → restatement / same concept
+        #
+        # Same scope:
+        #   value substitution → supersede old schema immediately
+        #   ambiguous          → flag needs_review, take no irreversible action
+        #   restatement        → reinforce existing (salience bump)
+        #
+        # Different scope:
+        #   same concept (dir_score < DIRECTION_THRESHOLD) → reinforce existing +
+        #     record raw event as schema_evidence so _update_utility_scores can
+        #     advance the generalization stage without requiring a recall event first
+        #   value divergence (dir_score >= DIRECTION_THRESHOLD) → skip; cross-scope
+        #     facts are allowed to diverge independently
+        #
+        # Language-agnostic: SupersessionManifold was calibrated on multilingual seed
+        # pairs (IT/FR/DE included). No regex, no English-only patterns.
         if emb is not None:
             manifold = self._get_manifold()
-            for candidate_id, score in self.schemas.search_embedding(
-                emb, limit=10, scope_id=scope_id
-            ):
-                if candidate_id == new_schema_id or score < 0.85:
-                    continue
-                try:
-                    candidate = self.schemas.get(candidate_id)
-                except KeyError:
-                    continue
-                if candidate.status not in ("active", "needs_review"):
-                    continue
-                candidate_emb = self._fetch_schema_embedding(candidate_id)
-                dir_score = (
-                    manifold.direction_score(emb, candidate_emb)
-                    if manifold is not None and candidate_emb is not None
-                    else DIRECTION_THRESHOLD  # boundary: neither path, leave as-is
-                )
-                if dir_score >= DIRECTION_THRESHOLD:
-                    # Value substitution → supersede the old schema
-                    self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
-                    self.schemas.add_relation(
-                        src_schema_id=new_schema_id,
-                        dst_schema_id=candidate_id,
-                        relation="supersedes",
-                        confidence=1.0,
-                    )
-                    if candidate_id not in superseded_schema_ids:
-                        superseded_schema_ids.append(candidate_id)
-                else:
-                    # Restatement/paraphrase → reinforce the existing schema
-                    try:
-                        self.schemas.reinforce_schema(candidate_id, salience_delta=0.1)
-                    except (KeyError, Exception):
-                        pass
-
-        # P4: Cross-scope near-duplicate detection.
-        # When the same concept is remembered from a different scope, reinforce the
-        # existing cross-scope schema and record the raw event as evidence. This
-        # feeds _update_utility_scores so generalization stage can advance from
-        # remember events, breaking the recall-only bootstrap deadlock.
-        if emb is not None:
-            manifold = self._get_manifold()
-            seen_ids = {new_schema_id} | set(superseded_schema_ids)
+            seen_ids: set[int] = {new_schema_id}
             try:
                 for candidate_id, score in self.schemas.search_embedding(
-                    emb, limit=10, scope_id=None  # all scopes
+                    emb, limit=10, scope_id=None
                 ):
-                    if candidate_id in seen_ids or score < 0.85:
+                    if candidate_id in seen_ids or score < CROSS_SCOPE_COS_THRESHOLD:
                         continue
                     try:
                         candidate = self.schemas.get(candidate_id)
                     except KeyError:
                         continue
-                    if candidate.scope_id == scope_id:
-                        continue  # same scope: handled by P3
                     if candidate.status not in ("active", "needs_review"):
                         continue
+
+                    is_same_scope = candidate.scope_id == scope_id
+                    if is_same_scope and score < SAME_SCOPE_COS_THRESHOLD:
+                        continue
+
                     candidate_emb = self._fetch_schema_embedding(candidate_id)
                     dir_score = (
                         manifold.direction_score(emb, candidate_emb)
                         if manifold is not None and candidate_emb is not None
                         else DIRECTION_THRESHOLD
                     )
-                    if dir_score < DIRECTION_THRESHOLD:
-                        # Same concept, different scope: reinforce + record cross-scope evidence
-                        try:
-                            self.schemas.reinforce_schema(
-                                candidate_id,
-                                salience_delta=0.05,
-                                evidence=[(None, event_id, content, 0.5)],
+
+                    if is_same_scope:
+                        if dir_score >= DIRECTION_THRESHOLD:
+                            self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
+                            self.schemas.add_relation(
+                                src_schema_id=new_schema_id,
+                                dst_schema_id=candidate_id,
+                                relation="supersedes",
+                                confidence=1.0,
                             )
-                        except (KeyError, Exception):
-                            pass
+                            superseded_schema_ids.append(candidate_id)
+                            seen_ids.add(candidate_id)
+                        elif dir_score >= DIR_REVIEW_BAND:
+                            try:
+                                self.schemas.adjust_feedback_state(candidate_id, needs_review=True)
+                            except (KeyError, Exception):
+                                pass
+                        else:
+                            try:
+                                self.schemas.reinforce_schema(candidate_id, salience_delta=0.1)
+                            except (KeyError, Exception):
+                                pass
+                    else:
+                        if dir_score < DIRECTION_THRESHOLD:
+                            try:
+                                self.schemas.reinforce_schema(
+                                    candidate_id,
+                                    salience_delta=0.05,
+                                    evidence=[(None, event_id, content, 0.5)],
+                                )
+                            except (KeyError, Exception):
+                                pass
             except Exception:
                 pass
 
