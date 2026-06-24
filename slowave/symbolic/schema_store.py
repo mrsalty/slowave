@@ -641,7 +641,7 @@ class SchemaStore:
         """
         conn = self.db.connect()
         row = conn.execute(
-            "SELECT facets_json, first_formed_ts, last_updated_ts, supporting_episode_ids "
+            "SELECT facets_json, first_formed_ts, last_updated_ts, supporting_episode_ids, scope_id "
             "FROM schemas WHERE id = ?",
             (int(schema_id),),
         ).fetchone()
@@ -678,8 +678,11 @@ class SchemaStore:
         facets["schema_utility"] = schema_utility
 
         # --- cross-scope generalization metrics (Stage 11) ---
-        # Derive from context_recall_items JOIN context_recall_events (ground truth).
-        # Runs on every reinforce so the stage stays fresh without a background job.
+        # Two sources:
+        # 1. context_recall_items: schemas surfaced via activate/recall (ground truth)
+        # 2. schema_evidence from cross-scope remember (P4 in engine.py): same concept
+        #    remembered from a different scope feeds evidence that breaks the bootstrap
+        #    deadlock where stage-0 schemas can't accumulate cross-scope recall events.
         schema_id_key = f"sch_{int(schema_id)}"
         xscope_row = conn.execute(
             """
@@ -695,10 +698,32 @@ class SchemaStore:
             (schema_id_key,),
         ).fetchone()
 
-        distinct_scopes = int(xscope_row["distinct_scopes"]) if xscope_row else 0
-        distinct_scope_kinds = int(xscope_row["distinct_scope_kinds"]) if xscope_row else 0
-        distinct_sessions = int(xscope_row["distinct_sessions"]) if xscope_row else 0
-        total_cross_recalls = int(xscope_row["total_cross_recalls"]) if xscope_row else 0
+        origin_scope = None if row["scope_id"] is None else str(row["scope_id"])
+        ev_row = conn.execute(
+            """
+            SELECT COUNT(DISTINCT ses.scope_id) AS ev_scopes,
+                   COUNT(DISTINCT ses.id)       AS ev_sessions
+            FROM schema_evidence se
+            JOIN raw_events re ON re.id = se.raw_event_id
+            JOIN sessions ses ON ses.id = re.session_id
+            WHERE se.schema_id = ?
+              AND ses.scope_id IS NOT NULL
+            """,
+            (int(schema_id),),
+        ).fetchone()
+        ev_scopes = int(ev_row["ev_scopes"] or 0) if ev_row else 0
+        ev_sessions = int(ev_row["ev_sessions"] or 0) if ev_row else 0
+
+        recall_scopes = int(xscope_row["distinct_scopes"] or 0) if xscope_row else 0
+        recall_kinds = int(xscope_row["distinct_scope_kinds"] or 0) if xscope_row else 0
+        recall_sessions = int(xscope_row["distinct_sessions"] or 0) if xscope_row else 0
+        total_cross_recalls = int(xscope_row["total_cross_recalls"] or 0) if xscope_row else 0
+
+        # Add evidence-based scope/session counts to recall-based counts.
+        # These are different events (recall vs. remember) so double-counting is rare.
+        distinct_scopes = recall_scopes + ev_scopes
+        distinct_scope_kinds = recall_kinds  # scope_kind not tracked via evidence path
+        distinct_sessions = recall_sessions + ev_sessions
 
         total_active_scopes, total_active_scope_kinds = \
             self.scope_registry.active_counts(self._gen_cfg.active_window_days)
