@@ -2456,11 +2456,13 @@ function genBadge(stage){
   const lbl=GEN_LABELS[stage]||'SCOPED';
   return `<span class="gen-badge gen-${stage}">${lbl}</span>`;
 }
-function genBreadthBar(pct,label){
+function genBreadthBar(pct,label,color,count){
   const w=Math.round(Math.min(100,pct*100));
+  const detail=count!=null?` · ${count}`:'';
+  const fill=color||'var(--blue)';
   return `<div class="gen-bar-wrap">
-    <div class="gen-bar-track"><div class="gen-bar" style="width:${w}%"></div></div>
-    <span style="font-size:11px;color:var(--muted);white-space:nowrap">${label}: ${(pct*100).toFixed(0)}%</span>
+    <div class="gen-bar-track"><div class="gen-bar" style="width:${w}%;background:${fill}"></div></div>
+    <span style="font-size:11px;color:var(--muted);white-space:nowrap">${label}: ${(pct*100).toFixed(0)}%${detail}</span>
   </div>`;
 }
 async function loadGeneralization(){
@@ -2473,8 +2475,9 @@ async function loadGeneralization(){
     // Stat cards
     const cards=[
       {icon:"📖",label:"Total active",val:num(sum.total_active_schemas),accent:"var(--green)"},
-      {icon:"🌐",label:"Promoted",val:num(sum.promoted_schemas),sub:"stage ≥ 1",accent:"var(--amber)"},
-      {icon:"✨",label:"Global",val:num(sum.global_schemas),sub:"stage 3",accent:"var(--green)"},
+      {icon:"🚀",label:"Portable",val:num(dist[1]||0),sub:"stage 1",accent:"var(--blue)"},
+      {icon:"🌍",label:"Contextual",val:num(dist[2]||0),sub:"stage 2",accent:"var(--amber)"},
+      {icon:"✨",label:"Global",val:num(dist[3]||0),sub:"stage 3",accent:"var(--green)"},
       {icon:"🗺",label:"Known scopes",val:num(sum.total_known_scopes),sub:num(sum.total_scope_kinds)+" kinds",accent:"var(--cyan)"},
     ];
     document.getElementById("genStatGrid").innerHTML=cards.map(c=>
@@ -2511,8 +2514,8 @@ async function loadGeneralization(){
             <span style="font-size:11px;color:var(--muted)">origin: ${esc(m.scope||"—")}</span>
           </div>
           <div style="font-size:13px;line-height:1.5;margin-bottom:8px">${esc(m.content)}</div>
-          ${genBreadthBar(m.scope_breadth_pct||0,"scope breadth")}
-          ${genBreadthBar(m.scope_kind_breadth_pct||0,"kind breadth")}
+          ${genBreadthBar(m.scope_breadth_pct||0,"scope breadth","var(--blue)",m.distinct_scope_count+" scope"+(m.distinct_scope_count!==1?"s":""))}
+          ${genBreadthBar(m.scope_kind_breadth_pct||0,"kind breadth","var(--amber)",m.distinct_scope_kind_count+" kind"+(m.distinct_scope_kind_count!==1?"s":""))}
           <div style="font-size:11px;color:var(--muted);margin-top:4px">
             ${m.distinct_scope_count} scope${m.distinct_scope_count!==1?"s":""} · 
             ${m.distinct_scope_kind_count} kind${m.distinct_scope_kind_count!==1?"s":""} · 
