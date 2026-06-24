@@ -86,6 +86,14 @@ DIR_REVIEW_BAND: float = 0.05
 # or clearly same-topic schemas trigger immediate action at remember() time.
 SAME_SCOPE_COS_THRESHOLD: float = 0.85
 
+# Extended same-scope supersession gate (Gap 3).
+# At cos in [EXTENDED_SAME_SCOPE_COS_THRESHOLD, SAME_SCOPE_COS_THRESHOLD) only
+# direction_score >= DIRECTION_THRESHOLD triggers supersession — no reinforce or
+# needs_review, because the cosine signal alone is too weak to act on.
+# Covers the 0.70–0.85 range that was previously ignored, catching cases like
+# S-1/S-2 wiki scenarios (cos ~0.80) with clear value substitution direction.
+EXTENDED_SAME_SCOPE_COS_THRESHOLD: float = 0.70
+
 # Minimum cosine for cross-scope linking (generalization reinforcement).
 # Motivated by empirical observation: cos=0.81 for Karpathy guidelines with minor
 # framing variation across projects. 3pp buffer below observed gives 0.78.
