@@ -698,32 +698,38 @@ class SchemaStore:
             (schema_id_key,),
         ).fetchone()
 
-        origin_scope = None if row["scope_id"] is None else str(row["scope_id"])
-        ev_row = conn.execute(
-            """
-            SELECT COUNT(DISTINCT ses.scope_id) AS ev_scopes,
-                   COUNT(DISTINCT ses.id)       AS ev_sessions
-            FROM schema_evidence se
-            JOIN raw_events re ON re.id = se.raw_event_id
-            JOIN sessions ses ON ses.id = re.session_id
-            WHERE se.schema_id = ?
-              AND ses.scope_id IS NOT NULL
-            """,
-            (int(schema_id),),
-        ).fetchone()
-        ev_scopes = int(ev_row["ev_scopes"] or 0) if ev_row else 0
-        ev_sessions = int(ev_row["ev_sessions"] or 0) if ev_row else 0
-
-        recall_scopes = int(xscope_row["distinct_scopes"] or 0) if xscope_row else 0
         recall_kinds = int(xscope_row["distinct_scope_kinds"] or 0) if xscope_row else 0
-        recall_sessions = int(xscope_row["distinct_sessions"] or 0) if xscope_row else 0
         total_cross_recalls = int(xscope_row["total_cross_recalls"] or 0) if xscope_row else 0
 
-        # Add evidence-based scope/session counts to recall-based counts.
-        # These are different events (recall vs. remember) so double-counting is rare.
-        distinct_scopes = recall_scopes + ev_scopes
-        distinct_scope_kinds = recall_kinds  # scope_kind not tracked via evidence path
-        distinct_sessions = recall_sessions + ev_sessions
+        # Merge recall-based and evidence-based cross-scope counts via UNION to
+        # avoid double-counting when the same scope+session appears in both paths
+        # (e.g. a session that both recalled the schema via activate AND triggered
+        # P4 remember reinforcement in the same session).
+        union_row = conn.execute(
+            """
+            SELECT COUNT(DISTINCT scope_id)   AS distinct_scopes,
+                   COUNT(DISTINCT session_id) AS distinct_sessions
+            FROM (
+                SELECT cre.scope_id, cre.session_id
+                FROM context_recall_items cri
+                JOIN context_recall_events cre ON cri.context_id = cre.context_id
+                WHERE cri.memory_id = ?
+                  AND cre.scope_id IS NOT NULL
+                UNION
+                SELECT ses.scope_id, ses.id AS session_id
+                FROM schema_evidence se
+                JOIN raw_events re ON re.id = se.raw_event_id
+                JOIN sessions ses ON ses.id = re.session_id
+                WHERE se.schema_id = ?
+                  AND ses.scope_id IS NOT NULL
+            )
+            """,
+            (schema_id_key, int(schema_id)),
+        ).fetchone()
+
+        distinct_scopes = int(union_row["distinct_scopes"] or 0) if union_row else 0
+        distinct_scope_kinds = recall_kinds  # scope_kind only tracked via recall path
+        distinct_sessions = int(union_row["distinct_sessions"] or 0) if union_row else 0
 
         total_active_scopes, total_active_scope_kinds = \
             self.scope_registry.active_counts(self._gen_cfg.active_window_days)
