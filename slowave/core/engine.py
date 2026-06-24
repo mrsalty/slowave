@@ -31,7 +31,7 @@ from slowave.core.supersession import (
     SupersessionCandidate,
     find_superseded_candidates,
 )
-from slowave.core.supersession_manifold import SupersessionManifold  # available for future use
+from slowave.core.supersession_manifold import DIRECTION_THRESHOLD, SupersessionManifold
 from slowave.latent.episodic_store import EpisodicStore, EpisodicStoreConfig
 from slowave.latent.graph_manager import GraphManager
 from slowave.latent.replay_engine import ReplayEngine
@@ -298,6 +298,26 @@ class SlowaveEngine:
         # post-construction assignment (e.g. test monkey-patching) stays in sync.
         if hasattr(self, "_retrieval"):
             self._retrieval.encoder = value
+
+    def _get_manifold(self) -> "SupersessionManifold | None":
+        if self.encoder is None:
+            return None
+        if self._manifold is None:
+            self._manifold = SupersessionManifold(self.encoder)
+        return self._manifold
+
+    def _fetch_schema_embedding(self, schema_id: int) -> "np.ndarray | None":
+        from slowave.utils.vec import unpack_f32
+        conn = self.db.connect()
+        row = conn.execute(
+            "SELECT embedding, dim FROM schemas WHERE id = ?", (int(schema_id),)
+        ).fetchone()
+        if row is None or row["embedding"] is None:
+            return None
+        try:
+            return unpack_f32(row["embedding"], int(row["dim"]))
+        except Exception:
+            return None
 
     @classmethod
     def from_config(
@@ -587,16 +607,15 @@ class SlowaveEngine:
             except Exception:
                 pass
 
-        # Supersession: if this explicit memory contradicts an existing
-        # active schema on the same topic, mark the old one superseded.
-        # Uses a high cosine threshold (0.85) so only genuinely same-topic
-        # schemas are affected — "I use MySQL" is superseded by "I switched
-        # to PostgreSQL", but unrelated memories are never touched.
-        # This is the explicit-path counterpart to the consolidation path's
-        # geometric contradiction judge, and it enables belief-revision
-        # silencing (_schema_priors) to fire immediately at recall time
-        # without waiting for the next consolidation pass.
+        # P3: Direction-score-gated same-scope supersession.
+        # cosine >= 0.85 means same topic; direction_score distinguishes whether
+        # the change is a value substitution (supersede) or a restatement (reinforce).
+        # The SupersessionManifold SVD1 axis was calibrated for this: behavioral
+        # guidelines and preferences score negatively (anti-aligned), so they
+        # reinforce instead of supersede. Concrete value updates (SQLite→DuckDB,
+        # $50k→$75k) score positively and are correctly superseded.
         if emb is not None:
+            manifold = self._get_manifold()
             for candidate_id, score in self.schemas.search_embedding(
                 emb, limit=10, scope_id=scope_id
             ):
@@ -608,7 +627,14 @@ class SlowaveEngine:
                     continue
                 if candidate.status not in ("active", "needs_review"):
                     continue
-                if candidate.last_updated_ts < int(time.time()):
+                candidate_emb = self._fetch_schema_embedding(candidate_id)
+                dir_score = (
+                    manifold.direction_score(emb, candidate_emb)
+                    if manifold is not None and candidate_emb is not None
+                    else DIRECTION_THRESHOLD  # boundary: neither path, leave as-is
+                )
+                if dir_score >= DIRECTION_THRESHOLD:
+                    # Value substitution → supersede the old schema
                     self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
                     self.schemas.add_relation(
                         src_schema_id=new_schema_id,
@@ -618,6 +644,53 @@ class SlowaveEngine:
                     )
                     if candidate_id not in superseded_schema_ids:
                         superseded_schema_ids.append(candidate_id)
+                else:
+                    # Restatement/paraphrase → reinforce the existing schema
+                    try:
+                        self.schemas.reinforce_schema(candidate_id, salience_delta=0.1)
+                    except (KeyError, Exception):
+                        pass
+
+        # P4: Cross-scope near-duplicate detection.
+        # When the same concept is remembered from a different scope, reinforce the
+        # existing cross-scope schema and record the raw event as evidence. This
+        # feeds _update_utility_scores so generalization stage can advance from
+        # remember events, breaking the recall-only bootstrap deadlock.
+        if emb is not None:
+            manifold = self._get_manifold()
+            seen_ids = {new_schema_id} | set(superseded_schema_ids)
+            try:
+                for candidate_id, score in self.schemas.search_embedding(
+                    emb, limit=10, scope_id=None  # all scopes
+                ):
+                    if candidate_id in seen_ids or score < 0.85:
+                        continue
+                    try:
+                        candidate = self.schemas.get(candidate_id)
+                    except KeyError:
+                        continue
+                    if candidate.scope_id == scope_id:
+                        continue  # same scope: handled by P3
+                    if candidate.status not in ("active", "needs_review"):
+                        continue
+                    candidate_emb = self._fetch_schema_embedding(candidate_id)
+                    dir_score = (
+                        manifold.direction_score(emb, candidate_emb)
+                        if manifold is not None and candidate_emb is not None
+                        else DIRECTION_THRESHOLD
+                    )
+                    if dir_score < DIRECTION_THRESHOLD:
+                        # Same concept, different scope: reinforce + record cross-scope evidence
+                        try:
+                            self.schemas.reinforce_schema(
+                                candidate_id,
+                                salience_delta=0.05,
+                                evidence=[(None, event_id, content, 0.5)],
+                            )
+                        except (KeyError, Exception):
+                            pass
+            except Exception:
+                pass
 
         try:
             created_schema = self.schemas.get(new_schema_id)
