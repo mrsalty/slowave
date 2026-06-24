@@ -1,5 +1,31 @@
 # Changelog
 
+## [0.7.0](https://github.com/mrsalty/slowave/compare/slowave-v0.6.1...slowave-v0.7.0) (2026-06-24)
+
+
+### Features
+
+* implement brain-inspired gaps 2/3/4/5/6 ([544719f](https://github.com/mrsalty/slowave/commit/544719f7f470f437c65a4d708e62d815026cd2aa))
+
+
+### Bug Fixes
+
+* brain-inspired-gaps ([0cce071](https://github.com/mrsalty/slowave/commit/0cce0711e0f3b86fb59179cd08320f626dd4314a))
+* **dashboard:** improve Generalization tab clarity ([66120ea](https://github.com/mrsalty/slowave/commit/66120ea15e72f50a9677345f0744eee3bccef23b))
+* deduplicate cross-scope counts via UNION to prevent premature promotion ([3b2b1e9](https://github.com/mrsalty/slowave/commit/3b2b1e9927f21787a606d8c83442a73cae28199d))
+* gate P3 supersession on direction score; add P4 cross-scope reinforce ([69acf5e](https://github.com/mrsalty/slowave/commit/69acf5ec43db37b601458fe96d0ead50cceb79ef))
+
+
+### Reverts
+
+* remove PR summary file (use GitHub PR body instead) ([a9cfc46](https://github.com/mrsalty/slowave/commit/a9cfc4699605c5df426892c786f323a68467842c))
+
+
+### Documentation
+
+* add PR summary for brain-inspired gaps branch ([7ada6c5](https://github.com/mrsalty/slowave/commit/7ada6c5820a3505b2d285b2785ff238257a8ea56))
+* update benchmark numbers to match current oracle-split results ([0830f68](https://github.com/mrsalty/slowave/commit/0830f6810368f906c6901083becc168c1eee7047))
+
 ## [0.6.1](https://github.com/mrsalty/slowave/compare/slowave-v0.6.0...slowave-v0.6.1) (2026-06-23)
 
 
