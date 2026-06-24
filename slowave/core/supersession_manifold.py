@@ -59,10 +59,47 @@ _SEED_PAIRS: list[tuple[str, str]] = [
     ("Alice riporta a Giovanni.", "Alice riporta a Sara."),
 ]
 
-# Calibrated on 104-pair test set (2026-06-19, mnlm):
-# sep(sup, add) at threshold 0.10 rejects most additive pairs (mean add = −0.028)
-# while covering financial/medical/business/science/tech (means 0.07–0.35)
+# All geometry thresholds for the supersession/reinforce/generalize decision tree.
+# Calibrated on 104-pair test set (2026-06-19, paraphrase-multilingual-MiniLM-L12-v2).
+#
+# Cosine distribution by zone (186-pair eval set):
+#   supersession  n=71  median=0.694  p75=0.800  p90=0.904  max=0.981
+#   additive      n=17  median=0.295  p90=0.582  max=0.902
+#   duplicate     n=6   min=0.822     median=0.952
+#   unrelated     n=10  median=0.682  max=0.948   ← noise floor for same-domain facts
+#
+# The cosine thresholds below are *triage gates*, not supersession detectors.
+# They admit candidates for direction_score evaluation. The bulk of supersession
+# pairs (79% have cosine < 0.85) are handled by the consolidation path
+# (GeometricContradictionJudge), not by remember().
+
+# Minimum direction_score to classify a change as a value substitution (supersede).
+# sep(sup, add) = +0.35 vs +0.09; mean(add) = −0.028 at this threshold.
 DIRECTION_THRESHOLD: float = 0.10
+
+# Lower bound of the ambiguous zone: direction_score in [DIR_REVIEW_BAND, DIRECTION_THRESHOLD)
+# triggers needs_review instead of auto-action.
+DIR_REVIEW_BAND: float = 0.05
+
+# Minimum cosine for same-scope action (supersede or reinforce).
+# Set at the duplicate-zone floor (min=0.822 rounded down) so only near-identical
+# or clearly same-topic schemas trigger immediate action at remember() time.
+SAME_SCOPE_COS_THRESHOLD: float = 0.85
+
+# Extended same-scope supersession gate (Gap 3).
+# At cos in [EXTENDED_SAME_SCOPE_COS_THRESHOLD, SAME_SCOPE_COS_THRESHOLD) only
+# direction_score >= DIRECTION_THRESHOLD triggers supersession — no reinforce or
+# needs_review, because the cosine signal alone is too weak to act on.
+# Covers the 0.70–0.85 range that was previously ignored, catching cases like
+# S-1/S-2 wiki scenarios (cos ~0.80) with clear value substitution direction.
+EXTENDED_SAME_SCOPE_COS_THRESHOLD: float = 0.70
+
+# Minimum cosine for cross-scope linking (generalization reinforcement).
+# Motivated by empirical observation: cos=0.81 for Karpathy guidelines with minor
+# framing variation across projects. 3pp buffer below observed gives 0.78.
+# Cross-scope never supersedes — only reinforces + records evidence.
+CROSS_SCOPE_COS_THRESHOLD: float = 0.78
+
 TOPICAL_THRESHOLD: float = 0.35
 
 

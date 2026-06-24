@@ -294,12 +294,13 @@ class LatentSchemaBuilder:
             facet_axes = np.zeros((0, embs.shape[1]), dtype=np.float32)
             facet_strengths = np.zeros((0,), dtype=np.float32)
 
-        # confidence (cluster tightness)
+        # confidence (cluster tightness) and embedding variance (abstraction proxy)
         if embs.shape[0] >= 2:
             within_var = float(((embs - cen) ** 2).mean())
             confidence = 1.0 - min(1.0, within_var / max(self.cfg.variance_floor, 1e-6))
             confidence = max(0.0, min(1.0, confidence))
         else:
+            within_var = 0.0
             confidence = 1.0
 
         # Lexical signature: contrastive TF-IDF over cluster episode texts.
@@ -330,6 +331,12 @@ class LatentSchemaBuilder:
             vsa_vec = build_schema_vsa(cen, facet_axes)
         vsa_b64 = vec_to_b64(vsa_vec)
 
+        # Episode embedding variance: measures within-cluster semantic spread.
+        # High variance = schema was recalled in diverse contexts = more abstract.
+        # Low variance = specific fact recalled in similar contexts.
+        # This is Phase 1 of gap 6 (abstraction quality) — measurement only.
+        episode_embedding_variance = float(within_var) if embs.shape[0] >= 2 else 0.0
+
         return LatentSchema(
             centroid=cen,
             facet_axes=facet_axes,
@@ -351,6 +358,7 @@ class LatentSchemaBuilder:
                 "ts_span_s": int(ts_span),
                 "display_label": display_lbl,
                 "vsa_vec": vsa_b64,
+                "episode_embedding_variance": round(episode_embedding_variance, 6),
             },
             evidence_indices=list(range(1, len(member_episodes) + 1)),
             evidence_quote=None,

@@ -571,6 +571,31 @@ class SchemaStore:
         conn.commit()
         self._update_utility_scores(schema_id, recall_hit=True)
 
+    def increment_cross_scope_reinforcement(self, schema_id: int) -> None:
+        """Increment cross_scope_reinforcement_count in facets for a schema.
+
+        Called by the consolidation path when a new latent schema from a
+        different scope reinforces an existing schema. This is a distinct
+        signal from observed recall — offline reinforcement carries lower
+        weight in generalization stage promotion.
+        """
+        conn = self.db.connect()
+        row = conn.execute(
+            "SELECT facets_json FROM schemas WHERE id = ?", (int(schema_id),)
+        ).fetchone()
+        if row is None:
+            return
+        facets = loads_json(row["facets_json"])
+        if not isinstance(facets, dict):
+            facets = {}
+        facets["cross_scope_reinforcement_count"] = int(facets.get("cross_scope_reinforcement_count", 0)) + 1
+        conn.execute(
+            "UPDATE schemas SET facets_json = ?, last_updated_ts = ? WHERE id = ?",
+            (dumps_json(facets), int(time.time()), int(schema_id)),
+        )
+        conn.commit()
+        self._update_utility_scores(schema_id, recall_hit=False)
+
     def adjust_feedback_state(
         self,
         schema_id: int,
@@ -641,7 +666,7 @@ class SchemaStore:
         """
         conn = self.db.connect()
         row = conn.execute(
-            "SELECT facets_json, first_formed_ts, last_updated_ts, supporting_episode_ids "
+            "SELECT facets_json, first_formed_ts, last_updated_ts, supporting_episode_ids, scope_id "
             "FROM schemas WHERE id = ?",
             (int(schema_id),),
         ).fetchone()
@@ -678,8 +703,11 @@ class SchemaStore:
         facets["schema_utility"] = schema_utility
 
         # --- cross-scope generalization metrics (Stage 11) ---
-        # Derive from context_recall_items JOIN context_recall_events (ground truth).
-        # Runs on every reinforce so the stage stays fresh without a background job.
+        # Two sources:
+        # 1. context_recall_items: schemas surfaced via activate/recall (ground truth)
+        # 2. schema_evidence from cross-scope remember (P4 in engine.py): same concept
+        #    remembered from a different scope feeds evidence that breaks the bootstrap
+        #    deadlock where stage-0 schemas can't accumulate cross-scope recall events.
         schema_id_key = f"sch_{int(schema_id)}"
         xscope_row = conn.execute(
             """
@@ -695,10 +723,45 @@ class SchemaStore:
             (schema_id_key,),
         ).fetchone()
 
-        distinct_scopes = int(xscope_row["distinct_scopes"]) if xscope_row else 0
-        distinct_scope_kinds = int(xscope_row["distinct_scope_kinds"]) if xscope_row else 0
-        distinct_sessions = int(xscope_row["distinct_sessions"]) if xscope_row else 0
-        total_cross_recalls = int(xscope_row["total_cross_recalls"]) if xscope_row else 0
+        recall_kinds = int(xscope_row["distinct_scope_kinds"] or 0) if xscope_row else 0
+        total_cross_recalls = int(xscope_row["total_cross_recalls"] or 0) if xscope_row else 0
+
+        # Merge recall-based and evidence-based cross-scope counts via UNION to
+        # avoid double-counting when the same scope+session appears in both paths
+        # (e.g. a session that both recalled the schema via activate AND triggered
+        # P4 remember reinforcement in the same session).
+        union_row = conn.execute(
+            """
+            SELECT COUNT(DISTINCT scope_id)   AS distinct_scopes,
+                   COUNT(DISTINCT session_id) AS distinct_sessions
+            FROM (
+                SELECT cre.scope_id, cre.session_id
+                FROM context_recall_items cri
+                JOIN context_recall_events cre ON cri.context_id = cre.context_id
+                WHERE cri.memory_id = ?
+                  AND cre.scope_id IS NOT NULL
+                UNION
+                SELECT ses.scope_id, ses.id AS session_id
+                FROM schema_evidence se
+                JOIN raw_events re ON re.id = se.raw_event_id
+                JOIN sessions ses ON ses.id = re.session_id
+                WHERE se.schema_id = ?
+                  AND ses.scope_id IS NOT NULL
+            )
+            """,
+            (schema_id_key, int(schema_id)),
+        ).fetchone()
+
+        distinct_scopes = int(union_row["distinct_scopes"] or 0) if union_row else 0
+        distinct_scope_kinds = recall_kinds  # scope_kind only tracked via recall path
+        distinct_sessions = int(union_row["distinct_sessions"] or 0) if union_row else 0
+
+        # Offline reinforcement bonus: each cross-scope reinforcement from
+        # consolidation counts as 0.5 equivalent observed-recall scope.
+        # Observed recall (context_recall_items) is the ground-truth signal;
+        # offline reinforcement is weaker evidence and carries half the weight.
+        reinforcement_count = int(facets.get("cross_scope_reinforcement_count", 0))
+        distinct_scopes += reinforcement_count // 2  # integer, conservative
 
         total_active_scopes, total_active_scope_kinds = \
             self.scope_registry.active_counts(self._gen_cfg.active_window_days)
