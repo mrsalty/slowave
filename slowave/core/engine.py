@@ -19,8 +19,6 @@ import numpy as np
 from slowave.core.config import SlowaveConfig
 from slowave.core.consolidation import Consolidator
 from slowave.core.context import WorkingMemoryGate, WorkingMemoryState
-from slowave.core.procedural import ProceduralMemoryStore
-from slowave.core.procedural_enforcement import ProceduralEnforcement
 from slowave.core.scope import normalize_scope, scope_kind
 from slowave.core.services.consolidation import ConsolidationService
 from slowave.core.services.feedback import FeedbackService
@@ -193,7 +191,6 @@ class SlowaveEngine:
         self.raw_log = RawLog(self.db)
         self.episode_text = EpisodeTextStore(self.db)
         self.schemas = SchemaStore(self.db, dim=self.cfg.dim)
-        self.procedures = ProceduralMemoryStore(self.db, self.cfg.procedural)
         self.working_memory_gate = WorkingMemoryGate()
 
         # encoder (lazy) — accept a pre-built shared encoder to avoid
@@ -253,7 +250,6 @@ class SlowaveEngine:
             consolidator=self.consolidator,
             schemas=self.schemas,
             ingest=self._ingest,
-            procedures=self.procedures,
             encoder=self.encoder,
         )
         self._retrieval = RetrievalService(
@@ -274,14 +270,9 @@ class SlowaveEngine:
         self._feedback = FeedbackService(
             db=self.db,
             schemas=self.schemas,
-            procedures=self.procedures,
             cfg=self.cfg.feedback,
         )
 
-        # Procedural memory enforcement (Tier 1)
-        self._procedural_enforcement = ProceduralEnforcement(
-            store=self.procedures, encoder=self.encoder, db=self.db
-        )
 
         # rebuild FAISS indices from DB
         self.episodic.reset_faiss_from_db()
@@ -383,22 +374,8 @@ class SlowaveEngine:
         """
         self.raw_log.end_session(session_id, ts=ts, outcome=outcome)
 
-        # Fetch the session's goal for procedural enforcement tracking
-        conn = self.db.connect()
-        session_row = conn.execute(
-            "SELECT goal FROM sessions WHERE id = ?", (session_id,)
-        ).fetchone()
-        goal = session_row["goal"] if session_row else None
-
         episode_ids = self._ingest.form_episodes(session_id)
         stats: dict[str, Any] = {"session_id": session_id, "episodes_formed": len(episode_ids)}
-
-        # Tier 1 enforcement: track procedure execution & record evidence
-        if outcome:
-            enforcement_result = self._procedural_enforcement.track(
-                session_id=session_id, goal=goal, outcome=outcome
-            )
-            stats["procedural_enforcement"] = enforcement_result
 
         if consolidate:
             replay_stats = self.replay_engine.replay_once()
@@ -690,65 +667,6 @@ class SlowaveEngine:
     def context_brief(self, **kwargs: Any) -> WorkingMemoryState:
         return self._retrieval.context_brief(**kwargs)
 
-    def retrieve_procedures(
-        self,
-        *,
-        query: str | None = None,
-        scope: str | None = None,
-        goal: str | None = None,
-        task_type: str | None = None,
-        situation: dict[str, Any] | None = None,
-        requirements: list[str] | tuple[str, ...] | None = None,
-        topics: list[str] | tuple[str, ...] | None = None,
-        entities: list[str] | tuple[str, ...] | None = None,
-        limit: int | None = None,
-        mode: str = "default",
-    ):
-        scope_id = normalize_scope(scope=scope)
-        return self.procedures.retrieve(
-            scope_id=scope_id,
-            goal=goal,
-            task_type=task_type,
-            situation=situation or {},
-            requirements=list(requirements or []),
-            query=query,
-            topics=topics or [],
-            entities=entities or [],
-            limit=limit,
-            mode=mode,
-        )
-
-    def remember_procedure(
-        self,
-        *,
-        procedure_steps: list[str],
-        goal: str | None = None,
-        task_type: str | None = None,
-        scope: str | None = None,
-        situation: dict[str, Any] | None = None,
-        requirements: list[str] | None = None,
-        trigger_pattern: list[str] | None = None,
-        confidence: float = 0.7,
-        status: str = "active",
-    ) -> int:
-        scope_id = normalize_scope(scope=scope)
-        return self.procedures.create(
-            origin_scope_id=scope_id,
-            origin_scope_kind=scope_kind(scope_id),
-            goal=goal,
-            task_type=task_type,
-            situation_signature=situation or {},
-            requirements=requirements or [],
-            trigger_pattern=trigger_pattern or [],
-            procedure_steps=procedure_steps,
-            confidence=confidence,
-            status=status,
-        )
-
-    def promote_procedure_candidates_from_feedback(self) -> dict[str, Any]:
-        """Deterministically promote repeated successful feedback into candidates."""
-        return self.procedures.promote_candidates_from_feedback()
-
     # ---- inspection -------------------------------------------------------
     def get_schema(self, schema_id: int) -> Schema:
         return self.schemas.get(schema_id)
@@ -761,7 +679,7 @@ class SlowaveEngine:
             "episodes": self.episodic.count(),
             "prototypes": self.semantic.count(),
             "schemas": self.schemas.count(),
-            "procedures": self.procedures.count(),
+            "procedures": 0,  # removed in Phase 1 P1
             "edges": self.graph.edge_count(),
         }
 

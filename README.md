@@ -29,8 +29,8 @@ Slowave runs a 5-verb cognitive cycle: *activate* → *remember* → *recall* �
 **🔮 Zero-config cold start.**  
 Drop Slowave into a new project and it auto-discovers key facts from `CLAUDE.md`, `README.md`, and other knowledge files. Your agents walk into context without you writing a single prompt.
 
-**⚙️ Procedural memory: workflows that stick.**  
-Store reusable procedures — "how we do deploys in this repo", "steps to implement a new feature across projects". Recalled by goal and situation, not keyword search. Your agents learn habits, not just facts.
+**⚙️ Behavioral memory: workflows that stick.**  
+Memory is stored via `remember()` as typed schemas (constraint, fact, preference, etc.). Behavioral patterns emerge implicitly — recurring workflows strengthen prototype transition paths, and the TransitionModel surfaces "what tends to come next" during recall.
 
 **📐 Smart scoping.**  
 Memory is scoped to exactly what matters: `project:my-app`, `domain:cooking`, `relationship:alex` — or unscoped for universal context. Cross-project bleed is prevented by default.
