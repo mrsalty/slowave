@@ -86,9 +86,9 @@
     "family": "generalization",
     "expected_keyword": "layer",
     "hit": true,
-    "hypothesis": "DNNs are prone to overfitting because of the added layers of abstraction, which allow them to model rare dependencies in the training data. Regularization methods such as Ivakhnenko's unit pruning&#91;41&#93; or weight decay ( &#x2113; 2 {\\displaystyle \\ell _{2}} -regularization) or sparsity ( &#x2113; 1 {\\displaystyle \\ell _{1}} -regularization) can be applied during training to combat overfitting.&#91;156&#93; Alternatively dropout regularization randomly omits units from the hidden layers dur",
+    "hypothesis": "In machine learning, deep learning (DL) focuses on utilizing multilayered neural networks to perform tasks such as classification, regression, and representation learning. The field takes inspiration from biological neuroscience and revolves around stacking artificial neurons into layers and \"training\" them to process data. The adjective \"deep\" refers to the use of multiple layers (ranging from three to several hundred or thousands) in the network. Methods used can be supervised, semi-supervised",
     "detail": {
-      "n_schemas": 157
+      "n_schemas": 160
     }
   },
   {
@@ -96,9 +96,9 @@
     "family": "generalization",
     "expected_keyword": "Senate",
     "hit": true,
-    "hypothesis": "With solid foundations and good drainage,&#91;224&#93; Roman roads were known for their durability and many segments of the Roman road system were still in use a thousand years after the fall of Rome. The construction of a vast and efficient travel network throughout the Empire dramatically increased Rome's power and influence. They allowed Roman legions to be deployed rapidly, with predictable marching times between key points of the empire, no matter the season.&#91;225&#93; These highways als",
+    "hypothesis": "Roman civil engineering and military engineering constituted a large part of Rome's technological superiority and legacy, and contributed to the construction of hundreds of roads, bridges, aqueducts, public baths, theatres and arenas. Many monuments, such as the Colosseum, Pont du Gard, and Pantheon, remain as testaments to Roman engineering and culture.\nThe Romans were renowned for their architecture, which is grouped with Greek traditions into \"Classical architecture\". Although there were many",
     "detail": {
-      "n_schemas": 159
+      "n_schemas": 154
     }
   },
   {
@@ -106,9 +106,9 @@
     "family": "generalization",
     "expected_keyword": "African",
     "hit": true,
-    "hypothesis": "In the post-Civil War period (after 1865), African Americans were able to obtain surplus military bass drums, snare drums and fifes, and an original African-American drum and fife music emerged, featuring tresillo and related syncopated rhythmic figures.&#91;62&#93; This was a drumming tradition that was distinct from its Caribbean counterparts, expressing a uniquely African-American sensibility. \"The snare and bass drummers played syncopated cross-rhythms,\" observed the writer Robert Palmer, sp",
+    "hypothesis": "Blues is a music genre&#91;3&#93; and musical form that originated among African Americans in the Deep South of the United States around the 1860s.&#91;2&#93; Blues has incorporated spirituals, work songs, field hollers, shouts, chants, and rhymed simple narrative ballads from the African-American culture. The blues form is ubiquitous in jazz, rhythm and blues, and rock and roll, and is characterized by the call-and-response pattern, the blues scale, and specific chord progressions, of which the",
     "detail": {
-      "n_schemas": 128
+      "n_schemas": 130
     }
   },
   {
@@ -116,7 +116,7 @@
     "family": "decay",
     "expected_keyword": "deep",
     "hit": true,
-    "hypothesis": "[2025-01-01] User: Statistics and mathematical optimisation methods compose the foundations of machine learning. Data mining is a related field of study, focusing on exploratory data analysis (EDA) through unsupervised learning.&#91;3&#93;&#91;4&#93;\nUser: From a theoretical viewpoint, probably approximately correct learning provides a mathematical and statistical framework for describing machine learning. Most traditional machine learning and deep learning algorithms can be described as empiric",
+    "hypothesis": "[2025-01-31] User: In machine learning, deep learning (DL) focuses on utilizing multilayered neural networks to perform tasks such as classification, regression, and representation learning. The field takes inspiration from biological neuroscience and revolves around stacking artificial neurons into layers and \"training\" them to process data. The adjective \"deep\" refers to the use of multiple layers (ranging from three to several hundred or thousands) in the network. Methods used can be supervis",
     "detail": {
       "sal_expected": 0.41,
       "sal_anti": 0.0,
@@ -128,7 +128,7 @@
     "family": "decay",
     "expected_keyword": "Caesar",
     "hit": true,
-    "hypothesis": "[2025-01-01] User: Roman civil engineering and military engineering constituted a large part of Rome's technological superiority and legacy, and contributed to the construction of hundreds of roads, bridges, aqueducts, public baths, theatres and arenas. Many monuments, such as the Colosseum, Pont du Gard, and Pantheon, remain as testaments to Roman engineering and culture.\nUser: The Romans were renowned for their architecture, which is grouped with Greek traditions into \"Classical architecture\".",
+    "hypothesis": "[2025-01-01] User: In 27&#160;BC and at the age of 36, Octavian was the sole Roman leader. In that year, he took the name Augustus. That event is usually taken by historians as the beginning of Roman Empire. Officially, the government was republican, but Augustus assumed absolute powers.&#91;49&#93; His reform of the government brought about a two-century period colloquially referred to by Romans as the Pax Romana.\nUser: The Julio-Claudian dynasty was established by Augustus. The emperors of thi",
     "detail": {
       "sal_expected": 0.41,
       "sal_anti": 0.0,
@@ -152,13 +152,13 @@
     "family": "supersession",
     "expected_keyword": "Adam",
     "hit": true,
-    "hypothesis": "Statistics and mathematical optimisation methods compose the foundations of machine learning. Data mining is a related field of study, focusing on exploratory data analysis (EDA) through unsupervised learning.&#91;3&#93;&#91;4&#93;\nFrom a theoretical viewpoint, probably approximately correct learning provides a mathematical and statistical framework for describing machine learning. Most traditional machine learning and deep learning algorithms can be described as empirical risk minimisation unde",
+    "hypothesis": "machine learning now uses gradient descent for optimisation Statistics and mathematical optimisation methods compose the foundations of machine learning. Data mining is a related field of study, focusing on exploratory data analysis (EDA) through unsupervised learning.&#91;3&#93;&#91;4&#93;\nFrom a theoretical viewpoint, probably approximately correct learning provides a mathematical and statistical framework for describing machine learning. Most traditional machine learning and deep learning alg",
     "detail": {
       "v1_kw_still_active": true,
-      "v1_schema_id": 161,
+      "v1_schema_id": 170,
       "v1_status": "active",
       "v2_superseded_ids": [],
-      "n_schemas": 162
+      "n_schemas": 171
     }
   },
   {
@@ -169,10 +169,10 @@
     "hypothesis": "In modern historiography, ancient Rome is the Roman civilisation from the founding of the Italian city of Rome in the 8th century&#160;BC to the collapse of the Western Roman Empire in the 5th century&#160;AD. It encompasses the Roman Kingdom (753\u2013509&#160;BC), the Roman Republic (509&#8205;&#8211;&#8205;27&#160;BC), and the Roman Empire (27&#160;BC&#160;&#8211;&#32;476&#160;AD) until the fall of the western empire.&#91;1&#93;&#91;a&#93;\nAncient Rome began as an Italic settlement, traditionally ",
     "detail": {
       "v1_kw_still_active": true,
-      "v1_schema_id": 152,
+      "v1_schema_id": 162,
       "v1_status": "active",
       "v2_superseded_ids": [],
-      "n_schemas": 153
+      "n_schemas": 163
     }
   },
   {
@@ -183,8 +183,8 @@
     "hypothesis": "Roman civil engineering and military engineering constituted a large part of Rome's technological superiority and legacy, and contributed to the construction of hundreds of roads, bridges, aqueducts, public baths, theatres and arenas. Many monuments, such as the Colosseum, Pont du Gard, and Pantheon, remain as testaments to Roman engineering and culture.\nThe Romans were renowned for their architecture, which is grouped with Greek traditions into \"Classical architecture\". Although there were many",
     "detail": {
       "cos_qf": 0.1051,
-      "proto_id": 90,
-      "n_schemas": 86
+      "proto_id": 87,
+      "n_schemas": 85
     }
   },
   {
@@ -192,11 +192,11 @@
     "family": "completion",
     "expected_keyword": "NeuroSync",
     "hit": false,
-    "hypothesis": "By adopting a softmax activation function, a generalization of the logistic function, on the output layer of the neural network (or a softmax component in a component-based network) for categorical target variables, the outputs can be interpreted as posterior probabilities. This is useful in classification as it gives a certainty measure.\nNeural networks support a broad range of applications in image processing, speech recognition, natural language processing, finance, and medicine.&#91;citation",
+    "hypothesis": "In machine learning, a neural network (NN) or neural net, is a computational model inspired by the structure and functions of biological neural networks.&#91;1&#93;&#91;2&#93;\nA neural network consists of connected units or nodes called artificial neurons, which loosely model the neurons in the brain. Artificial neuron models that mimic biological neurons more closely have also been recently investigated and shown to significantly improve performance. These are connected by edges, which model th",
     "detail": {
       "cos_qf": 0.2867,
       "proto_id": 92,
-      "n_schemas": 84
+      "n_schemas": 85
     }
   },
   {
@@ -204,11 +204,11 @@
     "family": "completion",
     "expected_keyword": "ChromaShift",
     "hit": false,
-    "hypothesis": "Jazz is a music genre that originated in the African-American communities of New Orleans, Louisiana, in the late 19th and early 20th centuries. Its roots are in blues, ragtime, European harmony, African rhythmic rituals, spirituals, hymns, marches, vaudeville song, and dance music. Since the 1920s Jazz Age, it has been recognized as a major form of musical expression in traditional and popular music. Jazz is characterized by swing and blue notes, complex chords, call and response vocals, polyrhy",
+    "hypothesis": "As jazz spread around the world, it drew on national, regional, and local musical cultures, which gave rise to different styles. New Orleans jazz began in the early 1910s, combining earlier brass band marches, French quadrilles, biguine, ragtime and blues with collective polyphonic improvisation. However, jazz did not begin as a single musical tradition in New Orleans or elsewhere.&#91;1&#93; In the 1930s, arranged dance-oriented swing big bands, Kansas City jazz (a hard-swinging, bluesy, improv",
     "detail": {
       "cos_qf": 0.2922,
-      "proto_id": 93,
-      "n_schemas": 90
+      "proto_id": 92,
+      "n_schemas": 92
     }
   }
 ]
