@@ -262,7 +262,7 @@ Slowave supports this with soft cross-scope generalization:
 
 - project-specific facts remain mostly local;
 - reusable preferences can become broader;
-- repeated workflows can consolidate into procedures;
+- repeated workflows strengthen prototype transition paths;
 - memories successfully recalled across scopes can gain broader activation;
 - irrelevant cross-scope matches can be suppressed through feedback.
 
@@ -299,11 +299,11 @@ The brief should be treated as retrieved context, not as ground truth. The downs
 
 ---
 
-## Procedural Memory
+## Behavioral Patterns
 
 Not all useful memory is factual.
 
-Some useful memory is procedural: repeated ways of doing things.
+Some memory is behavioral: repeated ways of doing things that shouldn't need to be re-stated every session.
 
 Examples include:
 
@@ -313,11 +313,11 @@ Examples include:
 - how a specific user prefers documentation to be reviewed;
 - how an agent should prepare context before editing a repository.
 
-Slowave treats repeated workflows as candidates for procedural memory.
+Slowave captures these patterns implicitly — not as explicit procedures, but through the structure that consolidation produces. Repeated episodes strengthen prototype-to-prototype transition weights. The TransitionModel reads these weights at recall time to surface "what tends to come next" as a predictive signal alongside regular cosine retrieval.
 
-The long-term goal is for successful repeated behavior to become easier to reuse, without requiring the user to restate the same process every time.
+Explicit instructions ("run tests before pushing") are stored as constraint schemas and recalled when relevant. Observed repetition reinforces the transition graph. Over time, both signals converge: the recalled constraint and the predicted next-state point in the same direction without any procedural store.
 
-Procedural memory should be understood as learned workflow context, not autonomous execution. Slowave can help recall how a workflow is usually performed; the downstream client still performs or approves the actions.
+This approach treats behavioral structure as emergent rather than declared. The LLM remains the decision-maker; Slowave supplies context about what has tended to work.
 
 ---
 
@@ -436,7 +436,7 @@ Slowave is guided by a small set of principles:
 - Strengthen frequently useful information.
 - Reduce the influence of stale or unused information.
 - Supersede outdated information instead of accumulating contradictions.
-- Consolidate repeated workflows into reusable procedures.
+- Surface behavioral patterns from repeated workflows.
 - Keep memory local, inspectable, and portable.
 - Avoid dependency on any specific model vendor.
 - Inject context selectively instead of replaying history wholesale.
