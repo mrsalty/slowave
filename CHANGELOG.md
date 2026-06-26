@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.8.1](https://github.com/mrsalty/slowave/compare/slowave-v0.8.0...slowave-v0.8.1) (2026-06-26)
+
+
+### Bug Fixes
+
+* NameError in slowave_activate — undefined variables procedure_ma… ([ae05a33](https://github.com/mrsalty/slowave/commit/ae05a33e280463265b7e3a0535ce8650d6d8a1ba))
+* NameError in slowave_activate — undefined variables procedure_matches, cold_start, scope_id, context_id ([e45d8e2](https://github.com/mrsalty/slowave/commit/e45d8e28ada8566a78d41f89908b74d1f7ddb5d9))
+* NameError in slowave_activate — undefined variables procedure_matches, cold_start, scope_id, context_id ([5c33245](https://github.com/mrsalty/slowave/commit/5c33245ef31b9508ffb5d795872a84c661f165cd))
+* stale PID file after SIGKILL blocks daemon restart ([b06fa9e](https://github.com/mrsalty/slowave/commit/b06fa9ef3d53fa8fc5ac17e93f7a6199ca6cac11))
+
 ## [0.8.0](https://github.com/mrsalty/slowave/compare/slowave-v0.7.0...slowave-v0.8.0) (2026-06-26)
 
 
