@@ -341,58 +341,9 @@ CREATE INDEX IF NOT EXISTS idx_scope_registry_kind ON scope_registry(scope_kind)
 CREATE INDEX IF NOT EXISTS idx_scope_registry_last_active ON scope_registry(last_active_ts);
 
 -- ============================================================================
--- Procedural memory system
+-- Procedural memory system (REMOVED in Phase 1 P1 — 2026-06-25)
+-- Procedural behavior is now implicit: schemas + prototypes + TransitionModel
+-- + spreading activation. The explicit procedural_memories / procedural_memory_evidence
+-- tables are dropped via _apply_post_migrations() in sqlite_db.py for existing DBs.
+-- New installs never create them. See docs/iterations/20260625_procedural_phase1_plan.md
 -- ============================================================================
-
-CREATE TABLE IF NOT EXISTS procedural_memories (
-  id                         INTEGER PRIMARY KEY AUTOINCREMENT,
-  origin_scope_id            TEXT,
-  origin_scope_kind          TEXT,
-  goal                       TEXT,
-  task_type                  TEXT,
-  situation_signature_json   TEXT NOT NULL DEFAULT '{}',
-  requirements_json          TEXT NOT NULL DEFAULT '[]',
-  trigger_pattern_json       TEXT NOT NULL DEFAULT '[]',
-  procedure_steps_json       TEXT NOT NULL DEFAULT '[]',
-  confidence                 REAL NOT NULL DEFAULT 0.5,
-  success_count              INTEGER NOT NULL DEFAULT 0,
-  failure_count              INTEGER NOT NULL DEFAULT 0,
-  transfer_count             INTEGER NOT NULL DEFAULT 0,
-  status                     TEXT NOT NULL DEFAULT 'candidate', -- candidate/active/deprecated
-  embedding                  BLOB,
-  dim                        INTEGER,
-  created_at                 INTEGER NOT NULL,
-  updated_at                 INTEGER NOT NULL,
-  last_used_at               INTEGER,
-  source                     TEXT NOT NULL DEFAULT 'implicit', -- implicit/explicit
-  superseded_by_id           INTEGER,
-  generalization_stage       INTEGER NOT NULL DEFAULT 0 -- 0=scoped, 1=portable, 2=contextual, 3=global
-);
-CREATE INDEX IF NOT EXISTS idx_procedural_origin_scope ON procedural_memories(origin_scope_id);
-CREATE INDEX IF NOT EXISTS idx_procedural_goal ON procedural_memories(goal);
-CREATE INDEX IF NOT EXISTS idx_procedural_task_type ON procedural_memories(task_type);
-CREATE INDEX IF NOT EXISTS idx_procedural_status ON procedural_memories(status);
-CREATE INDEX IF NOT EXISTS idx_procedural_updated ON procedural_memories(updated_at);
-
-CREATE TABLE IF NOT EXISTS procedural_memory_evidence (
-  id                         INTEGER PRIMARY KEY AUTOINCREMENT,
-  procedure_id               INTEGER NOT NULL,
-  context_id                 TEXT,
-  session_id                 TEXT,
-  scope_id                   TEXT,
-  scope_kind                 TEXT,
-  goal                       TEXT,
-  task_type                  TEXT,
-  situation_json             TEXT NOT NULL DEFAULT '{}',
-  requirements_json          TEXT NOT NULL DEFAULT '[]',
-  outcome                    TEXT NOT NULL,
-  feedback                   TEXT NOT NULL,
-  used_memory_ids_json       TEXT NOT NULL DEFAULT '[]',
-  weight                     REAL NOT NULL DEFAULT 1.0,
-  created_at                 INTEGER NOT NULL,
-  FOREIGN KEY (procedure_id) REFERENCES procedural_memories(id) ON DELETE CASCADE
-);
-CREATE INDEX IF NOT EXISTS idx_proc_evidence_proc ON procedural_memory_evidence(procedure_id);
-CREATE INDEX IF NOT EXISTS idx_proc_evidence_context ON procedural_memory_evidence(context_id);
-CREATE INDEX IF NOT EXISTS idx_proc_evidence_scope ON procedural_memory_evidence(scope_id);
-CREATE INDEX IF NOT EXISTS idx_proc_evidence_goal ON procedural_memory_evidence(goal);

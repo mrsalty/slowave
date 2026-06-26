@@ -107,8 +107,6 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                 elif path.startswith("/api/schemas/"):
                     schema_id = int(path.split("/")[-1].replace("sch_", ""))
                     self._send_json(_schema_detail(db_path, schema_id))
-                elif path == "/api/procedures":
-                    self._send_json(_procedures_payload(db_path, qs))
                 elif path == "/api/worker/runs":
                     self._send_json(_worker_runs_payload(db_path, qs))
                 elif path == "/api/generalization":
@@ -283,7 +281,6 @@ def _status_payload(db_path: str) -> dict[str, Any]:
                 "episode_texts": _table_count(conn, "episode_text"),
                 "prototypes": _table_count(conn, "semantic_prototypes"),
                 "schemas": _table_count(conn, "schemas"),
-                "procedures": _table_count(conn, "procedural_memories"),
                 "edges": _table_count(conn, "prototype_edges"),
                 "schema_relations": _table_count(conn, "schema_relations"),
                 "schema_evidence": _table_count(conn, "schema_evidence"),
@@ -776,46 +773,6 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
         conn.close()
 
 
-def _procedures_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
-    if not os.path.exists(db_path):
-        return {"procedures": []}
-    limit = max(1, min(200, int((qs.get("limit") or [50])[0])))
-    scope = (qs.get("scope") or [""])[0]
-    status = (qs.get("status") or [""])[0]
-    conn = _connect(db_path)
-    try:
-        args: list[Any] = []
-        sql = "SELECT * FROM procedural_memories WHERE 1=1"
-        if status:
-            sql += " AND status = ?"
-            args.append(status)
-        if scope:
-            sql += " AND origin_scope_id = ?"
-            args.append(scope)
-        sql += " ORDER BY confidence DESC, created_at DESC LIMIT ?"
-        args.append(limit)
-        rows = conn.execute(sql, tuple(args)).fetchall()
-        out = []
-        for r in rows:
-            out.append({
-                "id": int(r["id"]),
-                "goal": r["goal"],
-                "task_type": r["task_type"],
-                "scope": r["origin_scope_id"],
-                "status": str(r["status"]),
-                "confidence": float(r["confidence"]),
-                "steps": _json_loads(r["procedure_steps_json"], []),
-                "trigger_pattern": _json_loads(r["trigger_pattern_json"], []),
-                "created_at": int(r["created_at"]) if r["created_at"] else 0,
-                "updated_at": int(r["updated_at"]) if r["updated_at"] else 0,
-            })
-        return {"procedures": out}
-    except sqlite3.Error:
-        return {"procedures": []}
-    finally:
-        conn.close()
-
-
 def _generalization_payload(db_path: str) -> dict[str, Any]:
     """Return cross-scope generalization stats: stage distribution + scope registry."""
     if not os.path.exists(db_path):
@@ -914,8 +871,6 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
             "SELECT COUNT(*) AS n, MAX(started_ts) AS last_ts,"
             " SUM(schemas_created) AS schemas_created,"
             " SUM(schemas_reinforced) AS schemas_reinforced,"
-            " SUM(procedures_promoted) AS procedures_promoted,"
-            " SUM(procedures_generalized) AS procedures_generalized,"
             " SUM(schemas_decayed) AS schemas_decayed,"
             " AVG(duration_ms) AS avg_ms"
             " FROM worker_runs WHERE error_text IS NULL"
@@ -927,8 +882,6 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
                 "last_run_ts": total_row["last_ts"] if total_row else None,
                 "total_schemas_created": int(total_row["schemas_created"] or 0) if total_row else 0,
                 "total_schemas_reinforced": int(total_row["schemas_reinforced"] or 0) if total_row else 0,
-                "total_procedures_promoted": int(total_row["procedures_promoted"] or 0) if total_row else 0,
-                "total_procedures_generalized": int(total_row["procedures_generalized"] or 0) if total_row else 0,
                 "total_schemas_decayed": int(total_row["schemas_decayed"] or 0) if total_row else 0,
                 "avg_duration_ms": round(float(total_row["avg_ms"] or 0), 1) if total_row else 0,
             },
@@ -1296,7 +1249,6 @@ tr.expandable:hover td{background:var(--panel3)}
   <nav class="nav-tabs">
     <button class="tab active" data-tab="overview">📊 Overview</button>
     <button class="tab" data-tab="schemas">📖 Schemas</button>
-    <button class="tab" data-tab="procedures">🧭 Procedures</button>
     <button class="tab" data-tab="generalization">🌐 Generalization</button>
     <button class="tab" data-tab="graph">🕸 Graph</button>
     <button class="tab" data-tab="recall">🔍 Recall</button>
@@ -1358,20 +1310,6 @@ tr.expandable:hover td{background:var(--panel3)}
     <div class="table-wrap" id="schemaTable"></div>
     <div id="schemaDetail" style="margin-top:12px"></div>
   </div>
-</section>
-
-<!-- PROCEDURES -->
-<section id="procedures" class="section">
-  <div class="panel" style="margin-bottom:10px">
-    <div class="controls">
-      <input id="procScope" placeholder="scope filter" style="width:180px"/>
-      <select id="procStatus"><option value="">All statuses</option><option>active</option><option>candidate</option><option>archived</option></select>
-      <input id="procLimit" type="number" value="50" min="1" max="200" style="width:70px"/>
-      <button class="btn primary" onclick="loadProcedures()">Load</button>
-    </div>
-  </div>
-  <div id="procLoading" class="loading-overlay"><div class="spinner"></div> Loading procedures…</div>
-  <div id="procList"></div>
 </section>
 
 <!-- GENERALIZATION -->
@@ -1533,7 +1471,6 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   const tab=b.dataset.tab;
   if(tab==="overview")renderPulse();
   else if(tab==="schemas")loadSchemas();
-  else if(tab==="procedures")loadProcedures();
   else if(tab==="graph")loadGraph();
   else if(tab==="worker")loadWorker();
   else if(tab==="generalization")loadGeneralization();
@@ -1586,7 +1523,6 @@ async function loadStatus(){
     {icon:"🎞",label:"Episodes",val:num(s.episodes),sub:"formed",accent:"var(--blue)"},
     {icon:"🔵",label:"Prototypes",val:num(s.prototypes),sub:"semantic",accent:"var(--purple)"},
     {icon:"📖",label:"Schemas",val:num(s.schemas),sub:`<span style="display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap"><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--green);display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:var(--text)">${num(h.active_schemas)} active</span></span><span style="display:inline-flex;align-items:center;gap:4px"><span style="width:8px;height:8px;border-radius:50%;background:var(--amber);display:inline-block;flex-shrink:0"></span><span style="font-size:11px;color:var(--text)">${num(h.needs_review_schemas)} needs review</span></span></span>`,accent:"var(--green)",raw:true},
-    {icon:"🧭",label:"Procedures",val:num(s.procedures),sub:"stored",accent:"var(--cyan)"},
     {icon:"🕸",label:"Edges",val:num(s.edges),sub:"prototype",accent:"var(--purple)"},
     {icon:"🔗",label:"Relations",val:num(s.schema_relations),sub:"schema",accent:"var(--purple)"},
     {icon:"🗣",label:"Feedback",val:num(s.feedback_events),sub:"events",accent:"var(--cyan)"},
@@ -1634,7 +1570,6 @@ async function loadStatus(){
   const maxSalience=Number(sal.max||0);
   const salPct=maxSalience>0?Math.round(avgSal/maxSalience*100):0;
   const lastConsolidated=d.last_consolidation_ts?"Last session: "+fmtTs(d.last_consolidation_ts):"No sessions yet";
-  const procCount=num(s.procedures);
   document.getElementById("schemaHealthPanel").innerHTML=`
     <div class="status-bar">${barSegs||"<div class=\"status-bar-seg\" style=\"width:100%;background:var(--line)\"></div>"}</div>
     <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0">
@@ -1647,7 +1582,6 @@ async function loadStatus(){
       <div><span style="color:var(--muted)">Avg salience</span><br><b>${avgSal.toFixed(3)}</b></div>
       <div><span style="color:var(--muted)">Max salience</span><br><b>${maxSalience.toFixed(3)}</b></div>
       <div><span style="color:var(--muted)">Duplicates</span><br><b>${num(h.active_exact_duplicate_rows||0)}</b></div>
-      <div><span style="color:var(--muted)">Procedures</span><br><b>${procCount}</b></div>
     </div>
     <div style="margin-top:10px;font-size:11px;color:var(--muted)">${esc(lastConsolidated)}</div>
   `;
@@ -1957,46 +1891,6 @@ async function expandSchemaRow(tr,schemaId){
   tr.after(expTr);
 }
 
-// ── PROCEDURES ──
-async function loadProcedures(){
-  const ld=document.getElementById("procLoading");
-  const list=document.getElementById("procList");
-  ld.classList.add("show");list.innerHTML="";
-  try{
-    const sc=encodeURIComponent(document.getElementById("procScope").value);
-    const st=encodeURIComponent(document.getElementById("procStatus").value);
-    const lim=document.getElementById("procLimit").value;
-    const d=await getJSON(`/api/procedures?limit=${lim}&scope=${sc}&status=${st}`);
-    const procs=d.procedures||[];
-    if(!procs.length){list.innerHTML=emptyState("No procedures stored yet.","🧭");return;}
-    list.innerHTML=procs.map(p=>{
-      const steps=(p.steps||[]).map((s,i)=>`<li><strong>${i+1}.</strong> ${esc(s)}</li>`).join("");
-      const triggers=(p.trigger_pattern||[]).map(t=>`<span class="pill">${esc(t)}</span>`).join("");
-      const confPct=Math.round((p.confidence||0)*100);
-      return `<div class="proc-card">
-        <div class="proc-header">
-          <div>
-            <div class="proc-goal">${esc(p.goal||"(no goal)")}</div>
-            <div class="proc-meta">
-              ${pill(p.status)}
-              ${p.task_type?`<span class="pill">${esc(p.task_type)}</span>`:""}
-              ${p.scope?`<span class="pill">${esc(p.scope)}</span>`:""}
-              <span class="pill">proc_${p.id}</span>
-            </div>
-          </div>
-          <div style="text-align:right;flex-shrink:0">
-            <div style="font-size:12px;color:var(--muted)">Confidence</div>
-            ${confBar(p.confidence||0)}
-          </div>
-        </div>
-        ${triggers?`<div style="margin-bottom:8px;font-size:12px;color:var(--muted)">Triggers: ${triggers}</div>`:""}
-        <div class="proc-steps"><ol>${steps}</ol></div>
-        <div style="margin-top:8px;font-size:11px;color:var(--muted)">Created ${fmtDate(p.created_at)} · Updated ${fmtDate(p.updated_at)}</div>
-      </div>`;
-    }).join("");
-  }finally{ld.classList.remove("show");}
-}
-
 // ── WORKER ──
 async function loadWorker(){
   const ld=document.getElementById("workerLoading");
@@ -2014,8 +1908,6 @@ async function loadWorker(){
       {icon:"📖",label:"Schemas created",val:num(sum.total_schemas_created),accent:"var(--green)"},
       {icon:"🔁",label:"Reinforced",val:num(sum.total_schemas_reinforced),accent:"var(--cyan)"},
       {icon:"⏱",label:"Avg duration",val:(sum.avg_duration_ms||0).toFixed(0)+"ms",accent:"var(--amber)"},
-      {icon:"🧭",label:"Procedures +",val:num(sum.total_procedures_promoted),accent:"var(--amber)"},
-      {icon:"🔄",label:"Procs generalized",val:num(sum.total_procedures_generalized),accent:"var(--cyan)"},
       {icon:"📉",label:"Decayed",val:num(sum.total_schemas_decayed),accent:"var(--red)"},
       {icon:"🕐",label:"Last run",val:fmtTsCompact(sum.last_run_ts),sub:fmtTsCompactSub(sum.last_run_ts),accent:"var(--muted)",raw:true},
     ];
@@ -2035,7 +1927,7 @@ async function loadWorker(){
       tbl.innerHTML=emptyState("No worker runs recorded yet. Start the worker with: slowave worker","🧠");
       return;
     }
-    const heads=["#","Started","Duration","Trigger","Schemas +","~Reinf.","Protos","Procs +","Decayed","Eps proc","Status"];
+    const heads=["#","Started","Duration","Trigger","Schemas +","~Reinf.","Protos","Decayed","Eps proc","Status"];
     const rows=runs.map(r=>[
       r.id,
       fmtTs(r.started_ts),
@@ -2044,14 +1936,13 @@ async function loadWorker(){
       `<b style="color:var(--green)">+${r.schemas_created||0}</b>`,
       num(r.schemas_reinforced||0),
       num(r.prototypes_processed||0),
-      `<b style="color:var(--amber)">+${r.procedures_promoted||0}</b>`,
       `<span style="color:var(--red)">-${r.schemas_decayed||0}</span>`,
       num(r.episodes_processed||0),
       r.error_text
         ?`<span class="pill pill-contradicted" title="${esc(r.error_text)}">error</span>`
         :`<span class="pill pill-active">ok</span>`,
     ]);
-    const rawCols=[4,7,8,10];
+    const rawCols=[4,7,9];
     tbl.innerHTML=table(heads,rows,rawCols);
   }finally{ld.classList.remove("show");}
 }
@@ -2074,7 +1965,6 @@ function renderWorkerChart(runs){
   const CHANNELS=[
     {key:"schemas_created",    label:"schemas +",  color:"#3b82f6",gc:"rgba(59,130,246,"},
     {key:"schemas_reinforced", label:"reinforced", color:"#10b981",gc:"rgba(16,185,129,"},
-    {key:"procedures_promoted",label:"procs +",    color:"#f5b942",gc:"rgba(245,185,66,"},
     {key:"schemas_decayed",    label:"decayed",    color:"#f04e6a",gc:"rgba(240,78,106,"},
   ];
   const gmax=Math.max(1,...pts_runs.flatMap(r=>CHANNELS.map(ch=>r[ch.key]||0)));

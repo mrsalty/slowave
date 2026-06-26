@@ -147,6 +147,7 @@ class TestScopeHandling:
         assert global_id in returned_ids, "Global fact (scope_id=None) should be included in strict scope"
 
 
+
 class TestFeedbackSuppression:
     """Wrong/stale feedback suppression."""
 
@@ -362,60 +363,3 @@ class TestEpisodeDeduplication:
         )
 
 
-class TestProceduralMemory:
-    """Procedural memory retrieval."""
-
-    def test_explicit_seeded_procedure_retrieved_by_goal(self, engine_with_encoder: SlowaveEngine) -> None:
-        """User-seeded procedures should be retrieved."""
-        eng = engine_with_encoder
-        
-        # Seed a procedure
-        proc_id = eng.remember_procedure(
-            procedure_steps=["step 1: setup", "step 2: execute", "step 3: verify"],
-            goal="implement test case",
-            task_type="testing",
-            scope="project:test",
-        )
-        
-        # Retrieve by goal
-        matches = eng.retrieve_procedures(
-            goal="implement test case",
-            task_type="testing",
-            scope="project:test",
-        )
-        
-        assert len(matches) > 0, "Procedure not retrieved by goal"
-        assert matches[0].procedure.id == proc_id
-    
-    def test_procedure_retrieved_by_task_type_match(self, engine_with_encoder: SlowaveEngine) -> None:
-        """Procedures should be retrieved by task type match."""
-        eng = engine_with_encoder
-        
-        proc_id = eng.remember_procedure(
-            procedure_steps=["collect data", "analyze", "report"],
-            task_type="data_analysis",
-        )
-        
-        matches = eng.retrieve_procedures(task_type="data_analysis")
-        assert len(matches) > 0, "Procedure not retrieved by task_type"
-        assert matches[0].procedure.id == proc_id
-    
-    def test_auto_trigger_extraction_from_goal_and_steps(self, engine_with_encoder: SlowaveEngine) -> None:
-        """Auto-trigger extraction should create keywords from goal + steps."""
-        eng = engine_with_encoder
-        
-        proc_id = eng.remember_procedure(
-            procedure_steps=["initialize", "process", "finalize"],
-            goal="run batch job",
-            task_type="batch_processing",
-        )
-        
-        proc = eng.procedures.get(proc_id)
-        
-        # Auto-extracted triggers should include keywords from goal, task_type, and steps
-        triggers = set(proc.trigger_pattern)
-        assert len(triggers) > 0, "No auto-extracted triggers"
-        # At least some of these key terms should be present
-        expected_terms = {"run", "batch", "job", "process", "initialize"}
-        found_terms = expected_terms & triggers
-        assert len(found_terms) > 0, f"Expected some of {expected_terms}, found {triggers}"
