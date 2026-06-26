@@ -59,25 +59,66 @@ def read_pid() -> int | None:
     return None
 
 
+def _cleanup_stale_pid_file() -> None:
+    """Remove the PID file when the stored PID no longer exists or isn't a slowave process."""
+    pid_path = _pid_file_path()
+    try:
+        if pid_path.exists():
+            pid_path.unlink()
+            log.info("Removed stale PID file: %s", pid_path)
+    except Exception as e:
+        log.warning("Could not remove stale PID file %s: %s", pid_path, e)
+
+
+def _is_slowave_process(pid: int) -> bool:
+    """Check whether *pid* is actually a slowave process (not a PID-reuse collision).
+
+    Uses ``ps`` to inspect the command line.  Returns True when verification
+    succeeds and ``slowave`` appears in the args; returns True on any error so
+    a live daemon is never falsely rejected.
+    """
+    import subprocess
+
+    try:
+        result = subprocess.run(
+            ["ps", "-p", str(pid), "-o", "args="],
+            capture_output=True,
+            text=True,
+            timeout=3,
+        )
+        return "slowave" in result.stdout
+    except Exception:
+        # Can't verify — err on the side of not breaking a live daemon.
+        return True
+
+
 def is_running() -> bool:
-    """Return True if a daemon process with the stored PID is alive."""
+    """Return True if a daemon process with the stored PID is alive *and* is a slowave process."""
     pid = read_pid()
     if pid is None:
         return False
     try:
         os.kill(pid, 0)  # signal 0 = existence check, no actual signal sent
-        return True
     except ProcessLookupError:
+        _cleanup_stale_pid_file()
         return False
     except PermissionError:
         # Process exists but owned by another user — treat as running
         return True
+
+    # PID exists, but verify it's actually a slowave process (not a PID-reuse collision
+    # from a SIGKILL'd daemon whose PID was reassigned).
+    if not _is_slowave_process(pid):
+        _cleanup_stale_pid_file()
+        return False
+    return True
 
 
 def stop_daemon() -> bool:
     """Send SIGTERM to the running daemon.
 
     Returns True if a signal was sent, False if no daemon was found.
+    Cleans up the stale PID file when the stored process is already gone.
     """
     pid = read_pid()
     if pid is None:
@@ -87,7 +128,8 @@ def stop_daemon() -> bool:
         log.info("Sent SIGTERM to daemon pid=%d", pid)
         return True
     except ProcessLookupError:
-        log.warning("Daemon pid=%d not found (already stopped?)", pid)
+        log.warning("Daemon pid=%d not found — removing stale PID file.", pid)
+        _cleanup_stale_pid_file()
         return False
     except PermissionError as e:
         log.error("Cannot stop daemon pid=%d: %s", pid, e)
