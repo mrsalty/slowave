@@ -11,7 +11,6 @@ import time
 from typing import Any
 
 from slowave.core.feedback import FeedbackConfig
-from slowave.core.procedural import ProceduralMemoryStore, parse_procedure_ids
 from slowave.core.scope import scope_kind as _scope_kind
 from slowave.storage.sqlite_db import SQLiteDB
 from slowave.symbolic.schema_store import SchemaStore
@@ -26,12 +25,11 @@ class FeedbackService:
         *,
         db: SQLiteDB,
         schemas: SchemaStore,
-        procedures: ProceduralMemoryStore,
         cfg: FeedbackConfig,
     ):
         self.db = db
         self.schemas = schemas
-        self.procedures = procedures
+        self._parse_procedure_ids = lambda ids: []  # removed Phase 1 P1
         self.cfg = cfg
 
     # ---- public API --------------------------------------------------------
@@ -315,10 +313,6 @@ class FeedbackService:
         irrelevant_ids = _parse_schema_ids(irrelevant_memory_ids)
         stale_ids = _parse_schema_ids(stale_memory_ids)
         wrong_ids = _parse_schema_ids(wrong_memory_ids)
-        used_proc_ids = parse_procedure_ids(used_procedure_ids)
-        irrelevant_proc_ids = parse_procedure_ids(irrelevant_procedure_ids)
-        stale_proc_ids = parse_procedure_ids(stale_procedure_ids)
-        wrong_proc_ids = parse_procedure_ids(wrong_procedure_ids)
 
         applied: dict[str, list] = {"reinforced": [], "penalized": [], "marked_review": [], "procedures": []}
 
@@ -392,32 +386,7 @@ class FeedbackService:
                     except KeyError:
                         pass
 
-        for proc_id, proc_feedback in (
-            [(pid, fb_label) for pid in used_proc_ids]
-            + [(pid, "irrelevant") for pid in irrelevant_proc_ids]
-            + [(pid, "stale") for pid in stale_proc_ids]
-            + [(pid, "wrong") for pid in wrong_proc_ids]
-        ):
-            try:
-                updated = self.procedures.apply_feedback(
-                    procedure_id=proc_id,
-                    feedback=proc_feedback,
-                    outcome=outcome,
-                    context_id=str(retrieval_id),
-                    session_id=session_id,
-                    scope_id=scope_id,
-                    goal=goal,
-                    task_type=task_type,
-                    situation=situation or {},
-                    requirements=requirements or [],
-                    used_memory_ids=used_memory_ids or [],
-                )
-                applied["procedures"].append(
-                    {"id": f"proc_{proc_id}", "feedback": proc_feedback,
-                     "confidence": updated.confidence, "status": updated.status}
-                )
-            except KeyError:
-                pass
+        # Procedure feedback removed in Phase 1 P1
 
         # Persist feedback event; ensure parent FK row exists first.
         conn = self.db.connect()

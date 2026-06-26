@@ -85,16 +85,16 @@ Responsibilities:
 - Contradiction handling
 - Preference and decision persistence
 
-### Procedural Layer
+### Behavioral Patterns
 
-Stores reusable workflows and successful task strategies.
+Recurring workflows emerge implicitly — no explicit procedural store. Strong prototype-to-prototype transitions and co-activated schema clusters capture repeated behavioral structure.
 
 Responsibilities:
 
-- Workflow reuse
-- Goal-oriented recall
-- Cross-scope knowledge transfer
-- Habit formation
+- Pattern emergence via prototype transition graph (w_transition weights)
+- Predictive recall: TransitionModel surfaces "what tends to come next"
+- Co-activation of related constraints and preferences
+- Habit formation through salience strengthening over repeated episodes
 
 ---
 

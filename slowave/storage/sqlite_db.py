@@ -164,7 +164,11 @@ class SQLiteDB:
         """
         conn = self.connect()
 
-        # ---- Stage 9: episode_prototype_map composite PK ---------------
+        # ---- Phase 1 P1: drop procedural_memories tables (2026-06-25) ---------
+        # Procedural behavior is now implicit via schemas + prototypes +
+        # TransitionModel + spreading activation.
+        for tbl in ("procedural_memory_evidence", "procedural_memories"):
+            conn.execute(f"DROP TABLE IF EXISTS {tbl}")
         # Legacy schema declared PRIMARY KEY (episode_id) which constrained
         # an episode to one prototype. Stage 9 needs one mapping per
         # scale, so the PK is now (episode_id, prototype_id). SQLite

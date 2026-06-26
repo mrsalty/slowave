@@ -315,17 +315,6 @@ def context_cmd(
         mode=mode,
         limit=limit,
     )
-    procedures = eng.retrieve_procedures(
-        query=query,
-        scope=scope,
-        goal=goal,
-        task_type=task_type,
-        situation=situation_obj,
-        requirements=list(requirements),
-        topics=list(topics),
-        entities=list(entities),
-        mode=mode,
-    )
     if ctx.obj["json"]:
         _print(
             {
@@ -352,15 +341,7 @@ def context_cmd(
                     }
                     for item in brief.items
                 ],
-                "procedures": [
-                    {
-                        "id": f"proc_{m.procedure.id}",
-                        "score": m.score,
-                        "reason": m.reason,
-                        "procedure": asdict(m.procedure),
-                    }
-                    for m in procedures
-                ],
+                "procedures": [],
                 "activation_trace": (
                     [asdict(t) for t in brief.activation_trace] if mode == "debug" else []
                 ),
@@ -382,16 +363,6 @@ def context_cmd(
                 f" tags={','.join(s.tags)}"
                 f" reason={item.reason}" + ("  needs_review" if s.needs_review else "")
             )
-        for match in procedures:
-            p = match.procedure
-            click.echo(f"  [proc_{p.id}] score={match.score:.3f} goal={p.goal} task={p.task_type}")
-            for step in p.procedure_steps[: eng.cfg.procedural.max_steps_rendered]:
-                click.echo(f"    - {step}")
-        if mode == "debug":
-            click.echo(f"\nSuppressed: {brief.suppressed}")
-        click.echo("\nCite memories as [sch_xxx] or [epi_xxx] when you use them.")
-    eng.close()
-
 
 @cli.command("show")
 @click.argument("ref")
@@ -487,7 +458,7 @@ def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
             "memory": {
                 "episodes": data.get("episodes", 0),
                 "schemas": data.get("schemas", 0),
-                "procedures": data.get("procedures", 0),
+                "procedures": 0,
                 "prototypes": data.get("prototypes", 0),
                 "edges": data.get("edges", 0),
             },
@@ -506,7 +477,6 @@ def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
         renderer.section("Memory (Stored Schemas)")
         renderer.item("Episodes", f"{data.get('episodes', 0):,}")
         renderer.item("Schemas", f"{data.get('schemas', 0):,}")
-        renderer.item("Procedures", f"{data.get('procedures', 0):,}")
         renderer.item("Prototypes", f"{data.get('prototypes', 0):,}")
         renderer.item("Edges", f"{data.get('edges', 0):,}")
         
@@ -525,9 +495,6 @@ def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
         # Hints
         if data.get("episodes", 0) == 0:
             renderer.hint("No memories yet. Episodes will appear after sessions.")
-        if data.get("procedures", 0) == 0:
-            renderer.hint("Procedures are empty. They will appear after repeated workflows.")
-        
         click.echo()
 
 

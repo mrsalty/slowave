@@ -62,7 +62,6 @@ fact
 preference
 decision
 constraint
-procedure
 task
 open_question
 warning
