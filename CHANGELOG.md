@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.0](https://github.com/mrsalty/slowave/compare/slowave-v0.7.0...slowave-v0.8.0) (2026-06-26)
+
+
+### Features
+
+* remove explicit procedural layer; add emergent generalization test ([15ee568](https://github.com/mrsalty/slowave/commit/15ee5686447b8b6a7a05f37c4ae3a4ec325ae3ab))
+* remove explicit procedural layer; add emergent generalization test ([27687ed](https://github.com/mrsalty/slowave/commit/27687ed421b696d6128bedba5b60c9f37d042bec))
+
 ## [0.7.0](https://github.com/mrsalty/slowave/compare/slowave-v0.6.1...slowave-v0.7.0) (2026-06-24)
 
 
