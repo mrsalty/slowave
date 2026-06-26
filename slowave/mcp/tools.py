@@ -127,7 +127,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
             session_id: informational; used automatically by remember/commit.
             rendered: human-readable memory brief.
             schemas: [{id, text, activation, reason, source_kind}, ...].
-            procedures: matching workflows.
         """
         import uuid
 
@@ -147,14 +146,14 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 limit=limit,
                 mode=mode,
             )
+            context_id = str(uuid.uuid4())
+            cold_start = len(brief.items) == 0
             _internal = {
                 "memory_ids": [f"sch_{item.schema.id}" for item in brief.items],
-                "procedure_ids": [f"proc_{m.procedure.id}" for m in procedure_matches],
                 "schemas": [
                     {"id": f"sch_{item.schema.id}", "activation": item.activation}
                     for item in brief.items
                 ],
-                "procedures": [{"id": f"proc_{m.procedure.id}"} for m in procedure_matches],
             }
             public_schemas = [
                 {
@@ -171,21 +170,9 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 }
                 for item in brief.items
             ]
-            public_procedures = [
-                {
-                    "id": f"proc_{m.procedure.id}",
-                    "goal": m.procedure.goal,
-                    "task_type": m.procedure.task_type,
-                    "trigger_pattern": m.procedure.trigger_pattern,
-                    "procedure_steps": m.procedure.procedure_steps,
-                    "confidence": m.procedure.confidence,
-                    "score": m.score,
-                }
-                for m in procedure_matches
-            ]
             rendered = brief.rendered
             if cold_start:
-                scope_label = scope_id if scope_id else "global (no scope set — consider passing scope='project:<name>')"
+                scope_label = scope if scope else "global (no scope set — consider passing scope='project:<name>')"
                 hint = (
                     f"[cold start] No memories found for scope '{scope_label}'.\n"
                     "Recommended on cold start:\n"
@@ -207,7 +194,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 "rendered": rendered,
                 "cold_start": cold_start,
                 "schemas": public_schemas,
-                "procedures": public_procedures,
             }
             if cold_start:
                 response["suggested_actions"] = ["remember_project_facts"]
@@ -270,7 +256,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 "session_id": None,
                 "rendered": "",
                 "schemas": [],
-                "procedures": [],
                 "error": str(e),
             }
     @mcp.tool(name="slowave_recall")
