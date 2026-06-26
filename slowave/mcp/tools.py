@@ -146,8 +146,10 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 limit=limit,
                 mode=mode,
             )
-            context_id = str(uuid.uuid4())
-            cold_start = len(brief.items) == 0
+            scope_id = scope.strip() if scope else None
+            memory_count = eng.schemas.count_by_scope(scope_id)
+            cold_start = memory_count == 0
+            context_id = f"ctx_{uuid.uuid4().hex[:12]}"
             _internal = {
                 "memory_ids": [f"sch_{item.schema.id}" for item in brief.items],
                 "schemas": [
@@ -172,7 +174,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
             ]
             rendered = brief.rendered
             if cold_start:
-                scope_label = scope if scope else "global (no scope set — consider passing scope='project:<name>')"
+                scope_label = scope_id if scope_id else "global (no scope set — consider passing scope='project:<name>')"
                 hint = (
                     f"[cold start] No memories found for scope '{scope_label}'.\n"
                     "Recommended on cold start:\n"
@@ -230,7 +232,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                     eng,
                     context_id=context_id,
                     session_id=sid,
-                    scope_id=scope,
+                    scope_id=scope_id,
                     scope_kind=scope_kind_val,
                     query=query,
                     goal=goal,
