@@ -15,7 +15,6 @@ from slowave.latent.transition_model import TransitionModelConfig
 from slowave.symbolic.encoder import EncoderConfig
 from slowave.core.paths import default_db_path
 from slowave.core.feedback import FeedbackConfig
-from slowave.core.procedural import ProceduralMemoryConfig
 
 
 @dataclass(frozen=True)
@@ -50,8 +49,6 @@ class SlowaveConfig:
     # feedback system
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
 
-    # procedural memory system
-    procedural: ProceduralMemoryConfig = field(default_factory=ProceduralMemoryConfig)
 
     @staticmethod
     def default_schema_path() -> str:

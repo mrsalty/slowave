@@ -58,8 +58,8 @@ The system has two core layers plus supporting infrastructure:
 ### Core modules (`slowave/core/`) — procedural memory, feedback, context gating, supersession
 
 - **ProceduralMemoryStore** (`procedural.py`) — deterministic scope-aware procedural memory. Matching is lexical/metadata scoring + feedback-updated confidence, no LLM. Statuses: candidate → active → deprecated.
-- **ProceduralEnforcement** (`procedural_enforcement.py`) — Tier 1: step-coverage matching via cosine similarity between procedure steps and session events. Auto-records feedback from session_end.
-- **ProceduralEnrichment** (`procedural_enrichment.py`) — Tier 2: extracts and deduplicates procedure steps from successful sessions.
+  - Procedural behavior is implicit via schemas + prototypes + TransitionModel
+
 - **SupersessionManifold** (`supersession_manifold.py`) — SVD1-based latent supersession direction across 7 domains.
 - **FeedbackSystem** (`feedback.py`) — numeric learning signals from symbolic labels (useful/irrelevant/stale/wrong/missing).
 - **WorkingMemoryGate** (`context.py`) — activation-based selection with token budget enforcement for working context.
@@ -68,7 +68,7 @@ The system has two core layers plus supporting infrastructure:
 
 ### Engine & storage
 
-- **SlowaveEngine** (`core/engine.py`) — facade wiring latent + symbolic + storage + procedural. Session lifecycle, remember/recall, consolidation, feedback, stats, procedure promotion.
+- **SlowaveEngine** (`core/engine.py`) — facade wiring latent + symbolic + storage + procedural. Session lifecycle, remember/recall, consolidation, feedback, stats, consolidation.
 - **SQLiteDB** (`storage/sqlite_db.py`, `storage/schema.sql`) — single-file SQLite; all state durable here. Auto-migrates on init.
 - **Config** (`core/config.py`) — embedding dim and per-subsystem configs. Supports `disable_encoder` for cheap encoder-free instances.
 
@@ -93,7 +93,7 @@ event_append → raw log + FAISS (1ms, no LLM)
 session_end  → micro/macro episodes → procedural enforcement
 worker       → replay → prototypes → latent schemas → graph reinforcement
                → promote procedure candidates → supersession detection
-recall       → cosine + predictive + spreading-activation + temporal → ranked episodes/schemas/procedures
+recall       → cosine + predictive + spreading-activation + temporal → ranked episodes/schemas
 ```
 
 Consolidation is fully decoupled from ingest.

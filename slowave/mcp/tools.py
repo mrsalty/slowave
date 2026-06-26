@@ -147,21 +147,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 limit=limit,
                 mode=mode,
             )
-            procedure_matches = eng.retrieve_procedures(
-                query=query,
-                scope=scope,
-                goal=goal,
-                task_type=task_type,
-                situation=situation or {},
-                requirements=requirements or [],
-                topics=topics or [],
-                entities=entities or [],
-                mode=mode,
-            )
-            scope_id = scope.strip() if scope else None
-            memory_count = eng.schemas.count_by_scope(scope_id)
-            cold_start = memory_count == 0
-            context_id = f"ctx_{uuid.uuid4().hex[:12]}"
             _internal = {
                 "memory_ids": [f"sch_{item.schema.id}" for item in brief.items],
                 "procedure_ids": [f"proc_{m.procedure.id}" for m in procedure_matches],
@@ -288,7 +273,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 "procedures": [],
                 "error": str(e),
             }
-
     @mcp.tool(name="slowave_recall")
     async def slowave_recall(
         query: str,
@@ -298,13 +282,10 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         mode: str = "default",
     ) -> dict[str, Any]:
         """Semantic retrieval: bring relevant memories into working memory.
-
         Use for deliberate mid-task lookups when you need specific historical
         context beyond what activate surfaced.
-
         WARNING: omitting scope returns memories from ALL projects. Always pass
         scope=\"project:<name>\" when working within a specific project.
-
         Args:
             query: natural-language query.
             top_k: max memories returned (default 5).
@@ -312,19 +293,16 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
             scope: optional scope filter (e.g. \"project:myrepo\"). Recommended.
             mode: \"default\" (active only), \"strict_scope\" (scope-hard-filtered),
                   \"broad\" (active + needs_review), \"debug\" (all statuses).
-
         Returns:
             retrieval_id: pass to slowave_reinforce after using memories.
             memories: list of {id, text, activation, reason, source_kind}.
         """
         import uuid
-
         try:
             eng = build_engine()
             r = eng.recall(query, top_k=top_k, evidence=evidence, scope=scope, mode=mode)
             recall_id = f"rec_{uuid.uuid4().hex[:12]}"
             from slowave.mcp.compact import CompactSchema
-
             _internal_ids = [f"sch_{s.id}" for s in r.schemas]
             _internal_schemas = [
                 {
@@ -359,7 +337,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         except Exception as e:
             log.error("slowave_recall failed: %s", e, exc_info=True)
             return {"retrieval_id": None, "memories": [], "error": str(e)}
-
     @mcp.tool(name="slowave_remember")
     async def slowave_remember(
         content: str,
@@ -368,18 +345,15 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         session_id: str | None = None,
     ) -> dict[str, Any]:
         """Explicitly encode a durable typed claim into long-term memory.
-
         Use for decisions, preferences, constraints, lessons, or any fact that
         should persist across sessions. If called after slowave_activate without
         a session_id, the implicit session is used automatically.
-
         Args:
             content: the claim, as a complete sentence.
             type: fact|preference|decision|constraint|procedure|task|
                   open_question|warning|lesson|artifact.
             scope: optional scope, e.g. \"project:my-repo\".
             session_id: optional; inferred from activate's implicit session if omitted.
-
         IMPORTANT: Use ONLY for durable knowledge that should persist across sessions:
         decisions, lessons, preferences, constraints, architectural facts, procedures.
         Do NOT store ephemeral task state (current PR, in-progress bug, temp workarounds)
@@ -397,7 +371,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         except Exception as e:
             log.error("slowave_remember failed: %s", e, exc_info=True)
             return {"stored": False, "error": str(e), "type": type, "scope": scope}
-
     @mcp.tool(name="slowave_reinforce")
     async def slowave_reinforce(
         retrieval_id: str,
@@ -407,27 +380,19 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         irrelevant_memory_ids: list[str] | None = None,
         stale_memory_ids: list[str] | None = None,
         wrong_memory_ids: list[str] | None = None,
-        used_procedure_ids: list[str] | None = None,
-        irrelevant_procedure_ids: list[str] | None = None,
-        stale_procedure_ids: list[str] | None = None,
-        wrong_procedure_ids: list[str] | None = None,
     ) -> dict[str, Any]:
         """Strengthen or suppress memories based on how useful they were.
-
         Call after using memories from slowave_activate or slowave_recall.
         goal, task_type, scope, session, situation, requirements are auto-derived
         from the original retrieval snapshot — you only supply the signal.
-
         Feedback: useful|partially_useful|irrelevant|stale|wrong|missing|too_much_context
         Outcome:  success|partial|failure|unknown
-
         Args:
             retrieval_id: from slowave_activate or slowave_recall response.
             feedback: quality label for the retrieved memories.
             outcome: result of the downstream task.
             used_memory_ids: schema IDs that were actually relied on.
             irrelevant/stale/wrong_memory_ids: IDs needing penalty or review.
-            used/irrelevant/stale/wrong_procedure_ids: same for procedures.
         """
         try:
             eng = build_engine(disable_encoder=True)
@@ -439,15 +404,10 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 irrelevant_memory_ids=irrelevant_memory_ids,
                 stale_memory_ids=stale_memory_ids,
                 wrong_memory_ids=wrong_memory_ids,
-                used_procedure_ids=used_procedure_ids,
-                irrelevant_procedure_ids=irrelevant_procedure_ids,
-                stale_procedure_ids=stale_procedure_ids,
-                wrong_procedure_ids=wrong_procedure_ids,
             )
         except Exception as e:
             log.error("slowave_reinforce failed: %s", e, exc_info=True)
             return {"error": str(e), "retrieval_id": retrieval_id}
-
     @mcp.tool(name="slowave_commit")
     async def slowave_commit(
         outcome: str | None = None,
@@ -455,15 +415,12 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         session_id: str | None = None,
     ) -> dict[str, Any]:
         """Close the current task and trigger offline memory consolidation.
-
         Call at the end of every task. If skipped, the idle-session reaper closes
         the session after SLOWAVE_SESSION_IDLE_TIMEOUT seconds (default 3600).
-
         Args:
             outcome: task result — success|partial|failure|unknown.
             scope: scope used in activate (clears the implicit session binding).
             session_id: from activate response; inferred from scope if omitted.
-
         Returns:
             session_id: the session that was closed.
             episodes_formed: number of episodic memories created.
@@ -491,7 +448,6 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         except Exception as e:
             log.error("slowave_commit failed: %s", e, exc_info=True)
             return {"session_id": session_id, "episodes_formed": 0, "error": str(e)}
-
     @mcp.tool(name="slowave_stats")
     async def slowave_stats() -> dict[str, Any]:
         """Return system counts: episodes, prototypes, schemas, edges."""
