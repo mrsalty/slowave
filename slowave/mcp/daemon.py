@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 import os
 import signal
+import sys
 from pathlib import Path
 
 log = logging.getLogger(__name__)
@@ -70,23 +71,77 @@ def _cleanup_stale_pid_file() -> None:
         log.warning("Could not remove stale PID file %s: %s", pid_path, e)
 
 
+def _pid_exists(pid: int) -> bool:
+    """Return True if a process with *pid* is alive, cross-platform.
+
+    On Unix this uses ``os.kill(pid, 0)``.  On Windows signal 0 is not
+    supported, so we use ``ctypes.windll.kernel32.OpenProcess``.
+    """
+    if sys.platform != "win32":
+        # Unix: signal 0 does an existence check without sending a signal.
+        try:
+            os.kill(pid, 0)
+        except ProcessLookupError:
+            return False
+        except PermissionError:
+            return True  # exists, but owned by another user
+        return True
+
+    # ---------- Windows ----------
+    import ctypes
+
+    PROCESS_QUERY_LIMITED_INFORMATION = 0x1000
+    kernel32 = ctypes.windll.kernel32
+    handle = kernel32.OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, False, pid)
+    if handle == 0:
+        # 87 = invalid parameter (pid doesn't exist), 5 = access denied
+        # (exists but we can't open it — treat as running).
+        err = ctypes.get_last_error()
+        if err == 87:  # ERROR_INVALID_PARAMETER
+            return False
+        # err 5 = ERROR_ACCESS_DENIED — process exists, treat as alive.
+        return err == 5
+    kernel32.CloseHandle(handle)
+    return True
+
+
 def _is_slowave_process(pid: int) -> bool:
     """Check whether *pid* is actually a slowave process (not a PID-reuse collision).
 
-    Uses ``ps`` to inspect the command line.  Returns True when verification
-    succeeds and ``slowave`` appears in the args; returns True on any error so
-    a live daemon is never falsely rejected.
+    On Unix uses ``ps``, on Windows uses ``tasklist /V``.
+    Returns True when verification succeeds and ``slowave`` appears in the
+    command line; returns True on any error so a live daemon is never falsely
+    rejected.
     """
     import subprocess
 
     try:
-        result = subprocess.run(
-            ["ps", "-p", str(pid), "-o", "args="],
-            capture_output=True,
-            text=True,
-            timeout=3,
-        )
-        return "slowave" in result.stdout
+        if sys.platform == "win32":
+            # tasklist /V gives verbose output including the window title.
+            # /FI "PID eq N" /FO CSV /NH gives CSV without header.
+            result = subprocess.run(
+                [
+                    "tasklist",
+                    "/FI",
+                    f"PID eq {pid}",
+                    "/V",
+                    "/FO",
+                    "CSV",
+                    "/NH",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=5,
+            )
+            return "slowave" in result.stdout
+        else:
+            result = subprocess.run(
+                ["ps", "-p", str(pid), "-o", "args="],
+                capture_output=True,
+                text=True,
+                timeout=3,
+            )
+            return "slowave" in result.stdout
     except Exception:
         # Can't verify — err on the side of not breaking a live daemon.
         return True
@@ -97,17 +152,13 @@ def is_running() -> bool:
     pid = read_pid()
     if pid is None:
         return False
-    try:
-        os.kill(pid, 0)  # signal 0 = existence check, no actual signal sent
-    except ProcessLookupError:
+
+    if not _pid_exists(pid):
         _cleanup_stale_pid_file()
         return False
-    except PermissionError:
-        # Process exists but owned by another user — treat as running
-        return True
 
-    # PID exists, but verify it's actually a slowave process (not a PID-reuse collision
-    # from a SIGKILL'd daemon whose PID was reassigned).
+    # PID exists, but verify it's actually a slowave process (not a PID-reuse
+    # collision from a SIGKILL'd daemon whose PID was reassigned).
     if not _is_slowave_process(pid):
         _cleanup_stale_pid_file()
         return False
@@ -115,7 +166,7 @@ def is_running() -> bool:
 
 
 def stop_daemon() -> bool:
-    """Send SIGTERM to the running daemon.
+    """Send SIGTERM (or terminate on Windows) to the running daemon.
 
     Returns True if a signal was sent, False if no daemon was found.
     Cleans up the stale PID file when the stored process is already gone.
@@ -124,8 +175,19 @@ def stop_daemon() -> bool:
     if pid is None:
         return False
     try:
-        os.kill(pid, signal.SIGTERM)
-        log.info("Sent SIGTERM to daemon pid=%d", pid)
+        if sys.platform == "win32":
+            # Windows: use taskkill /PID to terminate the process
+            import subprocess
+
+            subprocess.run(
+                ["taskkill", "/PID", str(pid)],
+                capture_output=True,
+                timeout=10,
+            )
+            log.info("Terminated daemon pid=%d via taskkill", pid)
+        else:
+            os.kill(pid, signal.SIGTERM)
+            log.info("Sent SIGTERM to daemon pid=%d", pid)
         return True
     except ProcessLookupError:
         log.warning("Daemon pid=%d not found — removing stale PID file.", pid)
@@ -133,6 +195,9 @@ def stop_daemon() -> bool:
         return False
     except PermissionError as e:
         log.error("Cannot stop daemon pid=%d: %s", pid, e)
+        return False
+    except Exception as e:
+        log.warning("Failed to stop daemon pid=%d: %s", pid, e)
         return False
 
 
