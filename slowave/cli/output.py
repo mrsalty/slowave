@@ -149,7 +149,8 @@ class ConsoleRenderer:
     
     def hint(self, message: str) -> None:
         """Print a hint/suggestion."""
-        msg = self._colorize(f"💡 {message}", Color.DIM)
+        icon = _safe_emoji("💡", "[i]")
+        msg = self._colorize(f"{icon} {message}", Color.DIM)
         click().echo(f"  {msg}")
     
     def title(self, title: str, version: str = "") -> None:
@@ -169,6 +170,20 @@ def click():
     """Lazy import click to avoid circular dependency."""
     import click as _click
     return _click
+
+
+def _safe_emoji(emoji: str, fallback: str = "") -> str:
+    """Return *emoji* on non-Windows, *fallback* on Windows (unless SLOWAVE_EMOJI=1).
+
+    Windows consoles (cmd.exe, older PowerShell) can't render emoji — they
+    show up as "?" or replacement squares.  This helper lets us use emoji
+    everywhere in source while keeping Windows output readable.
+    """
+    if os.environ.get("SLOWAVE_EMOJI") == "1":
+        return emoji
+    if sys.platform == "win32":
+        return fallback
+    return emoji
 
 
 def get_renderer(use_emoji: bool = False) -> ConsoleRenderer:
