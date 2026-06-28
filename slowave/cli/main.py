@@ -35,6 +35,7 @@ _logging.getLogger("transformers").setLevel(_logging.ERROR)
 
 import click
 
+from slowave.cli.output import _safe_emoji
 from slowave.cli.setup import setup_cmd
 from slowave.core.config import SlowaveConfig
 from slowave.core.paths import default_db_path
@@ -1438,7 +1439,7 @@ def uninstall_cmd(dry_run: bool) -> None:
         click.echo("  No configuration found")
 
     if not dry_run:
-        click.echo("\n  ⚠️  Manual steps:")
+        click.echo(f"\n  {_safe_emoji('⚠️', '!!')}  Manual steps:")
         click.echo("    - Claude Desktop Custom Instructions (delete the Slowave block if you added it manually)")
         click.echo("    - Package: pipx uninstall slowave")
         click.echo("    - Database (optional): rm -rf ~/.slowave")
