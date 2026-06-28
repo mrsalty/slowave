@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.8.2](https://github.com/mrsalty/slowave/compare/slowave-v0.8.1...slowave-v0.8.2) (2026-06-28)
+
+
+### Bug Fixes
+
+* Windows compatibility — daemon crash + emoji rendering ([c6e69d7](https://github.com/mrsalty/slowave/commit/c6e69d70e17c2b018747ed72fdcf2d160bef573f))
+* Windows compatibility — daemon crash + emoji rendering ([90583c0](https://github.com/mrsalty/slowave/commit/90583c02aaf6f80c6af48c548d91a1352103a87b))
+
 ## [0.8.1](https://github.com/mrsalty/slowave/compare/slowave-v0.8.0...slowave-v0.8.1) (2026-06-26)
 
 
