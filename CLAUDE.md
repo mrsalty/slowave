@@ -148,12 +148,17 @@ This repo has Slowave MCP configured. Use the 5-verb cognitive cycle:
 
 > **Scope rule:** Always set `scope="project:slowave"` for all calls.
 
-**Lifecycle:**
-1. **Task start**: `slowave_activate(query, goal="<3-6 word verb-noun>", scope="project:slowave")`
-2. **During work**: `slowave_remember(content, type, scope="project:slowave")` for durable facts
-3. **Mid-task lookup**: `slowave_recall(query)`
-4. **After using memories**: `slowave_reinforce(retrieval_id, feedback, outcome, used_memory_ids=[...])`
-5. **Task end**: `slowave_commit(scope="project:slowave", outcome="success|partial|failure")`
+You are the reasoning module; Slowave is the memory module. Give it honest signals — what you encoded, what helped, what was noise, the outcome — and trust consolidation. Set `scope="project:slowave"` on every call.
+
+1. **`slowave_activate`** (before first response): `slowave_activate(query="<verbatim task>", goal="<3-6 word verb-noun>", scope="project:slowave")` → store `retrieval_id`. `query` verbatim (don't summarize); `goal` phrased naturally (it's a retrieval-cue term, not a procedure key — exact matching not needed). Call ONCE.
+2. **`slowave_remember`** (per durable fact): `slowave_remember(content, type, scope="project:slowave")`.
+   - Novelty gate — skip if it already surfaced in activate/recall, is reconstructible from the code, or is transient state.
+   - ONE fact per call; blank-slate phrasing (no session-context pronouns).
+   - `type` (most specific; default `decision`): `fact`, `preference`, `decision`, `constraint`, `procedure`, `lesson`, `warning`, `open_question`, `task`, `artifact`.
+   - Examples (good): `constraint` — "The LLM is output-only; never route a memory write through an LLM call — consolidation is geometry-only." · `decision` — "HTTP daemon enforces single-instance via PID file at SLOWAVE_DAEMON_PID." · `warning` — "Avoid importing FAISS/ONNX at module top level; import SlowaveEngine/SlowaveConfig directly."
+3. **`slowave_recall`** (only when activate fell short): `slowave_recall(query, scope="project:slowave")` — specific semantic query. Store `retrieval_id`.
+4. **`slowave_reinforce`** (after ANY retrieval, not only when used): `slowave_reinforce(retrieval_id, feedback, outcome, used_memory_ids=[...], irrelevant_memory_ids=[...], stale_memory_ids=[...], wrong_memory_ids=[...])`. Reward hits via `used_memory_ids`; suppress noise via the penalty-ID lists (this is how the store self-cleans). Real IDs only; honest feedback/outcome.
+5. **`slowave_commit`** (always, before last response): `slowave_commit(scope="project:slowave", outcome="success|partial|failure")` — honest outcome.
 
 ## Behavioral guidelines
 
