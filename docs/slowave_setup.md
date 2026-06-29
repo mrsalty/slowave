@@ -57,7 +57,7 @@ cp ~/.claude.json.bak.20260611_142300 ~/.claude.json
 | `~/.claude/settings.json` | Claude Code hooks | Adds `hooks.UserPromptSubmit` and `hooks.Stop` for lifecycle enforcement; removes stale `mcpServers` written by Slowave ≤0.4.2 |
 | `~/.claude/CLAUDE.md` | Claude Code instructions | Prepends lifecycle block between `<!-- slowave-lifecycle-start/end -->` markers |
 | `~/Library/Application Support/Claude/claude_desktop_config.json` | Claude Desktop MCP config | Adds `mcpServers.slowave` entry with binary path |
-| `~/.clinerules` | Cline instructions | Prepends lifecycle block between markers |
+| `~/.cline/rules/slowave.md` | Cline instructions | Prepends lifecycle block between markers |
 | `~/.config/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` | Cline MCP config | Adds `mcpServers.slowave` entry (if VS Code detected) |
 | `~/.config/Cursor/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` | Cline MCP config | Adds `mcpServers.slowave` entry (if Cursor detected) |
 | `~/.cursor/mcp.json` | Cursor native MCP config | Adds `mcpServers.slowave` entry |
@@ -73,7 +73,7 @@ cp ~/.claude.json.bak.20260611_142300 ~/.claude.json
 | `~/.claude/settings.json` | Claude Code hooks | Same as macOS |
 | `~/.claude/CLAUDE.md` | Claude Code instructions | Same as macOS |
 | `~/.config/Claude/claude_desktop_config.json` | Claude Desktop MCP config | Adds `mcpServers.slowave` entry |
-| `~/.clinerules` | Cline instructions | Same as macOS |
+| `~/.cline/rules/slowave.md` | Cline instructions | Same as macOS |
 | `~/.config/Code/User/globalStorage/.../cline_mcp_settings.json` | Cline MCP config | Same as macOS |
 | `~/.config/systemd/user/slowave-worker.service` | Background worker service | Creates systemd user service; enables with `systemctl --user` |
 
@@ -143,7 +143,7 @@ Two echo-based enforcement hooks are added to ensure lifecycle compliance:
           {
             "type": "command",
             "type": "http",
-  "url": "echo 'SLOWAVE MANDATORY: Before finishing this turn call: (1) if you used memories: slowave_reinforce(retrieval_id=<id>,feedback=useful|irrelevant|stale|wrong,outcome=success|partial|failure|unknown), (2) slowave_commit(scope=project:<basename(cwd)>,outcome=success|partial|failure|unknown). Do NOT end the turn without step 2.'"
+  "url": "echo 'SLOWAVE MANDATORY: Before finishing this turn call: (1) if you used memories: slowave_reinforce(retrieval_id=<id>,feedback=useful|partially_useful|irrelevant|stale|wrong|missing|too_much_context,outcome=success|partial|failure|unknown,used_memory_ids=[...],irrelevant_memory_ids=[...],stale_memory_ids=[...],wrong_memory_ids=[...]), (2) slowave_commit(scope=project:<basename(cwd)>,outcome=success|partial|failure). Do NOT end the turn without step 2.'"
           }
         ]
       }
@@ -154,7 +154,7 @@ Two echo-based enforcement hooks are added to ensure lifecycle compliance:
 
 ### Lifecycle Instructions Block
 
-Added to `CLAUDE.md` and `.clinerules` between `<!-- slowave-lifecycle-start -->` and `<!-- slowave-lifecycle-end -->` markers. The block instructs agents on the 5-verb cognitive cycle:
+Added to `~/.claude/CLAUDE.md`, `~/.cline/rules/slowave.md`, and `~/.codeium/windsurf/memories/global_rules.md` between `<!-- slowave-lifecycle-start -->` and `<!-- slowave-lifecycle-end -->` markers. The block instructs agents on the 5-verb cognitive cycle:
 - Priming working memory (`slowave_activate`)
 - Encoding durable facts (`slowave_remember`)
 - Mid-task retrieval (`slowave_recall`)

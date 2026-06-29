@@ -1,11 +1,11 @@
 """Shared MCP tool registration for Slowave.
 
 Provides a single ``register_tools(mcp, build_engine)`` function that attaches
-all 7 cognitive-cycle tools to any FastMCP instance.  Both the stdio server
-(server.py) and the HTTP daemon (http_server.py) call this function so there
-is no duplication of tool logic.
+all 6 tools to any FastMCP instance.  Both the stdio server (server.py) and
+the HTTP daemon (http_server.py) call this function so there is no
+duplication of tool logic.
 
-Tools registered:
+Tools registered (5 cognitive-cycle verbs + 1 ops tool):
   activate, remember, recall, reinforce, commit, stats
 """
 
