@@ -19,7 +19,7 @@ from typing import Any
 
 import click
 
-from slowave.cli.output import _safe_emoji
+from slowave.cli.output import safe_emoji
 
 log = logging.getLogger(__name__)
 
@@ -213,7 +213,7 @@ def backup_cmd(
         import json
         click.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     else:
-        click.echo(click.style(f"  {_safe_emoji('💾', '[ok]')} backup complete", fg="green", bold=True))
+        click.echo(click.style(f"  {safe_emoji('💾', '[ok]')} backup complete", fg="green", bold=True))
         click.echo(f"     source : {result['source']} ({_fmt_bytes(result['source_size_bytes'])})")
         click.echo(
             f"     target : {result['backup_path']} ({_fmt_bytes(result['backup_size_bytes'])}"

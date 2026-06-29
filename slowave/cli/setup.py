@@ -28,7 +28,7 @@ from typing import Any
 
 import click
 
-from slowave.cli.output import _safe_emoji
+from slowave.cli.output import safe_emoji
 
 # ---------------------------------------------------------------------------
 # Change tracking for summary
@@ -100,7 +100,7 @@ class Summary:
         
         # Binaries
         if self.binaries:
-            lines.append(click.style(f"{_safe_emoji('📦', '[package]')} Binaries", bold=True))
+            lines.append(click.style(f"{safe_emoji('📦', '[package]')} Binaries", bold=True))
             for name, path in self.binaries.items():
                 lines.append(f"  ✓ {name}: {path}")
             lines.append("")
@@ -111,7 +111,7 @@ class Summary:
         # MCP Configs
         if grouped[ChangeType.MCP_CONFIG]:
             configs = grouped[ChangeType.MCP_CONFIG]
-            lines.append(click.style(f"{_safe_emoji('🔌', '[plug]')} MCP Configurations ({len(configs)} file{'s' if len(configs) != 1 else ''})", bold=True))
+            lines.append(click.style(f"{safe_emoji('🔌', '[plug]')} MCP Configurations ({len(configs)} file{'s' if len(configs) != 1 else ''})", bold=True))
             for change in configs:
                 status_label = f"({change.status.value.upper()})"
                 lines.append(f"  ✓ {change.client} → {change.path} {click.style(status_label, fg='bright_black')}")
@@ -120,7 +120,7 @@ class Summary:
         # Lifecycle Blocks
         if grouped[ChangeType.LIFECYCLE_BLOCK]:
             blocks = grouped[ChangeType.LIFECYCLE_BLOCK]
-            lines.append(click.style(f"{_safe_emoji('📝', '[doc]')} Lifecycle Blocks ({len(blocks)} file{'s' if len(blocks) != 1 else ''})", bold=True))
+            lines.append(click.style(f"{safe_emoji('📝', '[doc]')} Lifecycle Blocks ({len(blocks)} file{'s' if len(blocks) != 1 else ''})", bold=True))
             for change in blocks:
                 status_label = f"({change.status.value.upper()})"
                 lines.append(f"  ✓ {change.client} → {change.path} {click.style(status_label, fg='bright_black')}")
@@ -129,7 +129,7 @@ class Summary:
         # Hooks
         if grouped[ChangeType.HOOKS]:
             hooks = grouped[ChangeType.HOOKS]
-            lines.append(click.style(f"{_safe_emoji('🔐', '[lock]')} Lifecycle Hooks", bold=True))
+            lines.append(click.style(f"{safe_emoji('🔐', '[lock]')} Lifecycle Hooks", bold=True))
             for change in hooks:
                 status_label = f"({change.status.value.upper()})"
                 lines.append(f"  ✓ {change.description} {click.style(status_label, fg='bright_black')}")
@@ -138,7 +138,7 @@ class Summary:
         # Worker Service
         if grouped[ChangeType.WORKER_SERVICE]:
             services = grouped[ChangeType.WORKER_SERVICE]
-            lines.append(click.style(f"{_safe_emoji('⚙️', '[gear]')}  Background Worker Service", bold=True))
+            lines.append(click.style(f"{safe_emoji('⚙️', '[gear]')}  Background Worker Service", bold=True))
             for change in services:
                 status_label = f"({change.status.value.upper()})"
                 lines.append(f"  ✓ {change.description} → {change.path} {click.style(status_label, fg='bright_black')}")
@@ -146,9 +146,9 @@ class Summary:
         
         # Manual Steps
         if self.manual_steps:
-            lines.append(click.style(f"{_safe_emoji('⚠️', '!!')}  Manual Steps Required ({len(self.manual_steps)})", bold=True))
+            lines.append(click.style(f"{safe_emoji('⚠️', '!!')}  Manual Steps Required ({len(self.manual_steps)})", bold=True))
             for step in self.manual_steps:
-                lines.append(f"  {_safe_emoji('⚠', '! ')} {step}")
+                lines.append(f"  {safe_emoji('⚠', '! ')} {step}")
             lines.append("")
         
         lines.append(click.style("━" * 70, fg="cyan"))
@@ -680,6 +680,12 @@ Anti-patterns: skip activate · `remember` without `scope` · bundle facts in on
 
 
 def _lifecycle_block(agent: str) -> str:
+    # NOTE: `agent` is intentionally unused. The v3 lifecycle block is
+    # client-agnostic — every AI client receives identical instructions, by
+    # design, so Slowave stays consistent across models. The parameter is
+    # kept for ClientSpec API stability; the .format() call is a no-op (the
+    # template contains no {agent} placeholder). Do NOT re-add {agent} to
+    # the template without a brain-system justification.
     return _LIFECYCLE_BLOCK_TEMPLATE.format(agent=agent)
 
 

@@ -147,43 +147,7 @@ slowave setup --client [claude-code|claude-desktop|cline|cursor|windsurf|all]  #
 
 ### Step 2a — Claude Desktop: add Custom Instructions
 
-Open Claude Desktop → **Settings → General → Instructions for Claude** and paste:
-
-```
-## MANDATORY — Slowave memory (5-verb cognitive cycle)
-
-You are the reasoning module; Slowave is the memory module. Give it honest signals — what you encoded, what helped, what was noise, the outcome — and trust consolidation to do the rest. Do not respond until step 1 completes. Do not end the task without step 5.
-
-1 — slowave_activate (before your first response)
-   slowave_activate(query="<verbatim task>", goal="<short goal>", scope="<project:name or null>") → store retrieval_id.
-   - query: the task verbatim — do not summarize (raw text drives retrieval).
-   - goal: 3–6 word verb-noun phrase (e.g. "fix auth null pointer"). Phrase it naturally; it is folded into the retrieval cue, so roughly consistent wording for the same kind of task gives a small overlap boost. Exact matching is NOT needed.
-   - scope: project:<name> (or user:<id> / domain:<topic>). Never omit. Call ONCE.
-
-2 — slowave_remember (encode durable knowledge)
-   slowave_remember(content, type, scope) — call per durable fact.
-   - Novelty gate — skip if it already surfaced in activate/recall, is reconstructible from current context, or is transient/session-only state.
-   - ONE fact per call (never bundle — it blurs the embedding).
-   - Blank-slate phrasing: write so a reader with zero session context understands it. WRONG: "fixed it by adding the field". RIGHT: "SessionReaper idle timeout defaults to 3600s; the HTTP daemon disables it (0)".
-   - type (pick the most specific; default decision): fact, preference (how the user wants things), decision (choice + reason), constraint (invariant), procedure (repeatable steps), lesson (from failure/surprise), warning (hazard), open_question, task (durable to-do), artifact (produced/external ref).
-   - If a remembered fact changed: remember the corrected version AND flag the old one via stale_memory_ids/wrong_memory_ids in step 4.
-   - Never encode: what is observable right now, transient state, vague impressions, or what you did this session (step 5 captures that).
-
-3 — slowave_recall (only when activate fell short)
-   slowave_recall(query, scope) — specific, semantic query. WRONG: "what about auth". RIGHT: "decision on daemon single-instance enforcement". Always pass scope (omitting returns ALL projects). Store retrieval_id. Not a substitute for activate.
-
-4 — slowave_reinforce (after ANY retrieval — reward hits, suppress noise)
-   Call whenever activate/recall returned memories — not only when you used some. Penalizing noise is how the store stays clean.
-   slowave_reinforce(retrieval_id=<id>, feedback="useful|partially_useful|irrelevant|stale|wrong|missing|too_much_context", outcome="success|partial|failure|unknown", used_memory_ids=[...], irrelevant_memory_ids=[...], stale_memory_ids=[...], wrong_memory_ids=[...])
-   - used_memory_ids: IDs you actually relied on (strengthens them).
-   - irrelevant/stale/wrong_memory_ids: IDs that were noise, outdated, or incorrect (this is how the store self-cleans). Real IDs only — never invent.
-   - feedback and outcome: honest, not optimistic. Use missing to flag a needed-but-absent memory.
-
-5 — slowave_commit (session close — always)
-   slowave_commit(scope="<same scope>", outcome="success|partial|failure"). Non-negotiable. Scope must match activate; outcome honest (partial if anything was incomplete). Skipping = no episodes form; the session lingers until the idle reaper closes it.
-
-Anti-patterns: skip activate; remember without scope; bundle facts; context-dependent phrasing; re-encode facts already surfaced; leave a superseded fact unflagged; reinforce only hits and never penalize noise; default feedback to useful; invent memory IDs; report success when partial/failed; skip reinforce or commit.
-```
+Open Claude Desktop → **Settings → General → Instructions for Claude** and paste the [lifecycle instruction block](#lifecycle-instruction-block) below.
 
 `slowave setup` prints the required settings path and links back to the Claude Desktop quick-ref. The Custom Instructions field is stored server-side, so Slowave cannot patch it automatically.
 

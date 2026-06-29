@@ -122,7 +122,7 @@ See [install.md](./install.md) for the full lifecycle block text. Add it to:
 | Client | Location | Notes |
 |---|---|---|
 | Claude Code | `~/.claude/CLAUDE.md` | Prepend at top; use `agent="claude-code"` |
-| Cline | `~/.clinerules` | Prepend at top; use `agent="cline-tui"` |
+| Cline | `~/.cline/rules/slowave.md` | Prepend at top; use `agent="cline-tui"` |
 | Windsurf | `~/.codeium/windsurf/memories/global_rules.md` | Prepend at top; use `agent="windsurf"` |
 | Claude Desktop | Settings → General → Instructions for Claude | Manual paste required; use `agent="claude-desktop"` |
 | Cursor | Settings → Rules for AI (or `.cursorrules` in repo root) | Manual paste required; use `agent="cursor"` |
