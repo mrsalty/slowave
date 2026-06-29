@@ -8,7 +8,7 @@
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Downloads](https://static.pepy.tech/badge/slowave)](https://pepy.tech/project/slowave)
 
-Slowave gives every MCP-compatible tool a shared, persistent memory. No LLM in the loop, fully local, $0 per query.
+Slowave gives every MCP-compatible tool one shared, persistent memory that runs on your laptop — fully local, no API keys, $0 per query.
 
 ## Demo
 
@@ -23,20 +23,20 @@ See Slowave in action:
 **👊 Central memory across every AI tool.**  
 Claude Code, Cline, Claude Desktop, Cursor, Windsurf, and any MCP-compatible client read from and write to the same memory store. Fix a bug in Claude Code tonight — Cline recalls the lesson tomorrow. Context follows you across tools instead of dying inside one chat.
 
-**🧠 Memory that learns from use.**  
-Slowave runs a 5-verb cognitive cycle: *activate* → *remember* → *recall* → *reinforce* → *commit*. Useful memories get stronger, stale ones decay, and outdated facts are superseded automatically. Recall is shaped by salience, time, scope, and feedback — not just raw vector similarity.
+**🔒 Fully local, zero LLM calls, \$0 per query.**  
+Ingestion, consolidation, and recall run on your machine using embeddings, FAISS, and SQLite — no API key, no cloud backend, nothing leaves your machine. Memory operations cost $0 per query. That's only possible because of how Slowave consolidates memory (see below).
+
+**🧠 Memory that learns from use — and forgets what doesn't.**  
+A 5-verb cognitive cycle — *activate → remember → recall → reinforce → commit* — mirrors how the brain prunes and strengthens memory. Useful memories get stronger every time they help; stale ones decay; outdated facts are superseded automatically. Recall is shaped by salience, time, scope, and your feedback — not just raw vector similarity.
 
 **🔮 Zero-config cold start.**  
 Drop Slowave into a new project and it auto-discovers key facts from `CLAUDE.md`, `README.md`, and other knowledge files. Your agents walk into context without you writing a single prompt.
 
 **⚙️ Behavioral memory: workflows that stick.**  
-Memory is stored via `remember()` as typed schemas (constraint, fact, preference, etc.). Behavioral patterns emerge implicitly — recurring workflows strengthen prototype transition paths, and the TransitionModel surfaces "what tends to come next" during recall.
+As your agents repeat similar tasks across sessions, Slowave quietly learns what tends to come next and surfaces it in the right context — so recurring workflows (and the lessons around them) reappear without you re-teaching them. It describes what usually happens; the agent still decides what to do.
 
 **📐 Smart scoping.**  
 Memory is scoped to exactly what matters: `project:my-app`, `domain:cooking`, `relationship:alex` — or unscoped for universal context. Cross-project bleed is prevented by default.
-
-**🔒 Fully local, zero LLM calls.**  
-Ingestion, consolidation, and recall run on your machine using embeddings, FAISS, and SQLite — no API key, no cloud backend. Memory operations cost $0 per query.
 
 **💰 Compact context instead of history replay.**  
 Slowave injects a small working-memory brief instead of replaying full chat history. In internal tests, this reduced context size by 86% over 20 sessions while preserving high recall quality. [See the test →](docs/token_efficiency.md)
@@ -54,7 +54,7 @@ Under the hood, Slowave has two layers:
 - **Latent layer** — pure geometry over embeddings. Consolidation, reinforcement, decay, supersession, and graph-based connections all run here. Zero LLM calls, ever.
 - **Symbolic layer** — the language interface. Text is stored and retrieved, but only *rendered* into natural language when an agent asks for it.
 
-The LLM is an output channel — it verbalizes what memory already knows. It never operates on memory itself.
+The LLM is an output channel — it verbalizes what memory already knows. It never operates on memory itself. That's the one idea that lets Slowave consolidate memory fully locally, with $0 per query.
 
 [Design rationale →](docs/design.md) — [Architecture →](docs/architecture.md)
 
