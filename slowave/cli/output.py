@@ -149,7 +149,7 @@ class ConsoleRenderer:
     
     def hint(self, message: str) -> None:
         """Print a hint/suggestion."""
-        icon = _safe_emoji("💡", "[i]")
+        icon = safe_emoji("💡", "[i]")
         msg = self._colorize(f"{icon} {message}", Color.DIM)
         click().echo(f"  {msg}")
     
@@ -172,7 +172,7 @@ def click():
     return _click
 
 
-def _safe_emoji(emoji: str, fallback: str = "") -> str:
+def safe_emoji(emoji: str, fallback: str = "") -> str:
     """Return *emoji* on non-Windows, *fallback* on Windows (unless SLOWAVE_EMOJI=1).
 
     Windows consoles (cmd.exe, older PowerShell) can't render emoji — they

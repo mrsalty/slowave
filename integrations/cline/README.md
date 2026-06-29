@@ -13,7 +13,7 @@ slowave setup --client cline
 
 `slowave setup` handles everything automatically:
 - Patches Cline's MCP settings JSON to connect to the Slowave HTTP daemon
-- Injects the lifecycle instruction block into `~/.clinerules`
+- Injects the lifecycle instruction block into `~/.cline/rules/slowave.md`
 - Installs the background worker service
 
 Then start the daemon and restart Cline:
@@ -29,14 +29,14 @@ slowave serve start
 | What | Where |
 |---|---|
 | MCP server (HTTP) | `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` (VS Code, macOS) |
-| Lifecycle instructions | `~/.clinerules` |
+| Lifecycle instructions | `~/.cline/rules/slowave.md` |
 | Background worker | launchd (macOS) / systemd (Linux) / Task Scheduler (Windows) |
 
 ---
 
 ## Lifecycle instructions
 
-`slowave setup` injects the lifecycle block into `~/.clinerules`.
+`slowave setup` injects the lifecycle block into `~/.cline/rules/slowave.md`.
 
 **Full lifecycle documentation:** [docs/install.md#lifecycle-instruction-block](../../docs/install.md#lifecycle-instruction-block)
 
@@ -83,5 +83,5 @@ slowave recall "what is my favourite food"
 | Symptom | Fix |
 |---|---|
 | Tools don't appear | Check MCP path (`slowave setup --dry-run`), restart Cline |
-| Tools appear but aren't called | `.clinerules` block missing — re-run `slowave setup` |
-| Sessions are empty | Verify `.clinerules` is present and contains the Slowave lifecycle block — re-run `slowave setup` |
+| Tools appear but aren't called | `~/.cline/rules/slowave.md` block missing — re-run `slowave setup` |
+| Sessions are empty | Verify `~/.cline/rules/slowave.md` is present and contains the Slowave lifecycle block — re-run `slowave setup` |
