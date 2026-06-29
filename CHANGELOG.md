@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.0](https://github.com/mrsalty/slowave/compare/slowave-v0.8.2...slowave-v0.9.0) (2026-06-29)
+
+
+### Features
+
+* client-verb-instructions-v3 ([cf92966](https://github.com/mrsalty/slowave/commit/cf92966718f125dd87c800400e4c045a160762f3))
+* overhaul client lifecycle instructions (v3, brain-aligned) ([f6382a2](https://github.com/mrsalty/slowave/commit/f6382a2d56203b45fdda1bf19fc218a39e8bdbcb))
+
+
+### Bug Fixes
+
+* sync docs, harden Windows daemon, rename safe_emoji ([8464fb1](https://github.com/mrsalty/slowave/commit/8464fb13e81708b48054fe5b1a4fea9c69b53879))
+
 ## [0.8.2](https://github.com/mrsalty/slowave/compare/slowave-v0.8.1...slowave-v0.8.2) (2026-06-28)
 
 
