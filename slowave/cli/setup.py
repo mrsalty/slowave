@@ -636,42 +636,47 @@ _MARKER_START = "<!-- slowave-lifecycle-start"   # prefix match — covers v1 an
 _MARKER_END = "<!-- slowave-lifecycle-end"     # prefix match — covers v1 and v2
 
 _LIFECYCLE_BLOCK_TEMPLATE = """\
-<!-- slowave-lifecycle-start v2 -->
+<!-- slowave-lifecycle-start v3 -->
 ## MANDATORY — Slowave memory (5-verb cognitive cycle)
 
-> Do not respond to the user until step 1 (and the cold start gate below, if triggered) completes.
-> Do not end the task without step 5. Run step 4 after using retrieved memories — feedback is NOT auto-fired; skipping means slowave cannot learn.
+You are the reasoning module; Slowave is the memory module. Give it honest signals — what you encoded, what helped, what was noise, the outcome — and trust consolidation to do the rest. Do not respond until step 1 completes. Do not end the task without step 5.
 
-**Task start (run before first response):**
-1. Derive `goal` = a 3–6 word verb-noun phrase (e.g. `"implement oauth login"`, `"fix auth null pointer"`, `"refactor database layer"`). Use consistent phrasing — same goal string across sessions enables procedure learning.
-   Then: `slowave_activate(query="<verbatim task>", goal="<derived goal>", scope="project:<basename(cwd)>")` → store `retrieval_id` and `session_id`
+**1 — `slowave_activate` (before your first response)**
+`slowave_activate(query="<verbatim task>", goal="<short goal>", scope="project:<basename(cwd)>")` → store `retrieval_id`.
+- `query`: the task verbatim — do not summarize (raw text drives retrieval).
+- `goal`: 3–6 word verb-noun phrase (e.g. `"fix auth null pointer"`). Phrase it naturally; it is folded into the retrieval cue, so roughly consistent wording for the same kind of task gives a small overlap boost. Exact matching is NOT needed.
+- `scope`: `project:<name>` (or `user:<id>` / `domain:<topic>`). Never omit.
+- Call ONCE.
 
    **Cold start gate — if the response contains `cold_start: true`:**
-   - Check for `README.md` then `CLAUDE.md` in the project root (stop at the first one found).
-   - Read it. For each fact, ask: would this be useful in any future interaction within this scope?
-     Can it be inferred as durable and critical — something a future session could not assume without it?
-     If yes to both, call `slowave_remember(content, type, scope)` — one call per fact, not one call per group.
-     Exhaust the document before moving on.
-   - If neither file exists, apply the same questions to what is visible from the current request.
-   - Only after you have no more qualifying facts to store, respond to the user.
-   - Do NOT scan the full codebase — only the designated knowledge files above.
+   - Find the most stable context document available (project README/overview, system instructions, or user profile).
+   - For each fact, ask: is it durable AND not already observable from the current context? If yes to both, call `slowave_remember(content, type, scope)` — one call per fact, never grouped.
+   - Exhaust that document before responding. Do NOT scan the full codebase.
 
-**During work:**
-2. `slowave_remember(content, type, scope="project:<basename(cwd)>")` — for any durable fact, decision, lesson, constraint. Session is inferred automatically; no session_id needed.
-3. `slowave_recall(query)` — only when you need specific history not surfaced by activate. Store the returned `retrieval_id`.
+**2 — `slowave_remember` (encode durable knowledge)**
+`slowave_remember(content, type, scope="project:<basename(cwd)>")` — call per durable fact.
+- Novelty gate — skip if it already surfaced in activate/recall, is reconstructible from current context, or is transient/session-only state.
+- ONE fact per call (never bundle — it blurs the embedding).
+- Blank-slate phrasing: write so a reader with zero session context understands it. WRONG: `"fixed it by adding the field"`. RIGHT: `"SessionReaper idle timeout defaults to 3600s; the HTTP daemon disables it (0)"`.
+- `type` (pick the most specific; default `decision`): `fact` · `preference` (how the user wants things) · `decision` (choice + reason) · `constraint` (invariant) · `procedure` (repeatable steps) · `lesson` (from failure/surprise) · `warning` (hazard) · `open_question` · `task` (durable to-do) · `artifact` (produced/external ref).
+- If a remembered fact changed: remember the corrected version AND flag the old one via `stale_memory_ids`/`wrong_memory_ids` in step 4.
+- Never encode: what is observable right now, transient state, vague impressions, or what you did this session (step 5 captures that).
 
-**Task close (run before last response):**
-4. If you used memories from activate or recall: `slowave_reinforce(retrieval_id=<id>, feedback="useful|partially_useful|irrelevant|stale|wrong|missing|too_much_context", outcome="success|partial|failure|unknown", used_memory_ids=[...])`. Do not invent feedback; only rate memories you actually used.
-5. `slowave_commit(scope="project:<basename(cwd)>", outcome="success|partial|failure")` — closes session, forms episodes.
+**3 — `slowave_recall` (only when activate fell short)**
+`slowave_recall(query, scope="project:<basename(cwd)>")` — specific, semantic query. WRONG: `"what about auth"`. RIGHT: `"decision on daemon single-instance enforcement"`. Always pass `scope` (omitting returns ALL projects). Store the returned `retrieval_id`. Not a substitute for activate.
 
-Anti-patterns to avoid:
-- Skipping `slowave_activate` at task start.
-- Calling `slowave_remember` without `scope` (memories become unscopeable).
-- Skipping the cold start gate when `cold_start: true` (memory store stays empty forever).
-- Skipping `slowave_reinforce` after using memories (learning loop broken).
-- Skipping `slowave_commit` (session stays open until idle reaper fires, no outcome recorded).
-- Using old tools: `slowave_context`, `slowave_session_start/end`, `slowave_event`, `slowave_retrieval_feedback`, `slowave_context_feedback` — these are deleted.
-<!-- slowave-lifecycle-end v2 -->"""
+**4 — `slowave_reinforce` (after ANY retrieval — reward hits, suppress noise)**
+Call whenever activate/recall returned memories — not only when you used some. Penalizing noise is how the store stays clean.
+`slowave_reinforce(retrieval_id=<id>, feedback="useful|partially_useful|irrelevant|stale|wrong|missing|too_much_context", outcome="success|partial|failure|unknown", used_memory_ids=[...], irrelevant_memory_ids=[...], stale_memory_ids=[...], wrong_memory_ids=[...])`
+- `used_memory_ids`: IDs you actually relied on (strengthens them).
+- `irrelevant`/`stale`/`wrong_memory_ids`: IDs that were noise, outdated, or incorrect (this is how the store self-cleans). Use real IDs only — never invent.
+- `feedback` and `outcome`: honest, not optimistic. Use `missing` to flag a needed-but-absent memory.
+
+**5 — `slowave_commit` (session close — always)**
+`slowave_commit(scope="project:<basename(cwd)>", outcome="success|partial|failure")`. Non-negotiable. Scope must match activate; outcome honest (`partial` if anything was incomplete). Skipping = no episodes form; the session lingers until the idle reaper closes it with no outcome.
+
+Anti-patterns: skip activate · `remember` without `scope` · bundle facts in one call · context-dependent phrasing · re-encode facts already surfaced · leave a superseded fact unflagged · reinforce only hits and never penalize noise · default feedback to `useful` · invent memory IDs · report `success` when partial/failed · skip reinforce or commit · use deleted tools (`slowave_context`, `slowave_session_start/end`, `slowave_event`, `slowave_retrieval_feedback`, `slowave_context_feedback`).
+<!-- slowave-lifecycle-end v3 -->"""
 
 
 def _lifecycle_block(agent: str) -> str:
