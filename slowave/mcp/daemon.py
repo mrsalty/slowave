@@ -108,32 +108,33 @@ def _pid_exists(pid: int) -> bool:
 def _is_slowave_process(pid: int) -> bool:
     """Check whether *pid* is actually a slowave process (not a PID-reuse collision).
 
-    On Unix uses ``ps``, on Windows uses ``tasklist /V``.
-    Returns True when verification succeeds and ``slowave`` appears in the
-    command line; returns True on any error so a live daemon is never falsely
-    rejected.
+    On Unix uses ``ps``, on Windows uses ``wmic`` to read the full command
+    line. ``tasklist /V`` only exposes the window title, which a headless
+    daemon launched as ``python -m slowave...`` would not contain — that would
+    cause a false negative, falsely rejecting a live daemon and allowing a
+    second one to start. Returns True when verification succeeds and
+    ``slowave`` appears in the command line; returns True on any error so a
+    live daemon is never falsely rejected.
     """
     import subprocess
 
     try:
         if sys.platform == "win32":
-            # tasklist /V gives verbose output including the window title.
-            # /FI "PID eq N" /FO CSV /NH gives CSV without header.
             result = subprocess.run(
                 [
-                    "tasklist",
-                    "/FI",
-                    f"PID eq {pid}",
-                    "/V",
-                    "/FO",
-                    "CSV",
-                    "/NH",
+                    "wmic",
+                    "process",
+                    "where",
+                    f"processid={pid}",
+                    "get",
+                    "commandline",
+                    "/format:list",
                 ],
                 capture_output=True,
                 text=True,
                 timeout=5,
             )
-            return "slowave" in result.stdout
+            return "slowave" in result.stdout.lower()
         else:
             result = subprocess.run(
                 ["ps", "-p", str(pid), "-o", "args="],
@@ -176,11 +177,12 @@ def stop_daemon() -> bool:
         return False
     try:
         if sys.platform == "win32":
-            # Windows: use taskkill /PID to terminate the process
+            # /F force-terminates (WM_CLOSE won't stop a headless daemon);
+            # /T takes down any child processes it spawned.
             import subprocess
 
             subprocess.run(
-                ["taskkill", "/PID", str(pid)],
+                ["taskkill", "/F", "/T", "/PID", str(pid)],
                 capture_output=True,
                 timeout=10,
             )
