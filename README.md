@@ -115,11 +115,11 @@ All Slowave runs: zero LLM calls, local CPU, no API key.
 | LoCoMo | Cross-session recall across real conversations, 5 categories | **76%** |
 | StaleMemory | Detecting when a stored preference has silently changed | **86–89%** |
 
-> Alpha-stage results. Internal runs, not independently verified. Slowave scores with keyword-overlap; most competitors use an LLM-as-judge, so numbers are not directly comparable. [Full benchmarks →](docs/benchmarks.md)
+> Beta-stage results. Internal runs, not independently verified. Slowave scores with keyword-overlap; most competitors use an LLM-as-judge, so numbers are not directly comparable. [Full benchmarks →](docs/benchmarks.md)
 
 ## Honest limits
 
-Slowave is alpha software. It is useful today, but it is deliberately not an LLM-based reasoning layer.
+Slowave is beta software. It is useful today, but it is deliberately not an LLM-based reasoning layer.
 
 - It recalls what was stored; it does not infer unstated preferences.
 - It retrieves individual memories; it does not do cross-session counting or arithmetic.
