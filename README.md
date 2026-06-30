@@ -1,6 +1,10 @@
 # Slowave
 
-> **Private memory for AI tools.** Install it once, keep using Claude Code, Cline, Cursor, Windsurf, Claude Desktop, or any MCP client, and they share one local memory of your work, decisions, preferences, and history.
+**A shared local memory layer for your AI coding tools.**
+
+Install once. Every AI client you use can remember your work, decisions, and preferences, across sessions and across tools.
+Claude Code, Cursor, Cline, Windsurf, Claude Desktop, and any MCP-compatible client all read and write the same local memory.
+Fully local and at €0 extra token cost.
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
@@ -8,24 +12,27 @@
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Downloads](https://static.pepy.tech/badge/slowave)](https://pepy.tech/project/slowave)
 
-AI tools are powerful, but their memory is still fragmented. A lesson learned in one chat disappears in the next. A project convention remembered by Claude Code is unknown to Cline. A debugging scar from last week has to be explained again.
-
-Slowave gives your AI clients a shared memory layer: local, private, inspectable, and **$0 per query**. You do not chat with Slowave. Your clients call it for you, so they can build durable context about you and your work over time.
-
 ## What it feels like
 
 ![Demo](img/demo.gif)
 
-You keep using your AI client normally.
+You use your AI tools normally.
 
-- At the start of a task, the client asks Slowave for relevant context.
-- As you work, durable decisions, preferences, lessons, and workflows can be stored.
-- During the task, the client can ask Slowave for specific memory when its reasoning needs it.
-- Later, another client can recall the same memory, even in a different session or project.
+- Start a session → relevant context is restored
 
-The result: your clients stop treating you like a stranger. They can reuse what Slowave has learned about your projects, decisions, preferences, historical work, debugging scars, and recurring choices. Nothing leaves your machine.
+- Work → decisions and patterns are stored automatically
 
-You may see `slowave_*` tool calls in the trace. That is the integration working.
+- Switch tools → context follows you
+
+- Resume later → memory is still there
+
+This creates continuity across tools:
+
+Claude Code, Cursor, Cline, Windsurf, and Claude Desktop all operate on the same evolving memory.
+
+You stop re-explaining project conventions, decisions, and past debugging work across tools.
+
+Everything stays local.
 
 ## The memory gets better with use
 
@@ -36,33 +43,15 @@ A single interaction becomes an episode. Related episodes become prototypes. Rep
 That is the compounding loop:
 
 ```text
-use your AI tools → Slowave stores durable signals → offline consolidation
-                 → better context next time → better feedback → stronger memory
+use your AI tools 
+    → Slowave stores durable signals 
+        → offline consolidation
+            → better context next time 
+                → your client will remember the relevant context
+                    → your work becomes more and more efficient
 ```
 
 The first day, Slowave may remember a fact. After a month, it starts to feel like your tools know the parts of you that matter for work: your projects, preferences, decisions, conventions, debugging history, and recurring choices.
-
-## How memory gets invoked
-
-### 1. Transparent learning
-
-Your clients feed Slowave as you work: architectural decisions, recurring bugs, project conventions, user preferences, open questions, and repeated workflows. You do not manage this manually; the client invokes Slowave when the lifecycle calls for it.
-
-### 2. Explicit memory hints
-
-Sometimes you tell your AI client that something should persist. The exact wording does not matter; the client decides whether to store it in Slowave.
-
-> “Remember that deploys require the secrets env var set, or the worker crashes on boot.”
-
-That is just one example. “Keep this in mind”, “we should not forget”, “for next time”, or a project-specific rule can all lead the client to encode memory.
-
-### 3. Client-initiated recall
-
-Your client can also query Slowave whenever it needs memory for the task — even if you did not explicitly ask for recall. If it is debugging auth, planning a migration, or checking a project convention, it can ask Slowave for relevant prior context during its own reasoning.
-
-> “What do you remember about how we handle auth token refresh?”
-
-That kind of prompt is only a visible example. In normal use, the recall often happens because the client decides memory would help. Slowave returns relevant project decisions, prior bugs, preferences, constraints, and lessons it has consolidated.
 
 ## Why it is different
 
@@ -70,13 +59,13 @@ Slowave is built on one claim:
 
 > **Memory consolidation does not require language.**
 
-The LLM verbalizes retrieved memory; it does not operate on memory itself. Ingestion, consolidation, reinforcement, decay, supersession, and recall run locally as memory mechanisms over embeddings.
+The LLM verbalizes retrieved memory; it does not operate on memory itself. Ingestion, consolidation, reinforcement, decay, supersession, and recall run locally at €0 extra tokens as memory mechanisms over embeddings.
 
-That gives you:
+Slowave gives you:
 
 - **One memory across tools** — Claude Code, Cline, Claude Desktop, Cursor, Windsurf, and any MCP-compatible client share the same store.
 - **Fully local memory** — no cloud backend, no external memory service, no Ollama, no vector database to run.
-- **Zero LLM calls for memory operations** — consolidation and recall run locally, at $0 per query.
+- **Zero LLM calls for memory operations** — consolidation and recall run locally, at €0 per query.
 - **Compact context instead of history replay** — internal tests showed **86% smaller context** over 20 sessions while preserving expected recall quality. [See the token-efficiency test →](docs/token_efficiency.md)
 - **Feedback-shaped recall** — useful memories strengthen; irrelevant, stale, or wrong memories can be suppressed.
 - **Scoped memory** — project, domain, relationship, or universal context. Cross-project bleed is prevented by default.
@@ -133,10 +122,6 @@ These are trade-offs of the zero-LLM design, not hidden features. [Known limitat
 Slowave is not a language model, reasoning engine, or agent framework. Your AI client still plans, reasons, writes code, executes tools, and answers you. Slowave is the memory layer underneath it.
 
 It is also not a markdown file manager, static RAG system, or LLM wrapper over a vector database. Memory changes through reinforcement, decay, supersession, consolidation, and feedback before it is rendered back into language.
-
-## The big picture
-
-![Slowave flow](img/flow.png)
 
 ## Dashboard
 
