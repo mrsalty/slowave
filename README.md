@@ -1,6 +1,6 @@
 # Slowave
 
-**A shared local memory layer for your AI coding tools.**
+**A shared local memory layer for your AI tools.**
 
 Install once. Every AI client you use can remember your work, decisions, and preferences, across sessions and across tools.
 Claude Code, Cursor, Cline, Windsurf, Claude Desktop, and any MCP-compatible client all read and write the same local memory.
