@@ -20,7 +20,7 @@ Slowave gives every MCP-compatible client one persistent memory running on your 
 
 ## Five moves, one memory
 
-Every agent runs the same five-tool cycle — `activate → remember → recall → reinforce → commit` — and what it learns is reusable across every tool, forever:
+Every agent runs the same five-tool cycle — `activate → remember → recall → reinforce → commit`. Do the cycle once and the memory is reusable across every tool, forever. Do it for a month and it compounds into something that knows your work back.
 
 ```text
 You start a task: "add validation to the signup form"
@@ -35,7 +35,7 @@ Days later, in a different tool: "add validation to checkout"
 → the Zod preference is recalled instantly. You never re-teach it.
 ```
 
-That is the whole product. Everything below is consequence of that one idea.
+That is the whole product. Every session feeds offline consolidation — episodes cluster into prototypes, recurring patterns harden into reusable schemas — so the context that greets you gets richer the more you lean on it. The more your tools write to it, the more useful it becomes to all of them. Start now; a month in, your agents walk into work that already knows you.
 
 ## What you get
 
@@ -101,7 +101,7 @@ All runs: zero LLM calls, local CPU, no API key.
 
 ## Dashboard
 
-Watch and steer it through a local web UI — no deps, plain SQLite under it. Use it, and Slowave starts connecting the dots.
+Watch it compound. It's a local web UI — no deps, plain SQLite under it — where you steer Slowave and watch the memory graph grow as you use it: every session feeds consolidation, and the dots connect into something that knows your work back.
 
 ![dashboard.png](img/dashboard.png)
 ![dashboard_graph.png](img/dashboard_graph.png)
