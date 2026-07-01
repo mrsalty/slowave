@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.9.1](https://github.com/mrsalty/slowave/compare/slowave-v0.9.0...slowave-v0.9.1) (2026-07-01)
+
+
+### Documentation
+
+* sharpen README positioning — lead with value, de-jargon behavioral memory ([ea34757](https://github.com/mrsalty/slowave/commit/ea34757aa8d2440b1e4d3d7584499e1ebdbe3baa))
+
 ## [0.9.0](https://github.com/mrsalty/slowave/compare/slowave-v0.8.2...slowave-v0.9.0) (2026-06-29)
 
 
