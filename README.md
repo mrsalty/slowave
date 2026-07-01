@@ -27,12 +27,8 @@ You use your AI tools normally.
 - Resume later → memory is still there
 
 This creates continuity across tools:
+> You stop re-explaining project conventions, decisions, and past debugging work across tools.
 
-Claude Code, Cursor, Cline, Windsurf, and Claude Desktop all operate on the same evolving memory.
-
-You stop re-explaining project conventions, decisions, and past debugging work across tools.
-
-Everything stays local.
 
 ## The memory gets better with use
 
