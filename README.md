@@ -124,6 +124,8 @@ It is also not a markdown file manager, static RAG system, or LLM wrapper over a
 Watch memory compound through a local web UI: inspect what Slowave has learned, search recall, and see the memory graph grow as sessions consolidate.
 
 ![dashboard.png](img/dashboard.png)
+
+
 ![dashboard_graph.png](img/dashboard_graph.png)
 
 ## Documentation
