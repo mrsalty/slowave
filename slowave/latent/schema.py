@@ -382,6 +382,10 @@ class GeometricJudgeConfig:
     # New schema must have at least this much support to supersede
     # an older one.
     min_support_to_supersede: int = 2
+    # Minimum time (seconds) between old and new schema for the newer
+    # one to supersede. Prevents rapid toggling where two schemas
+    # contradict each other within a very short window.
+    min_time_delta_to_supersede_s: float = 3600.0  # 1 hour
 
 
 class GeometricContradictionJudge:
