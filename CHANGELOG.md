@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.2](https://github.com/mrsalty/slowave/compare/slowave-v0.9.1...slowave-v0.9.2) (2026-07-03)
+
+
+### Bug Fixes
+
+* make Windows daemon/worker auto-start reliable ([94c9eeb](https://github.com/mrsalty/slowave/commit/94c9eeb3c0df2c3007df0f8bcb5b3794f5ae229b))
+* make Windows daemon/worker auto-start reliable ([f659705](https://github.com/mrsalty/slowave/commit/f6597051d6973835fe7702e933c67bda40d49a23))
+
 ## [0.9.1](https://github.com/mrsalty/slowave/compare/slowave-v0.9.0...slowave-v0.9.1) (2026-07-02)
 
 
