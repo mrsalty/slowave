@@ -2,9 +2,11 @@
 
 **A shared local memory layer for your AI tools.**
 
-Install once. Every AI client you use can remember your work, decisions, and preferences, across sessions and across tools.
-Claude Code, Cursor, Cline, Windsurf, Claude Desktop, and any MCP-compatible client all read and write the same local memory.
-Fully local and at €0 extra token cost.
+Install once. Your AI tools share the same evolving local memory across sessions and across tools.
+
+Slowave lets Claude Code, Cursor, Cline, Windsurf, Claude Desktop, and any MCP-compatible client read from and write to the same local memory. 
+
+Everything runs locally with no cloud backend and no additional LLM calls for memory operations.
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
@@ -12,132 +14,198 @@ Fully local and at €0 extra token cost.
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
 [![Downloads](https://static.pepy.tech/badge/slowave)](https://pepy.tech/project/slowave)
 
-## What it feels like
+---
+
+## Typical workflow
 
 ![Demo](img/demo.gif)
 
 You use your AI tools normally.
 
-- Start a session → relevant context is restored
+- Start a new session → relevant context is recalled.
+- Work as usual → useful information is stored automatically.
+- Switch to another client → the same memory is available.
+- Resume later → previous work can be recalled without replaying entire conversations.
 
-- Work → decisions and patterns are stored automatically
+Instead of relying on chat history or project-specific markdown files, multiple AI clients continuously build and reuse the same evolving memory.
 
-- Switch tools → context follows you
+---
 
-- Resume later → memory is still there
+## How memory evolves
 
-This creates continuity across tools:
-> You stop re-explaining project conventions, decisions, and past debugging work across tools.
+Slowave is designed around memory consolidation rather than note storage.
 
+Individual interactions become **episodes**. Related episodes are consolidated into **prototypes**. Repeated prototypes become **schemas** representing recurring conventions, preferences, and project knowledge.
 
-## The memory gets better with use
+Useful memories become easier to retrieve through reinforcement. Outdated memories gradually weaken through decay. When newer information replaces older facts, supersession allows recent knowledge to take precedence.
 
-Slowave is not just a note bucket. It consolidates.
+Over time, recall shifts from isolated facts toward recurring project patterns and decisions.
 
-A single interaction becomes an episode. Related episodes become prototypes. Repeated prototypes become schemas. Useful memories strengthen; stale ones decay; outdated facts can be superseded. Over time, project-specific lessons can become general concepts your clients surface elsewhere.
-
-That is the compounding loop:
+The overall feedback loop looks like this:
 
 ```text
-use your AI tools 
-    → Slowave stores durable signals 
+use your AI tools
+    → Slowave stores durable memory
         → offline consolidation
-            → better context next time 
-                → your client will remember the relevant context
-                    → your work becomes more and more efficient
+            → more useful recall
+                → better context in future sessions
 ```
 
-The first day, Slowave may remember a fact. After a month, it starts to feel like your tools know the parts of you that matter for work: your projects, preferences, decisions, conventions, debugging history, and recurring choices.
+The first sessions mostly accumulate experience. As more work is stored, recall increasingly reflects recurring project conventions, previous decisions, debugging history, and personal workflows rather than isolated conversations.
 
-## Why it is different
+---
 
-Slowave is built on one claim:
+### Why Slowave is different
 
-> **Memory consolidation does not require language.**
+Slowave is built around one central idea:
 
-The LLM verbalizes retrieved memory; it does not operate on memory itself. Ingestion, consolidation, reinforcement, decay, supersession, and recall run locally at €0 extra tokens as memory mechanisms over embeddings.
+> Memory consolidation does not require language.
 
-Slowave gives you:
+In Slowave, memory is not stored as text or prompts. It is maintained as evolving embedding-based state. The system continuously processes interactions into structured signals: storage, consolidation, reinforcement, decay, supersession, and retrieval all operate directly over this representation.
 
-- **One memory across tools** — Claude Code, Cline, Claude Desktop, Cursor, Windsurf, and any MCP-compatible client share the same store.
-- **Fully local memory** — no cloud backend, no external memory service, no Ollama, no vector database to run.
-- **Zero LLM calls for memory operations** — consolidation and recall run locally, at €0 per query.
-- **Compact context instead of history replay** — internal tests showed **86% smaller context** over 20 sessions while preserving expected recall quality. [See the token-efficiency test →](docs/token_efficiency.md)
-- **Feedback-shaped recall** — useful memories strengthen; irrelevant, stale, or wrong memories can be suppressed.
-- **Scoped memory** — project, domain, relationship, or universal context. Cross-project bleed is prevented by default.
+The language model is not part of this loop. It does not manage memory. It only receives the final recalled context when needed.
 
-[Design rationale →](docs/design.md) · [Architecture →](docs/architecture.md)
+This separation has direct consequences:
 
-## Install
+- Memory is shared across all MCP-compatible clients, since it lives outside any single tool’s prompt or history.
+- No cloud or external service is required, because all operations are local.
+- Memory operations do not require LLM calls, since consolidation and retrieval happen in embedding space.
+- Context injected into the model is compact and selective, rather than a replay of past conversations.
+- Memory can evolve through reinforcement and decay rather than static accumulation of notes.
+- Scope control (project, domain, global) prevents unrelated contexts from interfering with each other.
+Additional background:
+
+See:
+> [Design rationale](docs/design.md)
+> 
+> [Architecture](docs/architecture.md)
+
+---
+
+## Installation
+
+Install Slowave:
 
 ```bash
 pipx install slowave
+
 # or
-brew tap mrsalty/slowave https://github.com/mrsalty/slowave && brew install slowave
+
+brew tap mrsalty/slowave https://github.com/mrsalty/slowave
+brew install slowave
 ```
 
-Then wire every client Slowave can find:
+Configure every supported client:
 
 ```bash
-slowave setup --dry-run   # see what will change
-slowave setup             # configure clients, lifecycle hooks, and worker
-slowave doctor            # verify installation
+slowave setup --dry-run
+slowave setup
+slowave doctor
 ```
 
-`slowave setup` is idempotent and safe to re-run. Claude Desktop and Cursor need one manual paste because their instruction surfaces are not programmatically editable; `slowave setup` prints the exact text and path. [Full install guide →](docs/install.md)
+`slowave setup` is idempotent and safe to run multiple times.
 
-The default text encoder downloads its model from HuggingFace on first use (~45 MB); later runs work offline.
+Claude Desktop and Cursor require one manual paste because their instruction surfaces cannot currently be modified programmatically. During setup, Slowave prints the exact text and destination path.
 
-Memory lives at `~/.slowave/slowave.db`, a plain SQLite file. It is local and inspectable, but unencrypted by default. If you store sensitive information, protect it with OS-level permissions or full-disk encryption.
+See the complete installation guide:
 
-## Benchmarks
+- [docs/install.md](docs/install.md)
 
-All Slowave runs: zero LLM calls, local CPU, no API key.
+The default embedding model is downloaded from Hugging Face on first use (~45 MB). Subsequent runs work offline.
 
-| Benchmark | What it tests | Slowave |
-|---|---|---:|
-| LongMemEval | Facts, updates, preferences across many sessions with realistic distractors | **87.8%** |
-| LoCoMo | Cross-session recall across real conversations, 5 categories | **76%** |
-| StaleMemory | Detecting when a stored preference has silently changed | **86–89%** |
+Memory is stored locally as a SQLite database:
 
-> Beta-stage results. Internal runs, not independently verified. Slowave scores with keyword-overlap; most competitors use an LLM-as-judge, so numbers are not directly comparable. [Full benchmarks →](docs/benchmarks.md)
+```
+~/.slowave/slowave.db
+```
 
-## Honest limits
+The database is fully inspectable and remains on your machine. It is not encrypted by default, so sensitive information should be protected using normal operating system permissions or full-disk encryption.
 
-Slowave is beta software. It is useful today, but it is deliberately not an LLM-based reasoning layer.
-
-- It recalls what was stored; it does not infer unstated preferences.
-- It retrieves individual memories; it does not do cross-session counting or arithmetic.
-- Contradiction detection is heuristic, not guaranteed.
-- It is not safety-critical memory infrastructure.
-
-These are trade-offs of the zero-LLM design, not hidden features. [Known limitations →](docs/limitations.md)
-
-## What it is not
-
-Slowave is not a language model, reasoning engine, or agent framework. Your AI client still plans, reasons, writes code, executes tools, and answers you. Slowave is the memory layer underneath it.
-
-It is also not a markdown file manager, static RAG system, or LLM wrapper over a vector database. Memory changes through reinforcement, decay, supersession, consolidation, and feedback before it is rendered back into language.
+---
 
 ## Dashboard
 
-Watch memory compound through a local web UI: inspect what Slowave has learned, search recall, and see the memory graph grow as sessions consolidate.
+Watch memory evolve through the local dashboard.
+
+Inspect stored memories, browse recall results, visualize relationships, and observe consolidation over time.
 
 ![dashboard.png](img/dashboard.png)
 
-
 ![dashboard_graph.png](img/dashboard_graph.png)
+
+## Benchmarks
+
+Benchmarks were run internally during development to evaluate recall quality, stability, and context efficiency. Results have not yet been independently reproduced.
+
+Slowave does not use an LLM for memory operations; all evaluation is based on embedding retrieval and local consolidation.
+
+| Benchmark | What it evaluates | Result |
+|---|---|---:|
+| LongMemEval | Multi-session factual recall with noise and distractors | 87.8% |
+| LoCoMo | Cross-session conversational recall across categories | 76% |
+| StaleMemory | Detection of outdated or superseded preferences | 86–89% |
+
+These results are not directly comparable with systems that use LLM-as-a-judge scoring, since Slowave relies on embedding-based matching metrics.
+
+Full benchmark methodology and reproducibility details:
+- [docs/benchmarks.md](docs/benchmarks.md)
+
+---
+
+## Honest limits
+
+Slowave is useful in practice but intentionally constrained by its design.
+
+- It recalls stored information; it does not infer missing preferences.
+- It retrieves relevant memories; it does not perform reasoning over memory graphs.
+- Contradiction handling is heuristic and may not always resolve conflicts correctly.
+- It is not designed for safety-critical or compliance-critical memory use cases.
+- Memory quality depends on the quality and consistency of prior interactions.
+
+These limitations are a direct consequence of the zero-LLM memory design rather than implementation gaps.
+
+See: [docs/limitations.md](docs/limitations.md)
+
+---
+
+## What it is not
+
+Slowave is not:
+
+- a language model
+- an agent framework
+- a reasoning system
+- a prompt manager
+- a markdown-based memory store
+- a vector database wrapper
+
+The AI client remains responsible for planning, reasoning, and execution.
+
+Slowave only provides persistent, evolving context injection based on prior interactions.
+
+---
 
 ## Documentation
 
-- **[design.md](docs/design.md)** — the brain-inspired rationale. Read this first if you want to understand *why*.
-- **[architecture.md](docs/architecture.md)** — how consolidation works.
-- **[install.md](docs/install.md)** — install, setup, per-client wiring, troubleshooting.
-- **[benchmarks.md](docs/benchmarks.md)** — per-category results, strengths, known gaps, reproducibility.
-- **[limitations.md](docs/limitations.md)** — capability gaps and design trade-offs.
-- **[token_efficiency.md](docs/token_efficiency.md)** — context size vs. history replay and static knowledge files.
-- **[slowave_setup.md](docs/slowave_setup.md)** · **[manual_setup.md](docs/manual_setup.md)** · **[cli.md](docs/cli.md)** · **[dashboard.md](docs/dashboard.md)** — reference.
+- [design.md](docs/design.md) — system rationale and consolidation model
+- [architecture.md](docs/architecture.md) — ingestion, storage, and recall pipeline
+- [install.md](docs/install.md) — setup and client integration
+- [benchmarks.md](docs/benchmarks.md) — evaluation methodology and results
+- [limitations.md](docs/limitations.md) — known constraints and trade-offs
+- [token_efficiency.md](docs/token_efficiency.md) — context efficiency analysis
+
+---
 
 ## Contributing
 
-Open source under AGPL-3.0-or-later. Bug reports, install feedback, and focused improvements are welcome — read [CONTRIBUTING.md](./CONTRIBUTING.md) before opening a PR. Commercial licensing terms may be offered in the future.
+Slowave is open source under the AGPL-3.0-or-later license.
+
+Contributions are welcome, especially in:
+- client integrations
+- recall quality improvements
+- evaluation datasets
+- performance optimization
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a pull request.
+
+Commercial licensing may be considered in the future.
