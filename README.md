@@ -61,9 +61,9 @@ Slowave is built around one central idea:
 
 > Memory consolidation does not require language.
 
-In Slowave, memory is not stored as text or prompts. It is maintained as evolving embedding-based state. The system continuously processes interactions into structured signals: storage, consolidation, reinforcement, decay, supersession, and retrieval all operate directly over this representation.
+In Slowave, memory is not managed as prompts or replayed transcripts. Stored claims live alongside evolving embedding-based state, and consolidation, reinforcement, decay, supersession, and retrieval all operate directly over that representation.
 
-The language model is not part of this loop. It does not manage memory. It only receives the final recalled context when needed.
+The language model does not maintain memory. It authors what gets remembered and receives the final recalled context — but no LLM call is involved in consolidating, ranking, or revising what is stored.
 
 This separation has direct consequences:
 
@@ -187,8 +187,8 @@ Slowave only provides persistent, evolving context injection based on prior inte
 
 ## Documentation
 
-- [design.md](docs/design.md) — system rationale and consolidation model
-- [architecture.md](docs/architecture.md) — ingestion, storage, and recall pipeline
+- [design.md](docs/design.md) — design rationale, boundaries, and positioning
+- [architecture.md](docs/architecture.md) — brain-inspired memory model and lifecycle
 - [install.md](docs/install.md) — setup and client integration
 - [benchmarks.md](docs/benchmarks.md) — evaluation methodology and results
 - [limitations.md](docs/limitations.md) — known constraints and trade-offs
