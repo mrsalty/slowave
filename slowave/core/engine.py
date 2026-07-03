@@ -573,11 +573,18 @@ class SlowaveEngine:
                         continue
 
                     candidate_emb = self._fetch_schema_embedding(candidate_id)
-                    dir_score = (
-                        manifold.direction_score(emb, candidate_emb)
-                        if manifold is not None and candidate_emb is not None
-                        else DIRECTION_THRESHOLD
-                    )
+                    if candidate_emb is None:
+                        # A missing embedding is not evidence for supersession.
+                        # Fall through to reinforcement (same-scope) or skip
+                        # (cross-scope) — we cannot form a geometric verdict
+                        # without both embeddings.
+                        dir_score = 0.0
+                    else:
+                        dir_score = (
+                            manifold.direction_score(emb, candidate_emb)
+                            if manifold is not None
+                            else DIRECTION_THRESHOLD
+                        )
 
                     if is_same_scope:
                         if score >= SAME_SCOPE_COS_THRESHOLD:
