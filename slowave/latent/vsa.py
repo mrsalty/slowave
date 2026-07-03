@@ -1,5 +1,11 @@
 """Stage 11 — Vector Symbolic Architecture (VSA) role binding.
 
+**Experimental / internal use.** VSA vectors are stored in schema facets but
+are not currently used in retrieval ranking or consolidation decisions.
+This module is architecturally sound and retained for future retrieval
+experiments, but external claims should not imply VSA materially affects
+behavior unless it is connected to a measured retrieval path.
+
 Brain analogue: hippocampal binding. The hippocampus binds arbitrary roles
 (who, what, where, when) to content during encoding as a superposition over
 cortical representations. This module provides a lightweight, deterministic
