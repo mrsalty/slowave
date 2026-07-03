@@ -46,6 +46,8 @@ htmlcov/
 .AppleDouble
 .LSOverride
 
+# Generated benchmark run outputs
+/results/
 # Benchmark run outputs (keep datasets, not results)
 data/*/runs/
 data/runs/
