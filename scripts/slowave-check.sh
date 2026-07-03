@@ -25,13 +25,14 @@ else
 fi
 
 say "-- python deps --"
-for dep in numpy torch faiss click sentence_transformers; do
+for dep in numpy faiss click onnxruntime transformers huggingface_hub mcp uvicorn starlette; do
   if "$PY" -c "import $dep" 2>/dev/null; then
     ok "$dep importable"
   else
     case "$dep" in
-      sentence_transformers) bad "$dep missing (needed for text recall/event)";;
-      *)                     bad "$dep missing";;
+      onnxruntime) bad "$dep missing (needed for embedding encoder)";;
+      transformers) bad "$dep missing (needed for text encoding pipeline)";;
+      *)           bad "$dep missing";;
     esac
   fi
 done

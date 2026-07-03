@@ -139,11 +139,11 @@ Benchmarks were run internally during development to evaluate recall quality, st
 
 Slowave does not use an LLM for memory operations; all evaluation is based on embedding retrieval and local consolidation.
 
-| Benchmark | What it evaluates | Result |
-|---|---|---:|
-| LongMemEval | Multi-session factual recall with noise and distractors | 87.8% |
-| LoCoMo | Cross-session conversational recall across categories | 76% |
-| StaleMemory | Detection of outdated or superseded preferences | 86–89% |
+| Benchmark | What it evaluates | Scorer | Result |
+|---|---|---|---:|
+| LongMemEval | Multi-session factual recall with noise and distractors | keyword-overlap / local | 87.8% |
+| LoCoMo | Cross-session conversational recall across categories | keyword-overlap / local | 76% |
+| StaleMemory | Detection of outdated or superseded preferences | keyword-overlap / local | 45% overall; 86–89% for concrete preferences |
 
 These results are not directly comparable with systems that use LLM-as-a-judge scoring, since Slowave relies on embedding-based matching metrics.
 
