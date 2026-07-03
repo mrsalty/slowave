@@ -11,7 +11,7 @@
 #       [print(f['digests']['sha256']) for f in r['releases']['VERSION'] \
 #        if f['packagetype']=='sdist']"
 
-{% set version = "0.1.0" %}
+{% set version = "0.9.2" %}
 
 package:
   name: slowave
@@ -31,16 +31,17 @@ build:
 
 requirements:
   host:
-    - python >=3.10
+    - python >=3.11
     - setuptools >=69
     - pip
   run:
-    - python >=3.10
+    - python >=3.11
     - numpy
-    - pytorch >=2.0                # conda-forge name for torch
     - faiss-cpu
+    - onnxruntime >=1.19
+    - transformers >=4.30
+    - huggingface-hub >=0.16
     - click >=8.1
-    - sentence-transformers
     - mcp
 
 test:
