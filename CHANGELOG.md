@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.3](https://github.com/mrsalty/slowave/compare/slowave-v0.9.2...slowave-v0.9.3) (2026-07-03)
+
+
+### Bug Fixes
+
+* group A non-functional/benchmark-neutral fixes (Homebrew SHA, deps, README benchmarks, license, conda, dead code, docs, gitignore, results) ([acbb58e](https://github.com/mrsalty/slowave/commit/acbb58e0176e5ae61a33259263c62430312c9150))
+* group A non-functional/benchmark-neutral fixes (Homebrew SHA, deps, README benchmarks, license, conda, dead code, docs, gitignore, results) ([d525909](https://github.com/mrsalty/slowave/commit/d5259098b4a19adc2a7b53bb60445a8698053bb4))
+
 ## [0.9.2](https://github.com/mrsalty/slowave/compare/slowave-v0.9.1...slowave-v0.9.2) (2026-07-03)
 
 
