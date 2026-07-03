@@ -19,7 +19,10 @@ class ReplayConfig:
     sample_size: int = 256
     # KMeans-like clustering (simple, no sklearn dependency): we do online assignment to nearest centroid.
     max_prototypes_per_replay: int = 32
-    assignment_threshold: float = 0.60  # cosine similarity to existing prototype to reuse
+    # CA3 (fine-scale) assignment threshold — pattern completion.
+    # Higher threshold → only very similar episodes cluster together
+    # → specific, fine-grained prototypes (hippocampal CA3 analogue).
+    assignment_threshold: float = 0.85
     transition_batch_size: int = 64
     transition_steps: int = 50
 
@@ -80,19 +83,19 @@ class ReplayConfig:
     dg_min_prototypes: int = 3
 
     # Stage 9 — CA3 + CA1 dual-scale prototypes. Every episode is
-    # assigned at both scales in parallel during replay. The two
-    # graphs differ only in their assignment threshold. See
-    # docs/2026-05-26_stage9_proposal.md for the full architecture.
-    # NOTE: Both thresholds are currently set to 0.60 after grid-search
-    # tuning (2026-05-28). The original proposal used distinct CA3/CA1
-    # thresholds (0.85 / 0.55); distinct thresholds are available for
-    # experimentation but the current default reflects benchmark tuning.
+    # assigned at both scales in parallel during replay.
+    #   - CA3 (fine): higher threshold (0.85) — pattern completion,
+    #     specific prototypes for near-identical episodes.
+    #   - CA1 (coarse): lower threshold (0.55) — pattern separation,
+    #     broader categories spanning more varied episodes.
+    # The two graphs produce complementary views; retrieval rewards
+    # agreement between scales (multi_scale_co_occurrence_bonus).
+    # See docs/2026-05-26_stage9_proposal.md.
     use_multi_scale: bool = True
-    coarse_assignment_threshold: float = 0.60
-    # The fine-scale threshold reuses ``assignment_threshold`` above
-    # (default 0.60). The coarse threshold is tuned to match fine-scale
-    # for balanced dual-scale assignment — both set to 0.60 per grid
-    # search Phase 1 results (2026-05-28).
+    # CA1 (coarse-scale) assignment threshold — pattern separation.
+    # Lower threshold → more episodes cluster together → broader,
+    # more general prototypes (hippocampal CA1 analogue).
+    coarse_assignment_threshold: float = 0.55
 
 
 class ReplayEngine:
