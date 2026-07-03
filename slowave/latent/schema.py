@@ -439,16 +439,9 @@ class GeometricContradictionJudge:
             facet_dist = 0.0
 
         if facet_dist >= self.cfg.contradicts_facet_dist:
-            # If the new one is recent AND has enough support, treat
-            # it as a supersession; otherwise it's a contradiction
-            # without claim to replacement.
-            if (
-                dt_s > 0
-                and new.support_count >= self.cfg.min_support_to_supersede
-            ):
-                verdict = "contradicts"  # consolidator decides supersedes vs contradicts
-            else:
-                verdict = "contradicts"
+            # The consolidator decides whether to supersede or mark
+            # as contradicted based on time delta and support metadata.
+            verdict = "contradicts"
             return GeometricVerdict(
                 verdict=verdict,
                 reasoning=f"centroid_cos={cos:.3f} facet_dist={facet_dist:.3f}",

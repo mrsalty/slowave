@@ -83,6 +83,10 @@ class ReplayConfig:
     # assigned at both scales in parallel during replay. The two
     # graphs differ only in their assignment threshold. See
     # docs/2026-05-26_stage9_proposal.md for the full architecture.
+    # NOTE: Both thresholds are currently set to 0.60 after grid-search
+    # tuning (2026-05-28). The original proposal used distinct CA3/CA1
+    # thresholds (0.85 / 0.55); distinct thresholds are available for
+    # experimentation but the current default reflects benchmark tuning.
     use_multi_scale: bool = True
     coarse_assignment_threshold: float = 0.60
     # The fine-scale threshold reuses ``assignment_threshold`` above
