@@ -982,66 +982,93 @@ def _find_pythonw() -> str | None:
     return None
 
 
-def _install_worker_windows(slowave_bin: str) -> tuple[str, bool]:
+# Description marker: bump the version to force re-registration of tasks
+# created by older slowave versions (they lack battery/keep-alive settings).
+_WINDOWS_TASK_MARKER = "Managed by slowave setup (v2)"
+
+
+def _ps_squote(s: str) -> str:
+    """Escape a string for a single-quoted PowerShell literal."""
+    return s.replace("'", "''")
+
+
+def _register_windows_task(task_name: str, execute: str, argument: str) -> tuple[bool, str]:
+    """Register (or upgrade) a keep-alive Slowave task in Task Scheduler.
+
+    Reliability settings (all absent from pre-v2 registrations):
+    - -AllowStartIfOnBatteries / -DontStopIfGoingOnBatteries: the Task
+      Scheduler DEFAULT is to skip the logon trigger on battery and kill the
+      task when unplugging — the main reason services "never start" on laptops.
+    - A second trigger repeating every 5 minutes indefinitely, with
+      -MultipleInstances IgnoreNew: while the process runs, ticks are ignored;
+      if it dies, the next tick relaunches it. This is the Windows equivalent
+      of launchd KeepAlive / systemd Restart=always.
+
+    Returns (ok, detail). Registration failures are surfaced with the
+    PowerShell error text instead of being swallowed.
+    """
+    exe_q, arg_q, name_q = _ps_squote(execute), _ps_squote(argument), _ps_squote(task_name)
+
+    # Idempotency: skip only when the existing task matches this exact form
+    # (marker + executable + arguments). Older registrations get upgraded.
+    try:
+        check = subprocess.run(
+            ["powershell", "-NonInteractive", "-Command",
+             f"$t = Get-ScheduledTask -TaskName '{name_q}' -ErrorAction SilentlyContinue; "
+             f"if ($t) {{ $t.Description + '|' + $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}"],
+            capture_output=True, text=True, check=False, timeout=60,
+        )
+        parts = check.stdout.strip().split("|")
+        if (
+            len(parts) == 3
+            and parts[0].strip() == _WINDOWS_TASK_MARKER
+            and parts[1].strip().lower() == execute.lower()
+            and parts[2].strip().lower() == argument.lower()
+        ):
+            return True, "already up-to-date"
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False, "powershell not available"
+
+    ps = (
+        f"$ErrorActionPreference='Stop';"
+        f"$a=New-ScheduledTaskAction -Execute '{exe_q}' -Argument '{arg_q}';"
+        f"$logon=New-ScheduledTaskTrigger -AtLogOn;"
+        f"$tick=New-ScheduledTaskTrigger -Once -At (Get-Date) "
+        f"-RepetitionInterval (New-TimeSpan -Minutes 5) "
+        f"-RepetitionDuration (New-TimeSpan -Days 3650);"
+        f"$s=New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 "
+        f"-RestartInterval (New-TimeSpan -Minutes 1) "
+        f"-AllowStartIfOnBatteries -DontStopIfGoingOnBatteries "
+        f"-MultipleInstances IgnoreNew;"
+        f"$p=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;"
+        f"Register-ScheduledTask -TaskName '{name_q}' -Description '{_WINDOWS_TASK_MARKER}' "
+        f"-Action $a -Trigger $logon,$tick -Settings $s -Principal $p -Force | Out-Null;"
+        f"Start-ScheduledTask -TaskName '{name_q}'"
+    )
+    try:
+        result = subprocess.run(["powershell", "-NonInteractive", "-Command", ps],
+                                capture_output=True, text=True, check=False, timeout=120)
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        return False, "powershell not available"
+    if result.returncode != 0:
+        err = (result.stderr or result.stdout).strip().replace("\r\n", " ")
+        return False, f"registration failed: {err[:400]}"
+    return True, "registered and started"
+
+
+def _install_worker_windows(slowave_bin: str) -> tuple[bool, str]:
     """Register SlowaveWorker in Task Scheduler.
 
     Uses ``pythonw.exe -m slowave worker`` so the worker runs without opening a
     visible console window.  Falls back to ``slowave_bin`` if pythonw.exe is not
     found (rare custom installs without the no-console launcher).
     """
-    task_name = "SlowaveWorker"
-
-    # Prefer pythonw.exe to avoid a visible console window on logon/start.
     pythonw = _find_pythonw()
     if pythonw:
-        execute = pythonw
-        argument = "-m slowave worker --interval 300"
+        execute, argument = pythonw, "-m slowave worker --interval 300"
     else:
-        execute = slowave_bin
-        argument = "worker --interval 300"
-
-    # Check if a compatible task already exists (idempotency).
-    # Accept either the new pythonw form or the old slowave.EXE form so that
-    # re-runs on machines with an existing registration don't re-register.
-    already_registered = False
-    try:
-        check = subprocess.run(
-            ["powershell", "-NonInteractive", "-Command",
-             f"$t = Get-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
-             f"if ($t) {{ $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}"],
-            capture_output=True, text=True, check=False,
-        )
-        existing = check.stdout.strip()
-        if existing:
-            existing_exe, _, existing_args = existing.partition("|")
-            existing_exe = existing_exe.strip().lower()
-            existing_args = existing_args.strip().lower()
-            # Up-to-date if already using pythonw (new) or the same old slowave.EXE
-            new_form = pythonw and existing_exe == pythonw.lower() and "slowave worker" in existing_args
-            old_form = existing_exe == slowave_bin.lower()
-            already_registered = bool(new_form or old_form)
-    except FileNotFoundError:
-        pass
-
-    if already_registered:
-        return task_name, False
-
-    ps = (
-        f"$a=New-ScheduledTaskAction -Execute '{execute}' -Argument '{argument}';"
-        f"$t=New-ScheduledTaskTrigger -AtLogOn;"
-        f"$s=New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 "
-        f"-RestartInterval (New-TimeSpan -Minutes 1);"
-        f"$p=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;"
-        f"Register-ScheduledTask -TaskName '{task_name}' -Action $a -Trigger $t -Settings $s "
-        f"-Principal $p -Force;"
-        f"Start-ScheduledTask -TaskName '{task_name}'"
-    )
-    try:
-        subprocess.run(["powershell", "-NonInteractive", "-Command", ps],
-                       capture_output=True, check=False)
-    except FileNotFoundError:
-        pass
-    return task_name, True
+        execute, argument = slowave_bin, "worker --interval 300"
+    return _register_windows_task("SlowaveWorker", execute, argument)
 
 
 def _install_daemon_macos(slowave_bin: str) -> tuple[str, bool]:
@@ -1082,42 +1109,39 @@ def _install_daemon_linux(slowave_bin: str) -> tuple[str, bool]:
     return str(svc_path), True
 
 
-def _install_daemon_windows(slowave_bin: str) -> tuple[str, bool]:
-    """Register the HTTP MCP daemon as a Windows Scheduled Task."""
-    task_name = "SlowaveDaemon"
-    already_registered = False
-    try:
-        check = subprocess.run(
-            ["powershell", "-NonInteractive", "-Command",
-             f"$t = Get-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
-             f"if ($t) {{ $t.Actions[0].Execute }}"],
-            capture_output=True, text=True, check=False,
-        )
-        existing_exe = check.stdout.strip()
-        if existing_exe and existing_exe.lower() == slowave_bin.lower():
-            already_registered = True
-    except FileNotFoundError:
-        pass
+def _install_daemon_windows(slowave_bin: str) -> tuple[bool, str]:
+    """Register the HTTP MCP daemon as a Windows Scheduled Task.
 
-    if already_registered:
-        return task_name, False
+    Uses ``pythonw.exe -m slowave serve start`` so the daemon runs without a
+    visible console window (closing that window would kill the daemon).
+    """
+    pythonw = _find_pythonw()
+    if pythonw:
+        execute, argument = pythonw, "-m slowave serve start"
+    else:
+        execute, argument = slowave_bin, "serve start"
+    return _register_windows_task("SlowaveDaemon", execute, argument)
 
-    ps = (
-        f"$a=New-ScheduledTaskAction -Execute '{slowave_bin}' -Argument 'serve start';"
-        f"$t=New-ScheduledTaskTrigger -AtLogOn;"
-        f"$s=New-ScheduledTaskSettingsSet -ExecutionTimeLimit 0 -RestartCount 3 "
-        f"-RestartInterval (New-TimeSpan -Minutes 1);"
-        f"$p=New-ScheduledTaskPrincipal -UserId $env:USERNAME -LogonType Interactive -RunLevel Limited;"
-        f"Register-ScheduledTask -TaskName '{task_name}' -Action $a -Trigger $t -Settings $s "
-        f"-Principal $p -Force;"
-        f"Start-ScheduledTask -TaskName '{task_name}'"
-    )
-    try:
-        subprocess.run(["powershell", "-NonInteractive", "-Command", ps],
-                       capture_output=True, check=False)
-    except FileNotFoundError:
-        pass
-    return task_name, True
+
+def _verify_daemon_health(timeout: float = 15.0) -> bool:
+    """Poll the daemon /health endpoint until it responds or *timeout* elapses.
+
+    Setup previously claimed success as soon as the service files were written;
+    this turns "setup said OK but nothing is listening" into an immediate error.
+    """
+    import time
+    import urllib.request
+
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        try:
+            with urllib.request.urlopen("http://127.0.0.1:8766/health", timeout=1) as resp:
+                if resp.status == 200:
+                    return True
+        except Exception:
+            pass
+        time.sleep(0.5)
+    return False
 
 
 def _build_summary(client: str, worker: bool, install_hooks: bool,
@@ -1395,13 +1419,24 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
                 else:
                     _skip("systemd daemon service already up-to-date")
             elif SYSTEM == "Windows":
-                task, changed = _install_daemon_windows(slowave_bin)
-                if changed:
-                    _ok(f"Task Scheduler task registered: {task}")
+                ok, detail = _install_daemon_windows(slowave_bin)
+                if ok:
+                    _ok(f"Task Scheduler task SlowaveDaemon: {detail}")
                 else:
-                    _skip(f"Task Scheduler task already up-to-date: {task}")
+                    _err(f"Task Scheduler task SlowaveDaemon: {detail}")
+                    _warn("Start manually: slowave serve start")
             else:
                 _warn(f"Unknown platform '{SYSTEM}'. Run manually: slowave serve start")
+            if _verify_daemon_health():
+                _ok("Daemon is live: http://127.0.0.1:8766/health")
+            else:
+                _err("Daemon did not respond on http://127.0.0.1:8766/health within 15s.")
+                if SYSTEM == "Windows":
+                    _warn("Check logs: ~/.slowave/logs/pythonw-serve.log")
+                elif SYSTEM == "Linux":
+                    _warn("Check logs: journalctl --user -u slowave-daemon")
+                else:
+                    _warn("Check logs: /tmp/slowave-daemon.err")
     else:
         _skip("Skipped (--no-worker). Run manually: slowave serve start")
 
@@ -1432,9 +1467,13 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
                 else:
                     _skip("systemd worker service already up-to-date")
             elif SYSTEM == "Windows":
-                task, _ = _install_worker_windows(slowave_bin)
-                _ok(f"Task Scheduler task registered: {task}")
-                _ok("Verify:  Get-ScheduledTask -TaskName SlowaveWorker")
+                ok, detail = _install_worker_windows(slowave_bin)
+                if ok:
+                    _ok(f"Task Scheduler task SlowaveWorker: {detail}")
+                    _ok("Verify:  Get-ScheduledTask -TaskName SlowaveWorker")
+                else:
+                    _err(f"Task Scheduler task SlowaveWorker: {detail}")
+                    _warn("Start manually: slowave worker --interval 300")
             else:
                 _warn(f"Unknown platform '{SYSTEM}'. Run manually: slowave worker --interval 300")
     else:
