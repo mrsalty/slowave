@@ -226,11 +226,16 @@ class Consolidator:
 
         # Re-fetch the related schema's stored embedding from the DB. We
         # need it as a numpy array to compare centroids with the geometric
-        # judge. Falls back to a zero vector if missing (degenerate case
-        # that the judge will treat as "unrelated").
+        # judge. A missing embedding is not evidence for contradiction or
+        # supersession — fall back to creation without a geometric verdict.
         related_emb = self._fetch_schema_embedding(related.id)
         if related_emb is None:
-            related_emb = np.zeros_like(claim_embedding)
+            log.warning(
+                "consolidation: schema %d has no stored embedding; "
+                "skipping geometric verdict, creating new schema %d",
+                related.id, new_schema_id,
+            )
+            return "created", new_schema_id
 
         old_view = _LS(
             centroid=np.asarray(related_emb, dtype=np.float32),
