@@ -108,13 +108,14 @@ def _pid_exists(pid: int) -> bool:
 def _is_slowave_process(pid: int) -> bool:
     """Check whether *pid* is actually a slowave process (not a PID-reuse collision).
 
-    On Unix uses ``ps``, on Windows uses ``wmic`` to read the full command
-    line. ``tasklist /V`` only exposes the window title, which a headless
-    daemon launched as ``python -m slowave...`` would not contain — that would
-    cause a false negative, falsely rejecting a live daemon and allowing a
-    second one to start. Returns True when verification succeeds and
-    ``slowave`` appears in the command line; returns True on any error so a
-    live daemon is never falsely rejected.
+    On Unix uses ``ps``, on Windows uses PowerShell CIM to read the full
+    command line (``wmic`` is removed from Windows 11 24H2+, and ``tasklist
+    /V`` only exposes the window title, which a headless daemon launched as
+    ``python -m slowave...`` would not contain — that would cause a false
+    negative, falsely rejecting a live daemon and allowing a second one to
+    start). Returns True when verification succeeds and ``slowave`` appears
+    in the command line; returns True on any error so a live daemon is never
+    falsely rejected.
     """
     import subprocess
 
@@ -122,18 +123,17 @@ def _is_slowave_process(pid: int) -> bool:
         if sys.platform == "win32":
             result = subprocess.run(
                 [
-                    "wmic",
-                    "process",
-                    "where",
-                    f"processid={pid}",
-                    "get",
-                    "commandline",
-                    "/format:list",
+                    "powershell",
+                    "-NonInteractive",
+                    "-Command",
+                    f"(Get-CimInstance Win32_Process -Filter 'ProcessId={int(pid)}').CommandLine",
                 ],
                 capture_output=True,
                 text=True,
-                timeout=5,
+                timeout=10,
             )
+            if result.returncode != 0:
+                return True  # can't verify — don't reject a live daemon
             return "slowave" in result.stdout.lower()
         else:
             result = subprocess.run(
