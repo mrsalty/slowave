@@ -225,7 +225,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                     "reason": t.reason,
                 }
                 for t in brief.activation_trace
-                if not t.admitted
+                if not t.admitted and t.reason != "scope_mismatch"
             ]
             asyncio.create_task(
                 _bg_record_context_recall(
