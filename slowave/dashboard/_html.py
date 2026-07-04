@@ -352,6 +352,8 @@ tr.expandable:hover td{background:var(--panel3)}
     <button class="tab" data-tab="recall">🔍 Recall</button>
     <button class="tab" data-tab="worker">🧠 Worker</button>
     <button class="tab" data-tab="db">💾 DB Health</button>
+    <button class="tab" data-tab="episodes">🎞 Episodes</button>
+    <button class="tab" data-tab="supersessions">🔄 Supersessions</button>
   </nav>
 </header>
 
@@ -368,6 +370,10 @@ tr.expandable:hover td{background:var(--panel3)}
     <div class="pulse-stats" id="pulseStats"></div>
   </div>
   <div class="stat-grid" id="statGrid"></div>
+<div class="panel" style="margin-bottom:10px">
+    <div class="panel-title">📈 Salience distribution</div>
+    <canvas id="salienceHistCanvas" width="800" height="140" style="width:100%;height:140px"></canvas>
+  </div>
   <div class="two-col">
     <div class="panel">
       <div class="panel-title">📊 Schema health</div>
@@ -525,6 +531,42 @@ tr.expandable:hover td{background:var(--panel3)}
     </div>
     <div id="dbHealthLoading" class="loading-overlay"><div class="spinner"></div></div>
     <div id="dbHealth"></div>
+  </div>
+</section>
+<!-- EPISODES -->
+<section id="episodes" class="section">
+  <div class="panel" style="margin-bottom:10px">
+    <div class="controls">
+      <input id="episodeQ" placeholder="search content…" style="flex:1;min-width:160px"/>
+      <input id="episodeLimit" type="number" value="50" min="1" max="200" style="width:70px"/>
+      <button class="btn primary" onclick="loadEpisodes()">Load</button>
+      <button class="btn" onclick="loadPrototypes()">🔵 Prototypes</button>
+    </div>
+  </div>
+  <div class="two-col">
+    <div class="panel">
+      <div class="panel-title">🎞 Episodes</div>
+      <div id="episodeLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
+      <div id="episodeTable"></div>
+    </div>
+    <div class="panel">
+      <div class="panel-title">🔵 Prototypes</div>
+      <div id="prototypeLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
+      <div id="prototypeTable"></div>
+      <div id="prototypeDetail" style="margin-top:10px"></div>
+    </div>
+  </div>
+</section>
+
+<!-- SUPERSESSIONS -->
+<section id="supersessions" class="section">
+  <div class="panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+      <div class="panel-title" style="margin:0">🔄 Supersession chains</div>
+      <button class="btn" onclick="loadSupersessions()">↺ Refresh</button>
+    </div>
+    <div id="supersessionLoading" class="loading-overlay"><div class="spinner"></div></div>
+    <div id="supersessionTable"></div>
   </div>
 </section>
 </main>

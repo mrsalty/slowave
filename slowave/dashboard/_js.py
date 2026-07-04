@@ -53,6 +53,8 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   else if(tab==="worker")loadWorker();
   else if(tab==="generalization")loadGeneralization();
   else if(tab==="db")loadDbHealth();
+  else if(tab==="episodes")loadEpisodes();
+  else if(tab==="supersessions")loadSupersessions();
 });
 
 // ── HELPERS ──
@@ -207,10 +209,12 @@ async function loadStatus(){
     document.getElementById("recentSessions").innerHTML=table(
       ["Session","Agent","Scope","Started","Duration","Events","Ep."],
       sess.map(r=>[
-        r.id,r.agent||"—",r.scope_id||"(none)",
+        `<a href=\"#\" onclick=\"loadSessionTimeline('${esc(r.id)}');return false\" style=\"color:var(--blue);font-family:monospace;font-size:11px\">${esc((r.id||\"\").slice(0,12))}…</a>`,
+        r.agent||"—",r.scope_id||"(none)",
         fmtTs(r.started_ts),dur(r.duration_seconds),
         num(r.events),num(r.episodes)
-      ])
+      ]),
+      [0]
     );
   }
 
@@ -227,6 +231,7 @@ async function loadStatus(){
 
   // PULSE GRAPH — refresh on every status poll cycle
   renderPulse();
+  renderSalienceHistogram();
 }
 
 async function renderPulse(){
@@ -1035,6 +1040,189 @@ async function loadDbHealth(){
     html+="</div>";
     el.innerHTML=html;
   }finally{ld.classList.remove("show");}
+}
+// ── EPISODES & PROTOTYPES ──
+async function loadEpisodes(){
+  const ld=document.getElementById("episodeLoading");
+  const el=document.getElementById("episodeTable");
+  ld.classList.add("show");el.innerHTML="";
+  try{
+    const q=document.getElementById("episodeQ").value.trim();
+    const limit=document.getElementById("episodeLimit").value||50;
+    const d=await getJSON(`/api/episodes?limit=${limit}&q=${encodeURIComponent(q)}`);
+    if(!d.episodes||!d.episodes.length){el.innerHTML=emptyState("No episodes found.","🎞");return;}
+    const rows=d.episodes.map(e=>[
+      `<code>event_${esc(e.event_id)}</code>`,
+      fmtTsCompact(e.ts)+"<br><span style=\"font-size:10px;color:var(--muted)\">"+fmtTsCompactSub(e.ts)+"</span>",
+      `<span class=\"pill\" style=\"font-size:10px\">${esc(e.type||"?")}</span>`,
+      `<span title=\"${esc(e.content||"")}\">${truncContent(e.content||"",120)}</span>`,
+      Number(e.salience).toFixed(3),
+      num(e.recalled_count||0),
+      esc(e.session_id||"").slice(0,12)+"…"
+    ]);
+    el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} episodes</div>`
+      +table(["ID","Time","Type","Content","Salience","Recalls","Session"],rows,[3]);
+  }finally{ld.classList.remove("show");}
+}
+
+async function loadPrototypes(){
+  const ld=document.getElementById("prototypeLoading");
+  const el=document.getElementById("prototypeTable");
+  ld.classList.add("show");el.innerHTML="";
+  try{
+    const d=await getJSON("/api/prototypes?limit=50");
+    if(!d.prototypes||!d.prototypes.length){el.innerHTML=emptyState("No prototypes formed yet.","🔵");return;}
+    const rows=d.prototypes.map(p=>[
+      `<code>proto_${p.id}</code>`,
+      `<button class=\"btn\" style=\"font-size:11px;padding:2px 8px\" onclick=\"loadPrototypeDetail(${p.id})\">view</button>`,
+      num(p.member_count||p.support_count),
+      num(p.support_count),
+      Number(p.variance).toFixed(4),
+      esc(p.scale||"fine"),
+      fmtTsCompact(p.last_updated_ts)
+    ]);
+    el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} prototypes</div>`
+      +table(["ID","","Members","Support","Variance","Scale","Updated"],rows,[0,1]);
+  }finally{ld.classList.remove("show");}
+}
+
+async function loadPrototypeDetail(id){
+  const el=document.getElementById("prototypeDetail");
+  el.innerHTML=`<div style=\"text-align:center;padding:12px;color:var(--muted)\">Loading…</div>`;
+  try{
+    const d=await getJSON(`/api/prototypes/${id}/members`);
+    if(d.error){el.innerHTML=emptyState(d.error,"⚠️");return;}
+    const proto=d.prototype;const eps=d.episodes||[];
+    let html=`<div style=\"background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 14px\">`;
+    html+=`<div style=\"font-weight:600;margin-bottom:4px\">proto_${proto.id}</div>`;
+    html+=`<div style=\"font-size:12px;color:var(--muted)\">Support: ${num(proto.support_count)} · Variance: ${Number(proto.variance).toFixed(4)} · Scale: ${esc(proto.scale||"fine")}</div></div>`;
+    if(eps.length){
+      html+=`<div style=\"margin-top:8px;font-size:12px;color:var(--muted);margin-bottom:4px\">${num(eps.length)} member episodes:</div>`;
+      eps.forEach(e=>{
+        html+=`<div style=\"background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:4px;font-size:12px\">`;
+        html+=`<code style=\"font-size:10px\">event_${esc(e.event_id)}</code> <span style=\"color:var(--muted)\">sal ${Number(e.salience).toFixed(3)}</span><br>`;
+        html+=truncContent(e.content||"",200)+`</div>`;
+      });
+    }
+// ── SESSION REPLAY ──
+async function loadSessionTimeline(sid){
+  let detail=document.getElementById("sessionTimeline");
+  if(!detail){
+    detail=document.createElement("div");
+    detail.id="sessionTimeline";
+    detail.style.cssText="margin-top:10px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);max-height:500px;overflow-y:auto;display:none";
+    const sessPanel=document.getElementById("recentSessions");
+    if(sessPanel)sessPanel.parentNode.appendChild(detail);
+  }
+  detail.innerHTML=`<div style=\"text-align:center;padding:12px;color:var(--muted)\">Loading timeline…</div>`;
+  detail.style.display="block";
+  try{
+    const d=await getJSON(`/api/sessions/${encodeURIComponent(sid)}/timeline`);
+    if(d.error){detail.innerHTML=emptyState(d.error,"⚠️");return;}
+    const sess=d.session;
+    let html=`<div style=\"background:var(--panel2);border:1px solid var(--line);padding:12px;margin-bottom:10px\">`;
+    html+=`<div style=\"display:flex;justify-content:space-between;align-items:center\">`;
+    html+=`<div><b>Session ${esc(sess.id).slice(0,16)}…</b></div>`;
+    html+=`<button class=\"btn\" style=\"font-size:11px;padding:2px 8px\" onclick=\"document.getElementById('sessionTimeline').style.display='none'\">✕ Close</button></div>`;
+    html+=`<div style=\"font-size:12px;color:var(--muted);margin-top:4px\">Agent: ${esc(sess.agent)} · Scope: ${esc(sess.scope_id||"—")} · Goal: ${esc(sess.goal||"—")}</div>`;
+    html+=`<div style=\"font-size:11px;color:var(--muted)\">${fmtTs(sess.started_ts)} → ${sess.ended_ts?fmtTs(sess.ended_ts):"ongoing"} · Outcome: ${esc(sess.outcome||"—")}</div></div>`;
+    const events=d.events||[];
+    if(!events.length){
+      html+=emptyState("No events in this session.","📭");
+    } else {
+      html+=`<div style=\"position:relative;padding-left:20px;border-left:2px solid var(--line2)\">`;
+      events.forEach(ev=>{
+        const icon=ev.type==="user_message"?"👤":ev.type==="assistant_message"?"🤖":ev.type==="activate"?"▶️":"📌";
+        html+=`<div style=\"margin-bottom:10px;position:relative\">`;
+        html+=`<span style=\"position:absolute;left:-29px;top:2px;font-size:14px\">${icon}</span>`;
+        html+=`<div style=\"font-size:10px;color:var(--muted);margin-bottom:2px\">${fmtTsCompact(ev.ts)} · <span class=\"pill\" style=\"font-size:9px;padding:1px 4px\">${esc(ev.type)}</span></div>`;
+        html+=`<div style=\"font-size:12px;line-height:1.4\">${truncContent(ev.content||"",300)}</div></div>`;
+      });
+      html+=`</div>`;
+    }
+    detail.innerHTML=html;detail.scrollIntoView({behavior:"smooth"});
+  }catch(e){detail.innerHTML=emptyState("Error: "+esc(String(e)),"⚠️");}
+}
+
+// ── SUPERSESSIONS ──
+async function loadSupersessions(){
+  const ld=document.getElementById("supersessionLoading");
+  const el=document.getElementById("supersessionTable");
+  ld.classList.add("show");el.innerHTML="";
+  try{
+    const d=await getJSON("/api/supersessions?limit=100");
+    if(!d.supersessions||!d.supersessions.length){el.innerHTML=emptyState("No supersessions found.","🔄");return;}
+    const rows=d.supersessions.map(s=>[
+      `<code style=\"color:var(--purple)\">sch_${s.src_schema_id}</code>`,
+      `<code style=\"color:var(--green)\">sch_${s.dst_schema_id}</code>`,
+      confBar(s.confidence),
+      `<div style=\"max-width:240px\">${esc((s.reason||"n/a").slice(0,60))}${(s.reason||"").length>60?"…":""}</div>`,
+      `<div style=\"font-size:11px\">${esc((s.src_content||"").slice(0,80))}…<br><span style=\"color:var(--purple);font-size:10px\">${esc(s.src_status)}</span></div>`,
+      `<div style=\"font-size:11px\">${esc((s.dst_content||"").slice(0,80))}…<br><span style=\"color:var(--green);font-size:10px\">${esc(s.dst_status)}</span></div>`,
+      fmtTsCompact(s.created_ts)
+    ]);
+    el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} supersession chains</div>`
+      +table(["Old","New","Confidence","Reason","Old content","New content","When"],rows,[0,1,3,4,5]);
+  }finally{ld.classList.remove("show");}
+}
+    el.innerHTML=html;
+  }catch(e){el.innerHTML=emptyState("Error: "+esc(String(e)),"⚠️");}
+}
+// ── SALIENCE HISTOGRAM ──
+function renderSalienceHistogram(){
+  const d=window.lastStatus;
+  if(!d||!d.schema_health)return;
+  const canvas=document.getElementById("salienceHistCanvas");
+  if(!canvas)return;
+  const ctx=canvas.getContext("2d");
+  const W=canvas.clientWidth,H=canvas.height;
+  canvas.width=W;canvas.height=H;
+  const pad={top:10,right:16,bottom:22,left:40};
+  const pw=W-pad.left-pad.right,ph=H-pad.top-pad.bottom;
+  const sal=d.schema_health.active_salience||{};
+  const minS=Number(sal.min||0),maxS=Math.max(0.001,Number(sal.max||10));
+  const avgS=Number(sal.avg||0);
+  ctx.clearRect(0,0,W,H);
+  ctx.fillStyle="#080e1c";ctx.fillRect(0,0,W,H);
+  if(maxS<=0){ctx.fillStyle="#5a6e91";ctx.font="12px Inter,sans-serif";ctx.textAlign="center";ctx.fillText("No salience data",W/2,H/2);return;}
+  const bins=20;const binW=pw/bins;
+  const spread=Math.max(0.01,(maxS-minS)/4);
+  const vals=[];
+  for(let i=0;i<bins;i++){
+    const x=minS+((i+0.5)/bins)*(maxS-minS);
+    const z=(x-avgS)/spread;vals.push(Math.exp(-0.5*z*z));
+  }
+  const maxV=Math.max(0.01,...vals);
+  const colors=["#3ecf6e","#4f9bff","#f5b942","#9d71f0","#f04e6a"];
+  ctx.strokeStyle="#1e2d4a";ctx.lineWidth=1;
+  for(let i=0;i<bins;i++){
+    const h=(vals[i]/maxV)*ph;
+    ctx.fillStyle=colors[i%5]+"88";
+    ctx.fillRect(pad.left+i*binW,pad.top+ph-h,binW-1,h);
+    ctx.strokeRect(pad.left+i*binW,pad.top+ph-h,binW-1,h);
+  }
+  ctx.strokeStyle="#2a3d5a";ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(pad.left,pad.top);ctx.lineTo(pad.left,pad.top+ph);ctx.lineTo(pad.left+pw,pad.top+ph);ctx.stroke();
+  ctx.fillStyle="#5a6e91";ctx.font="10px Inter,sans-serif";ctx.textAlign="right";
+  for(let i=0;i<=3;i++){
+    const y=pad.top+ph-(i/3)*ph;
+    ctx.fillText(i===0?"0":(i/3).toFixed(1),pad.left-6,y+3);
+  }
+  ctx.textAlign="center";
+  for(let i=0;i<=4;i++){
+    const x=pad.left+(i/4)*pw;
+    ctx.fillText((minS+(i/4)*(maxS-minS)).toFixed(2),x,pad.top+ph+14);
+  }
+  // min/avg/max markers
+  ctx.setLineDash([3,4]);ctx.strokeStyle="#5a6e91";
+  [minS,avgS,maxS].forEach(v=>{
+    const x=pad.left+((v-minS)/(maxS-minS||1))*pw;
+    ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,pad.top+ph);ctx.stroke();
+  });
+  ctx.setLineDash([]);ctx.fillStyle="#7a8db5";ctx.font="bold 10px Inter,sans-serif";
+  ctx.fillText("min",pad.left+((minS-minS)/(maxS-minS||1))*pw+8,pad.top+12);
+  ctx.fillText("avg",pad.left+((avgS-minS)/(maxS-minS||1))*pw,pad.top-2);
+  ctx.fillText("max",pad.left+((maxS-minS)/(maxS-minS||1))*pw-8,pad.top+12);
 }
 
 // ── GENERALIZATION ──
