@@ -288,14 +288,11 @@ class Consolidator:
         conn = self.db.connect()
         conn.execute(
             "INSERT INTO consolidation_debug "
-            "(prototype_id, episode_ids, prompt_text, response_json, extracted_claims_json, created_schema_ids, ts) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(prototype_id, episode_ids, created_schema_ids, ts) "
+            "VALUES (?, ?, ?, ?)",
             (
                 int(prototype_id),
                 dumps_json({"ids": [int(e) for e in episode_ids]}),
-                "",
-                dumps_json({}),
-                dumps_json({"claims": []}),
                 dumps_json({"ids": [int(s) for s in created_schema_ids]}),
                 int(time.time()),
             ),
