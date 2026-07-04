@@ -436,10 +436,12 @@ async function expandSchemaRow(tr,schemaId){
   const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto">`+d.evidence.map((e,i)=>{
     const quote=e.quote||e.event_content||"";
     const evLink=e.raw_event_id?` <a href="#" onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:12px">evt_${e.raw_event_id}</a>`:"";
+    const sessLink=e.episode_session?` <a href="#" onclick="loadSessionTimeline('${esc(e.episode_session)}');return false" style="color:var(--cyan);font-size:11px">sess_${esc((e.episode_session||"").slice(0,12))}…</a>`:"";
+    const kindBadge=e.episode_kind?`<span class="pill" style="font-size:9px;padding:1px 4px">${esc(e.episode_kind)}</span>`:"";
     const evMeta=e.event_type?`<span class="pill" style="font-size:10px">${esc(e.event_type)}</span> `:"";
     return `<div style="margin-bottom:6px;font-size:12px;padding:6px 8px;background:var(--panel2);border-radius:4px">
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-        <span style="color:var(--muted)">epi_${e.episode_id||"—"}</span>${evLink}
+        <span style="color:var(--muted)">epi_${e.episode_id||"—"}</span>${kindBadge}${evLink}${sessLink}
         <span style="color:var(--green);font-size:11px">w${Number(e.weight||0).toFixed(3)}</span>
         ${evMeta}
       </div>
@@ -465,7 +467,7 @@ const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence",
         ${(s.distinct_scope_count||0)} scope${s.distinct_scope_count!==1?"s":""} ·
         ${(s.distinct_scope_kind_count||0)} kind${s.distinct_scope_kind_count!==1?"s":""} ·
         ${(s.cross_scope_recall_count||0)} cross-scope recall${s.cross_scope_recall_count!==1?"s":""}
-        ${(s.recalled_scopes||[]).length?`<div style="margin-top:4px;font-size:11px;color:var(--cyan)">${s.recalled_scopes.slice(0,8).map(sc=>`<span style="margin-right:6px">${esc(sc)}</span>`).join("")}${s.recalled_scopes.length>8?" …":""}</div>`:""}
+        ${(s.all_scopes||s.recalled_scopes||[]).length?`<div style="margin-top:4px;font-size:11px;color:var(--cyan)">Scopes: ${(s.all_scopes||s.recalled_scopes||[]).slice(0,12).map(sc=>typeof sc==="string"?`<span style="margin-right:6px">${esc(sc)}</span>`:`<span style="margin-right:6px" title="${esc(sc.kind||"")}">${esc(sc.id)}</span>`).join("")}${(s.all_scopes||s.recalled_scopes||[]).length>12?" …":""}</div>`:""}
       </div>`:"<div style='font-size:12px;color:var(--muted)'>Not yet recalled across multiple scopes.</div>"}
   </div>`;
   expTr.innerHTML=`<td colspan="9"><div class="expand-content">
