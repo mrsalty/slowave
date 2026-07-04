@@ -434,13 +434,19 @@ async function expandSchemaRow(tr,schemaId){
   const d=await getJSON(`/api/schemas/${schemaId}`);
   const s=d.schema;
   const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto">`+d.evidence.map((e,i)=>{
-    const evLink=e.raw_event_id?`<a href="#" onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:11px">evt_${e.raw_event_id}</a>`:"—";
-    return `<div style="margin-bottom:4px;font-size:11px">
-      <span style="color:var(--muted)">epi_${e.episode_id||"—"}</span> ${evLink} <span style="color:var(--green)">w${Number(e.weight||0).toFixed(3)}</span>
-      <div style="color:var(--text);margin:2px 0">${esc((e.quote||"?").slice(0,200))}</div>
+    const quote=e.quote||e.event_content||"";
+    const evLink=e.raw_event_id?` <a href="#" onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:12px">evt_${e.raw_event_id}</a>`:"";
+    const evMeta=e.event_type?`<span class="pill" style="font-size:10px">${esc(e.event_type)}</span> `:"";
+    return `<div style="margin-bottom:6px;font-size:12px;padding:6px 8px;background:var(--panel2);border-radius:4px">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+        <span style="color:var(--muted)">epi_${e.episode_id||"—"}</span>${evLink}
+        <span style="color:var(--green);font-size:11px">w${Number(e.weight||0).toFixed(3)}</span>
+        ${evMeta}
+      </div>
+      ${quote?`<div style="color:var(--text);line-height:1.4;font-size:12px">${esc(quote.slice(0,300))}${quote.length>300?"…":""}</div>`:""}
       <div id="evt_detail_${schemaId}_${i}"></div>
     </div>`;}).join("")+`</div>`:`<em style="color:var(--muted)">No evidence.</em>`;
-  const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence","Reason"],
+const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence","Reason"],
     d.outgoing.map(e=>[`sch_${e.dst_schema_id}`,e.relation,Number(e.confidence||0).toFixed(2),e.reason||"—"])):"<em style='color:var(--muted)'>None.</em>";
   const inHtml=d.incoming&&d.incoming.length?table(["From","Relation","Confidence","Reason"],
     d.incoming.map(e=>[`sch_${e.src_schema_id}`,e.relation,Number(e.confidence||0).toFixed(2),e.reason||"—"])):"<em style='color:var(--muted)'>None.</em>";
@@ -455,10 +461,11 @@ async function expandSchemaRow(tr,schemaId){
     ${stage>0?`
       ${genBreadthBar((s.scope_breadth_pct||0),"scope breadth")}
       ${genBreadthBar((s.scope_kind_breadth_pct||0),"kind breadth")}
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">
         ${(s.distinct_scope_count||0)} scope${s.distinct_scope_count!==1?"s":""} ·
         ${(s.distinct_scope_kind_count||0)} kind${s.distinct_scope_kind_count!==1?"s":""} ·
         ${(s.cross_scope_recall_count||0)} cross-scope recall${s.cross_scope_recall_count!==1?"s":""}
+        ${(s.recalled_scopes||[]).length?`<div style="margin-top:4px;font-size:11px;color:var(--cyan)">${s.recalled_scopes.slice(0,8).map(sc=>`<span style="margin-right:6px">${esc(sc)}</span>`).join("")}${s.recalled_scopes.length>8?" …":""}</div>`:""}
       </div>`:"<div style='font-size:12px;color:var(--muted)'>Not yet recalled across multiple scopes.</div>"}
   </div>`;
   expTr.innerHTML=`<td colspan="9"><div class="expand-content">

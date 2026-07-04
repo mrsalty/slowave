@@ -795,10 +795,35 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
             return {"error": "schema not found", "schema_id": schema_id}
         proto_map = _prototype_map(conn, [schema_id])
         schema = _schema_row_to_node(row, proto_map.get(schema_id, []))
-        evidence = [dict(r) for r in conn.execute(
-            "SELECT * FROM schema_evidence WHERE schema_id = ? ORDER BY weight DESC LIMIT 50",
+        evidence = [
+            dict(r) for r in conn.execute(
+                "SELECT se.*, re.content AS event_content, re.type AS event_type, "
+                "re.ts AS event_ts, re.session_id AS event_session "
+                "FROM schema_evidence se "
+                "LEFT JOIN raw_events re ON re.id = se.raw_event_id "
+                "WHERE se.schema_id = ? ORDER BY se.weight DESC LIMIT 50",
+                (schema_id,),
+            ).fetchall()
+        ]
+        # Fill missing quote with event_content or episode metadata
+        for ev in evidence:
+            if not ev.get("quote") and ev.get("raw_event_id"):
+                ev["quote"] = (ev.get("event_content") or "")[:300]
+            elif not ev.get("quote"):
+                # Try episode metadata
+                ep_row = conn.execute(
+                    "SELECT metadata_json FROM episodic_memories WHERE id = ?",
+                    (ev.get("episode_id"),)
+                ).fetchone()
+                if ep_row:
+                    meta = _json_loads(ep_row["metadata_json"], {})
+                    ev["quote"] = str(meta.get("text", meta.get("content", "")))[:300]
+        # Distinct scopes for this schema
+        scope_rows = conn.execute(
+            "SELECT DISTINCT scope_id FROM schema_evidence WHERE schema_id = ?",
             (schema_id,),
-        ).fetchall()]
+        ).fetchall()
+        schema["recalled_scopes"] = [str(r["scope_id"]) for r in scope_rows if r["scope_id"]]
         outgoing = [dict(r) for r in conn.execute(
             "SELECT * FROM schema_relations WHERE src_schema_id = ? ORDER BY created_ts DESC",
             (schema_id,),
