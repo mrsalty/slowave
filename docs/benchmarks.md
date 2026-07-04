@@ -61,6 +61,8 @@ All Slowave runs: **zero LLM calls**, local CPU, no API key required.
 | commonsense | 96 | **50.0%** | 🔴 out of scope |
 | **TOTAL** | **1 986** | **74.6%** | 🟢 **beats all independently verified competitors** |
 
+> Category breakdown above is from a prior 76% run. Individual category scores vary ±1–2 pp between runs due to consolidation non-determinism.
+
 **🟢 Where Slowave excels:** cross-session recall — the category that matters most in real agent use. Beats LangMem (58.1%) and Zep (75.1%) with zero fine-tuning and zero LLM calls.
 
 **🔴 Where Slowave falls short:** "How many days since X?" is arithmetic, not retrieval — Slowave doesn't have an answer-construction layer. Commonsense questions require world knowledge that was never stored. These are structural limits of any retrieval-only system.
