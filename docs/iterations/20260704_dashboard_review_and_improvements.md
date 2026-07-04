@@ -13,10 +13,10 @@ HTML/JS/Cytoscape.js), read-only, localhost-bound by default.
 | Tab | What it shows |
 |-----|--------------|
 | **Overview** | Stat cards (sessions, events, episodes, schemas, prototypes, edges, relations, feedback, promoted, global, scopes, DB size), multi-channel pulse chart (raw_events / episodes / schemas over time), recent sessions, process list, daemon health, warnings |
-| **Schemas** | Searchable/filterable schema table with status/salience/class/scope filtering, detail drill-down panel (content, facets, tags, evidence, incoming/outgoing relations) |
-| **Graph** | Interactive schema-relation graph with Cytoscape.js + SVG fallback, scope/status/salience filters, neighborhood view on click |
+| **Schemas** | Searchable/filterable schema table with status/salience/class/scope filtering, detail drill-down panel (content, facets, tags, evidence with aligned grid, incoming/outgoing relations), generalization stat cards at top |
+| **Graph** | Interactive schema-relation graph with Cytoscape.js + SVG fallback, scope/status/salience filters (cross-browser range slider), neighborhood view on click |
 | **Worker** | Consolidation run history + multi-channel spline chart (schemas created/reinforced/decayed) |
-| **Generalization** | Stage distribution (0-3), scope registry, top promoted schemas |
+| **Supersessions** | Supersession chains with confidence, source/target content, timestamps |
 | **Recall Playground** | Live `engine.recall()` with query/k/evidence controls, displays schemas + episodes + expanded neighbors |
 | **DB Health** | SQLite pragmas, integrity check, FK check, table counts |
 
@@ -59,14 +59,11 @@ agent experienced.
 - `GET /api/sessions/:id/episodes` — all formed episodes
 - Timeline view in the UI: event type, content preview, timestamps, role/speaker
 
-#### 3. Salience Distribution Histogram
-Current overview only shows min/avg/max. A histogram or density plot of schema salience
-values reveals the activation landscape — are most schemas dormant or fighting for
-attention?
-
-- Canvas-based bar chart
-- Grouped by status (active, needs_review, superseded)
-- `/api/schemas/salience-distribution` or as part of `/api/status`
+#### 3. ~~Salience Distribution Histogram~~ (removed)
+~~Canvas-based bar chart of schema salience values.~~ Implemented then removed in July 2026
+dashboard polish pass — histograms of synthetic normal-distribution bars proved
+uninformative; the actual salience range is better served by the schema health panel
+and per-schema salience bars.
 
 #### 4. Supersession / Contradiction Timeline
 A view showing correction history — which schemas were superseded by which, when, and why.
@@ -166,7 +163,7 @@ Together they transform the dashboard from a "system monitor" (showing counts of
 |---|------|---------|--------|
 | 1 | 1 | Episode & Prototype Browser | 🟢 implemented |
 | 2 | 1 | Session Replay Viewer | 🟢 implemented |
-| 3 | 1 | Salience Distribution Histogram | 🟢 implemented |
+| 3 | 1 | Salience Distribution Histogram | 🟠 removed — implemented then removed (uninformative) |
 | 4 | 1 | Supersession / Contradiction Timeline | 🟢 implemented |
 | 5 | 2 | Memory Health Score | 🔴 pending |
 | 6 | 2 | Scope Activity Comparison | 🔴 pending |
@@ -180,4 +177,18 @@ Together they transform the dashboard from a "system monitor" (showing counts of
 | 14 | 4 | Collapsible stat card sections | 🔴 pending |
 | 15 | 4 | Relative time display toggle | 🔴 pending |
 | 16 | 4 | Color-blind friendly palette | 🔴 pending |
-memories) into a true "memory explorer" (showing what the memories actually say).
+
+### Additional polish (July 2026 session)
+
+These items were not in the original plan but were implemented during dashboard cleanup:
+
+| Item | Description |
+|------|-------------|
+| **Evidence grid redesign** | 4-column CSS grid (Episode\|Kind\|Session\|Weight) with consistent 14px gaps, aligned headers, plain-text kind badges, full session IDs, clean weight display |
+| **Schema row highlight** | Expanded schema row gets a subtle background tint for visual context |
+| **Expand/collapse fix** | Clicking an already-expanded schema now properly collapses it |
+| **Scope tooltip** | Scope list now queries `context_recall_items` for schema-specific scopes (not full registry); shown as hover tooltip |
+| **Generalization tab removed** | Stat cards moved into Schemas tab header; redundant promoted list and scope registry panels removed |
+| **Cross-browser range slider** | Graph tab salience slider uses `::-webkit-slider-*` / `::-moz-range-*` pseudo-elements instead of Chrome-only `accent-color` |
+| **Session timeline overlay** | Session replay opens as fixed bottom-right overlay panel |
+| **Supersessions tab** | Added as dedicated tab (was missing from original tab list) |
