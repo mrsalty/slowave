@@ -1114,22 +1114,21 @@ async function explorerSchemaDetail(id){
     const d=await getJSON(`/api/schemas/${id}`);
     if(d.error){el.innerHTML=emptyState(d.error,"⚠️");return;}
     const s=d.schema||d;
+    const sc=s.scope||s.scope_id||"";
+    const eps=d.evidence||[];
+    const rels=d.outgoing||[];
     let html=`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;margin-top:8px">`;
-    html+=`<div style="display:flex;justify-content:space-between;align-items:center"><b>sch_${id}</b>`;
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center"><b>${esc(s.id||"sch_"+id)}</b>`;
     html+=`<button class="btn" style="font-size:10px;padding:1px 6px" onclick="document.getElementById('explorerSchemaDetail').innerHTML=''">✕</button></div>`;
-    html+=`<div style="font-size:13px;line-height:1.5;margin:6px 0">${esc(s.content_text||"")}</div>`;
-    html+=`<div style="font-size:11px;color:var(--muted)">${pill(s.status)} · sal ${Number(s.salience).toFixed(3)} · stage ${s.generalization_stage||0} · scope ${esc(s.scope_id||"—")}</div>`;
-    // Evidence episodes
-    const eps=d.evidence_episodes||[];
+    html+=`<div style="font-size:13px;line-height:1.5;margin:6px 0">${esc(s.content||s.content_text||"")}</div>`;
+    html+=`<div style="font-size:11px;color:var(--muted)">${pill(s.status)} · sal ${Number(s.salience).toFixed(3)} · stage ${s.generalization_stage||0} · scope ${esc(sc.slice(0,30))}</div>`;
     if(eps.length){
       html+=`<div style="margin-top:8px;font-size:11px;color:var(--muted)">Evidence (${eps.length}):</div>`;
-      eps.forEach(e=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">· ${esc((e.content_text||"").slice(0,150))}</div>`;});
+      eps.slice(0,10).forEach(e=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">· ${esc((e.content_text||e.content||"").slice(0,150))}</div>`;});
     }
-    // Relations
-    const rels=d.outgoing_relations||[];
     if(rels.length){
       html+=`<div style="margin-top:8px;font-size:11px;color:var(--muted)">Relations:</div>`;
-      rels.forEach(r=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">${esc(r.relation)} → sch_${r.dst_schema_id} (conf ${Number(r.confidence).toFixed(2)})</div>`;});
+      rels.slice(0,10).forEach(r=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">${esc(r.relation)} → sch_${r.dst_schema_id} (conf ${Number(r.confidence).toFixed(2)})</div>`;});
     }
     html+=`</div>`;
     el.innerHTML=html;
