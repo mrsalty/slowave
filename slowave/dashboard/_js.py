@@ -435,8 +435,8 @@ async function expandSchemaRow(tr,schemaId){
   const s=d.schema;
   const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto">`+d.evidence.map((e,i)=>{
     const quote=e.quote||e.event_content||"";
-    const evLink=e.raw_event_id?` <a href="#" onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:12px">evt_${e.raw_event_id}</a>`:"";
-    const sessLink=e.episode_session?` <a href="#" onclick="loadSessionTimeline('${esc(e.episode_session)}');return false" style="color:var(--cyan);font-size:11px">sess_${esc((e.episode_session||"").slice(0,12))}…</a>`:"";
+    const evLink=e.raw_event_id?` <span onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:12px">evt_${e.raw_event_id}</span>`:"";
+    const sessLink=e.episode_session?` <span onclick="loadSessionTimeline('${esc(e.episode_session)}')" style="cursor:pointer;color:var(--cyan);font-size:11px" title="Open session timeline">sess_${esc((e.episode_session||"").slice(0,12))}…</span>`:"";
     const kindBadge=e.episode_kind?`<span class="pill" style="font-size:9px;padding:1px 4px">${esc(e.episode_kind)}</span>`:"";
     const evMeta=e.event_type?`<span class="pill" style="font-size:10px">${esc(e.event_type)}</span> `:"";
     return `<div style="margin-bottom:6px;font-size:12px;padding:6px 8px;background:var(--panel2);border-radius:4px">
