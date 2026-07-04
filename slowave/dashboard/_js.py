@@ -53,7 +53,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   else if(tab==="worker")loadWorker();
   else if(tab==="generalization")loadGeneralization();
   else if(tab==="db")loadDbHealth();
-  else if(tab==="episodes")loadEpisodes();
+  else if(tab==="episodes"){loadEpisodes();loadPrototypes();}
   else if(tab==="supersessions")loadSupersessions();
 });
 
@@ -209,7 +209,8 @@ async function loadStatus(){
     document.getElementById("recentSessions").innerHTML=table(
       ["Session","Agent","Scope","Started","Duration","Events","Ep."],
       sess.map(r=>[
-        `<a href="#" onclick="loadSessionTimeline('${esc(r.id)}');return false" style="color:var(--blue);font-family:monospace;font-size:11px">${esc((r.id||"").slice(0,12))}…</a>`,        r.agent||"—",r.scope_id||"(none)",
+        `<span onclick="loadSessionTimeline('${esc(r.id)}')" style="cursor:pointer;color:var(--blue);font-family:monospace;font-size:11px" title="Click to replay session">${esc((r.id||"").slice(0,12))}…</span>`,
+        r.agent||"—",r.scope_id||"(none)",
         fmtTs(r.started_ts),dur(r.duration_seconds),
         num(r.events),num(r.episodes)
       ]),
@@ -1060,7 +1061,7 @@ async function loadEpisodes(){
       esc(e.session_id||"").slice(0,12)+"…"
     ]);
     el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} episodes</div>`
-      +table(["ID","Time","Type","Content","Salience","Recalls","Session"],rows,[3]);
+      +table(["ID","Time","Type","Content","Salience","Recalls","Session"],rows,[1,2,3]);
   }finally{ld.classList.remove("show");}
 }
 
