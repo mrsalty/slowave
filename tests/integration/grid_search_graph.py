@@ -32,11 +32,13 @@ shared_encoder = TextEncoder(EncoderConfig())
 
 CONFIGS = [
     ("overwrite", GraphConfig(homeostatic_enabled=False, accumulate_decay=0.0)),
-    ("d=0.5_t=1.0_r=0.1", GraphConfig(accumulate_decay=0.5, homeostatic_target=1.0, prune_ratio=0.1)),
-    ("d=0.3_t=1.0_r=0.1", GraphConfig(accumulate_decay=0.3, homeostatic_target=1.0, prune_ratio=0.1)),
-    ("d=0.5_t=0.5_r=0.1", GraphConfig(accumulate_decay=0.5, homeostatic_target=0.5, prune_ratio=0.1)),
-    ("d=0.5_t=1.0_r=0.2", GraphConfig(accumulate_decay=0.5, homeostatic_target=1.0, prune_ratio=0.2)),
+    # current defaults
     ("d=0.3_t=0.5_r=0.2", GraphConfig(accumulate_decay=0.3, homeostatic_target=0.5, prune_ratio=0.2)),
+    # relaxed budget for sparser 128-proto graph
+    ("d=0.3_t=1.0_r=0.1", GraphConfig(accumulate_decay=0.3, homeostatic_target=1.0, prune_ratio=0.1)),
+    ("d=0.5_t=1.0_r=0.1", GraphConfig(accumulate_decay=0.5, homeostatic_target=1.0, prune_ratio=0.1)),
+    ("d=0.5_t=0.8_r=0.1", GraphConfig(accumulate_decay=0.5, homeostatic_target=0.8, prune_ratio=0.1)),
+    ("d=0.3_t=0.8_r=0.1", GraphConfig(accumulate_decay=0.3, homeostatic_target=0.8, prune_ratio=0.1)),
 ]
 def run_one(name, graph_cfg):
     t0 = time.time()
@@ -50,7 +52,7 @@ def run_one(name, graph_cfg):
             cfg = SlowaveConfig(db_path=db_path, dim=shared_encoder.dim, encoder=EncoderConfig(),
                 salience=SalienceConfig(tau_seconds=86400*30),
                 replay=ReplayConfig(assignment_threshold=0.85, sample_size=2048,
-                    max_prototypes_per_replay=750, use_multi_scale=True),
+                    max_prototypes_per_replay=128, use_multi_scale=True),
                 retrieval=RetrievalConfig(salience_weight=0.3, neighbor_top_k=6,
                     use_multi_scale=True, use_transition=True),
                 graph=graph_cfg, disable_encoder=False)
