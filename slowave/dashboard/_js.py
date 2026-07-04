@@ -426,6 +426,9 @@ function renderSchemasTable(schemas){
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function expandSchemaRow(tr,schemaId){
+  // Collapse all other expanded rows first
+  const allRows=tr.parentElement.querySelectorAll("tr.expand-row");
+  allRows.forEach(r=>r.remove());
   // Toggle existing
   const nextTr=tr.nextElementSibling;
   if(nextTr&&nextTr.classList.contains("expand-row")){
@@ -1081,7 +1084,7 @@ async function loadSessionTimeline(sid){
   if(!detail){
     detail=document.createElement("div");
     detail.id="sessionTimeline";
-    detail.style.cssText="position:fixed;bottom:16px;right:16px;width:520px;max-height:70vh;padding:16px;background:var(--panel);border:2px solid var(--blue);border-radius:var(--radius);overflow-y:auto;display:none;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5)";
+    detail.style.cssText="position:fixed;bottom:16px;right:16px;width:600px;max-height:70vh;padding:16px;background:var(--panel);border:2px solid var(--blue);border-radius:var(--radius);overflow-y:auto;display:none;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5)";
     document.body.appendChild(detail);
   }
   detail.innerHTML=`<div style=\"text-align:center;padding:12px;color:var(--muted)\">Loading timeline…</div>`;
@@ -1094,8 +1097,8 @@ async function loadSessionTimeline(sid){
     html+=`<div style=\"display:flex;justify-content:space-between;align-items:center\">`;
     html+=`<div><b>Session ${esc(sess.id).slice(0,16)}…</b></div>`;
     html+=`<button class=\"btn\" style=\"font-size:11px;padding:2px 8px\" onclick=\"document.getElementById('sessionTimeline').style.display='none'\">✕ Close</button></div>`;
-    html+=`<div style=\"font-size:12px;color:var(--muted);margin-top:4px\">Agent: ${esc(sess.agent)} · Scope: ${esc(sess.scope_id||"—")} · Goal: ${esc(sess.goal||"—")}</div>`;
-    html+=`<div style=\"font-size:11px;color:var(--muted)\">${fmtTs(sess.started_ts)} → ${sess.ended_ts?fmtTs(sess.ended_ts):"ongoing"} · Outcome: ${esc(sess.outcome||"—")}</div></div>`;
+    html+=`<div style=\"font-size:13px;color:var(--muted);margin-top:4px\">Agent: ${esc(sess.agent)} · Scope: ${esc(sess.scope_id||"—")} · Goal: ${esc(sess.goal||"—")}</div>`;
+    html+=`<div style=\"font-size:12px;color:var(--muted)\">${fmtTs(sess.started_ts)} → ${sess.ended_ts?fmtTs(sess.ended_ts):"ongoing"} · Outcome: ${esc(sess.outcome||"—")}</div></div>`;
     const events=d.events||[];
     if(!events.length){
       html+=emptyState("No events in this session.","📭");
@@ -1105,8 +1108,8 @@ async function loadSessionTimeline(sid){
         const icon=ev.type==="user_message"?"👤":ev.type==="assistant_message"?"🤖":ev.type==="activate"?"▶️":"📌";
         html+=`<div style=\"margin-bottom:10px;position:relative\">`;
         html+=`<span style=\"position:absolute;left:-29px;top:2px;font-size:14px\">${icon}</span>`;
-        html+=`<div style=\"font-size:10px;color:var(--muted);margin-bottom:2px\">${fmtTsCompact(ev.ts)} · <span class=\"pill\" style=\"font-size:9px;padding:1px 4px\">${esc(ev.type)}</span></div>`;
-        html+=`<div style=\"font-size:12px;line-height:1.4\">${truncContent(ev.content||"",300)}</div></div>`;
+        html+=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:3px\">${fmtTsCompact(ev.ts)} · <span class=\"pill\" style=\"font-size:10px;padding:2px 5px\">${esc(ev.type)}</span></div>`;
+        html+=`<div style=\"font-size:13px;line-height:1.5\">${truncContent(ev.content||"",300)}</div></div>`;
       });
       html+=`</div>`;
     }
