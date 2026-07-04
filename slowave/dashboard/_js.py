@@ -987,7 +987,7 @@ async function runRecall(){
       html+=`<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">🗒 Evidence events (${d.raw_events.length})</div>`;
       html+=table(
         ["ID","Type","Content"],
-        d.raw_events.map(e=>[`evt_${e.id}`,e.type||"—",esc((e.content||"").slice(0,200))]),
+        d.raw_events.map(e=>[`evt_${e.id}`,e.type||"—",esc((e.content_preview||"").slice(0,200))]),
         [0]
       );
     }
@@ -1047,15 +1047,15 @@ async function loadEpisodes(){
   const el=document.getElementById("episodeTable");
   ld.classList.add("show");el.innerHTML="";
   try{
-    const q=document.getElementById("episodeQ").value.trim();
-    const limit=document.getElementById("episodeLimit").value||50;
+    const q=document.getElementById("episodeQ")?.value?.trim()||"";
+    const limit=document.getElementById("episodeLimit")?.value||50;
     const d=await getJSON(`/api/episodes?limit=${limit}&q=${encodeURIComponent(q)}`);
     if(!d.episodes||!d.episodes.length){el.innerHTML=emptyState("No episodes found.","🎞");return;}
     const rows=d.episodes.map(e=>[
       `<code>event_${esc(e.event_id)}</code>`,
       fmtTsCompact(e.ts)+"<br><span style=\"font-size:10px;color:var(--muted)\">"+fmtTsCompactSub(e.ts)+"</span>",
       `<span class=\"pill\" style=\"font-size:10px\">${esc(e.type||"?")}</span>`,
-      `<span title=\"${esc(e.content||"")}\">${truncContent(e.content||"",120)}</span>`,
+      `<span title=\"${esc(e.content_preview||"")}\">${truncContent(e.content_preview||"",120)}</span>`,
       Number(e.salience).toFixed(3),
       num(e.recalled_count||0),
       esc(e.session_id||"").slice(0,12)+"…"
@@ -1101,7 +1101,7 @@ async function loadPrototypeDetail(id){
       eps.forEach(e=>{
         html+=`<div style=\"background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:4px;font-size:12px\">`;
         html+=`<code style=\"font-size:10px\">event_${esc(e.event_id)}</code> <span style=\"color:var(--muted)\">sal ${Number(e.salience).toFixed(3)}</span><br>`;
-        html+=truncContent(e.content||"",200)+`</div>`;
+        html+=truncContent(e.content_preview||"",200)+`</div>`;
       });
     }
     el.innerHTML=html;
@@ -1329,6 +1329,12 @@ async function loadGeneralization(){
 }
 
 // ── INIT ──
+// Ensure new functions are globally accessible
+window.loadEpisodes = loadEpisodes;
+window.loadPrototypes = loadPrototypes;
+window.loadSessionTimeline = loadSessionTimeline;
+window.loadSupersessions = loadSupersessions;
+
 loadStatus();
 renderPulse();
 setInterval(loadStatus,REFRESH_MS);
