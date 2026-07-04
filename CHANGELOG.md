@@ -1,5 +1,34 @@
 # Changelog
 
+## [0.9.3](https://github.com/mrsalty/slowave/compare/slowave-v0.9.2...slowave-v0.9.3) (2026-07-04)
+
+
+### Bug Fixes
+
+* both paths now explicitly guard against missing embeddings: ([7d9a1e0](https://github.com/mrsalty/slowave/commit/7d9a1e00f64901a55e8047f6e5dcc7a785f16a78))
+* contradiction judge gates on support count and recency ([f20a267](https://github.com/mrsalty/slowave/commit/f20a267b288e62c04e994e8ddd1344267e99e5d2))
+* contrastive TF-IDF uses global schema corpus as background ([87bfdec](https://github.com/mrsalty/slowave/commit/87bfdecbee011ea82b9ccbee0b40aee56c3e8a87))
+* dashboard caches engine instead of creating per request ([0b34f75](https://github.com/mrsalty/slowave/commit/0b34f75289a20f26998e873c531011dfc1bdf585))
+* differentiate CA3/CA1 dual-scale prototype thresholds ([c62cf60](https://github.com/mrsalty/slowave/commit/c62cf60497ac4c24315cc11f0f977299d00c732f))
+* graph transition/coactivation weights accumulate across replays ([abbf206](https://github.com/mrsalty/slowave/commit/abbf206fc79a1aeebf069e676da1865194971c45))
+* group A non-functional/benchmark-neutral fixes (Homebrew SHA, deps, README benchmarks, license, conda, dead code, docs, gitignore, results) ([acbb58e](https://github.com/mrsalty/slowave/commit/acbb58e0176e5ae61a33259263c62430312c9150))
+* group A non-functional/benchmark-neutral fixes (Homebrew SHA, deps, README benchmarks, license, conda, dead code, docs, gitignore, results) ([d525909](https://github.com/mrsalty/slowave/commit/d5259098b4a19adc2a7b53bb60445a8698053bb4))
+* missing embedding must not trigger supersession (Group B-1) ([7d9a1e0](https://github.com/mrsalty/slowave/commit/7d9a1e00f64901a55e8047f6e5dcc7a785f16a78))
+* persist FAISS indexes to disk via faiss.write_index/read_index ([ca2d957](https://github.com/mrsalty/slowave/commit/ca2d957011b908101f36fde74a9acc5e9ad6857c))
+* profile-layer memories must not be geometry-superseded (Group B-2) ([6ad3540](https://github.com/mrsalty/slowave/commit/6ad35403c2ecb5f33051227e75c46678f9ac00bd))
+* remove LLM-era columns from consolidation_debug ([e5e94e2](https://github.com/mrsalty/slowave/commit/e5e94e2e09b0970596edd69f7b9a10477861812f))
+* scope-filter FTS and prototype candidates at collection time ([691cfa1](https://github.com/mrsalty/slowave/commit/691cfa124240f67525f298d61be87250e6628459))
+* session resolver uses per-thread bindings to prevent collisions ([7c0bfe1](https://github.com/mrsalty/slowave/commit/7c0bfe10aa2d6953dbf969cdfa33fc0e2ccd5e26))
+* supersession exception handling — log instead of silently pass ([b37b5e0](https://github.com/mrsalty/slowave/commit/b37b5e0441169bb82753f67b22a65c78bd7adf19))
+* untrack generated wiki benchmark result JSONs ([0150f88](https://github.com/mrsalty/slowave/commit/0150f88aa8ad66fe0f3e8d4b0f3ba8e5fa245e72))
+
+
+### Documentation
+
+* explain transition edges as hippocampal replay co-activation ([1823957](https://github.com/mrsalty/slowave/commit/182395737c0a530e82440adfd36d0d7eb6273ce0))
+* note that LoCoMo category breakdown is from prior run ([3f20fdf](https://github.com/mrsalty/slowave/commit/3f20fdfbdce20e82da68bddf21f0eaead2e81815))
+* update LoCoMo benchmark to 74.6% (latest full suite run) ([432b585](https://github.com/mrsalty/slowave/commit/432b58556d708c7e5f423c9c7df73923a330e091))
+
 ## [0.9.2](https://github.com/mrsalty/slowave/compare/slowave-v0.9.1...slowave-v0.9.2) (2026-07-03)
 
 
