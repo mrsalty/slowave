@@ -38,7 +38,8 @@ def test_resolve_stale_binding():
 
     # Manually backdate the binding to be older than TTL
     now_ts = int(time.time())
-    binding = resolver._bindings["project:test"]
+    bindings = resolver._bindings()
+    binding = bindings["project:test"]
     binding.set_at_ts = now_ts - 15  # 15 seconds ago (past 10s TTL)
 
     # Resolve should return None and remove the binding
@@ -46,7 +47,7 @@ def test_resolve_stale_binding():
     assert result is None, f"Expected None for stale binding, got {result}"
 
     # Verify binding was removed
-    assert "project:test" not in resolver._bindings, "Stale binding should be removed"
+    assert "project:test" not in bindings, "Stale binding should be removed"
 
 
 def test_clear():
@@ -110,6 +111,31 @@ def test_scope_rebinding():
     assert resolver.resolve("project:test") == "sess_new"
 
 
+def test_thread_isolation():
+    """Two threads with the same scope are isolated — no collision."""
+    import threading
+    resolver = SessionResolver()
+    results = {}
+
+    def thread_a():
+        resolver.bind("project:shared", "sess_a")
+        results["a"] = resolver.resolve("project:shared")
+
+    def thread_b():
+        resolver.bind("project:shared", "sess_b")
+        results["b"] = resolver.resolve("project:shared")
+
+    ta = threading.Thread(target=thread_a)
+    tb = threading.Thread(target=thread_b)
+    ta.start()
+    tb.start()
+    ta.join()
+    tb.join()
+
+    assert results["a"] == "sess_a"
+    assert results["b"] == "sess_b"
+
+
 if __name__ == "__main__":
     test_bind_resolve()
     test_resolve_unknown_scope()
@@ -118,4 +144,5 @@ if __name__ == "__main__":
     test_scope_isolation()
     test_snapshot()
     test_scope_rebinding()
+    test_thread_isolation()
     print("All tests passed!")

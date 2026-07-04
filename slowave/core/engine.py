@@ -573,35 +573,74 @@ class SlowaveEngine:
                         continue
 
                     candidate_emb = self._fetch_schema_embedding(candidate_id)
-                    dir_score = (
-                        manifold.direction_score(emb, candidate_emb)
-                        if manifold is not None and candidate_emb is not None
-                        else DIRECTION_THRESHOLD
+
+                    # Missing embedding → no geometric verdict possible.
+                    # Profile-layer memories → geometry supersession suppressed.
+
+                    # Profile-layer memories (preferences, constraints, habits)
+                    # must not be geometry-superseded. The SVD1 supersession
+                    # manifold is anti-aligned with personal preference (−0.17)
+                    # and calibrated on concrete value-substitution pairs
+                    # (tech/medical/business etc.). A preference flipping from
+                    # "dark mode" to "light mode" is a divergence, not a
+                    # replacement; treat as reinforcement.
+                    _mem_layer = str(candidate.facets.get("memory_layer", "")).lower()
+                    _mem_class = str(candidate.facets.get("schema_class", "")).lower()
+                    _is_profile = (
+                        _mem_layer == "profile"
+                        or _mem_class in {
+                            "preference", "interaction_preference",
+                            "constraint", "habit", "relationship",
+                        }
                     )
+
+                    if candidate_emb is None or _is_profile:
+                        # Missing embedding or profile memory — no geometric verdict.
+                        # Fall through to reinforcement (same-scope) or skip
+                        # (cross-scope / extended-range).
+                        dir_score = 0.0
+                    else:
+                        dir_score = (
+                            manifold.direction_score(emb, candidate_emb)
+                            if manifold is not None
+                            else DIRECTION_THRESHOLD
+                        )
 
                     if is_same_scope:
                         if score >= SAME_SCOPE_COS_THRESHOLD:
                             # High-confidence topical match: full three-way decision
                             if dir_score >= DIRECTION_THRESHOLD:
-                                self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
-                                self.schemas.add_relation(
-                                    src_schema_id=new_schema_id,
-                                    dst_schema_id=candidate_id,
-                                    relation="supersedes",
-                                    confidence=1.0,
-                                )
-                                superseded_schema_ids.append(candidate_id)
-                                seen_ids.add(candidate_id)
+                                try:
+                                    self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
+                                    self.schemas.add_relation(
+                                        src_schema_id=new_schema_id,
+                                        dst_schema_id=candidate_id,
+                                        relation="supersedes",
+                                        confidence=1.0,
+                                    )
+                                    superseded_schema_ids.append(candidate_id)
+                                    seen_ids.add(candidate_id)
+                                except Exception as e:
+                                    log.warning(
+                                        "remember: supersession failed for schema %d: %s",
+                                        candidate_id, e,
+                                    )
                             elif dir_score >= DIR_REVIEW_BAND:
                                 try:
                                     self.schemas.adjust_feedback_state(candidate_id, needs_review=True)
-                                except (KeyError, Exception):
-                                    pass
+                                except (KeyError, Exception) as e:
+                                    log.warning(
+                                        "remember: adjust_feedback_state failed for schema %d: %s",
+                                        candidate_id, e,
+                                    )
                             else:
                                 try:
                                     self.schemas.reinforce_schema(candidate_id, salience_delta=0.1)
-                                except (KeyError, Exception):
-                                    pass
+                                except (KeyError, Exception) as e:
+                                    log.warning(
+                                        "remember: reinforce_schema failed for schema %d: %s",
+                                        candidate_id, e,
+                                    )
                         else:
                             # Extended range (0.70–0.85): direction_score-only supersession.
                             # Cosine is too weak to act on ambiguous cases — only clear
@@ -626,10 +665,16 @@ class SlowaveEngine:
                                     salience_delta=0.05,
                                     evidence=[(None, event_id, content, 0.5)],
                                 )
-                            except (KeyError, Exception):
-                                pass
-            except Exception:
-                pass
+                            except (KeyError, Exception) as e:
+                                log.warning(
+                                    "remember: cross-scope reinforce failed for schema %d: %s",
+                                    candidate_id, e,
+                                )
+            except Exception as e:
+                log.warning(
+                    "remember: candidate loop iteration failed for schema %d: %s",
+                    candidate_id, e,
+                )
 
         try:
             created_schema = self.schemas.get(new_schema_id)

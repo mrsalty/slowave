@@ -101,6 +101,22 @@ class Consolidator:
         contradicted = 0
         skipped = 0
 
+        # Build global background corpus for contrastive TF-IDF.
+        # Using all existing schema content texts as the background
+        # ensures IDF reflects global rarity, not intra-cluster
+        # commonality. Terms appearing across many schemas get low
+        # IDF (generic/stopword-like); terms unique to this cluster
+        # get high IDF (truly distinctive).
+        _global_corpus: list[str] = []
+        try:
+            _global_corpus = [
+                s.content_text
+                for s in self.schemas.list(limit=500)
+                if s.content_text
+            ]
+        except Exception:
+            pass
+
         for pid in prototype_ids:
             ep_ids = self._episodes_for_prototype(pid)
             if not ep_ids:
@@ -146,6 +162,7 @@ class Consolidator:
                 member_episodes=kept_eps,
                 member_episode_ids=kept_ids,
                 member_timestamps=ts_list,
+                background_corpus_texts=_global_corpus,
             )
             if schema is None:
                 skipped += 1
@@ -226,11 +243,16 @@ class Consolidator:
 
         # Re-fetch the related schema's stored embedding from the DB. We
         # need it as a numpy array to compare centroids with the geometric
-        # judge. Falls back to a zero vector if missing (degenerate case
-        # that the judge will treat as "unrelated").
+        # judge. A missing embedding is not evidence for contradiction or
+        # supersession — fall back to creation without a geometric verdict.
         related_emb = self._fetch_schema_embedding(related.id)
         if related_emb is None:
-            related_emb = np.zeros_like(claim_embedding)
+            log.warning(
+                "consolidation: schema %d has no stored embedding; "
+                "skipping geometric verdict, creating new schema %d",
+                related.id, new_schema_id,
+            )
+            return "created", new_schema_id
 
         old_view = _LS(
             centroid=np.asarray(related_emb, dtype=np.float32),
@@ -269,6 +291,18 @@ class Consolidator:
             )
             return "reinforced", new_schema_id
         if verdict.verdict == "contradicts":
+            # Gate: only supersede when the new schema has enough support
+            # AND sufficient temporal distance from the old one.
+            # A single episode or a near-simultaneous contradiction
+            # should not bury a well-established schema.
+            min_support = getattr(self.geometric_judge.cfg, "min_support_to_supersede", 2)
+            if schema.support_count < min_support:
+                return "reinforced", new_schema_id
+
+            min_dt = getattr(self.geometric_judge.cfg, "min_time_delta_to_supersede_s", 3600.0)
+            if 0 < verdict.time_delta_s < min_dt:
+                return "reinforced", new_schema_id
+
             relation = "supersedes" if verdict.time_delta_s > 0 else "contradicts"
             old_status = "superseded" if relation == "supersedes" else "contradicted"
             # Transition the old schema out of active so belief-revision
@@ -288,14 +322,11 @@ class Consolidator:
         conn = self.db.connect()
         conn.execute(
             "INSERT INTO consolidation_debug "
-            "(prototype_id, episode_ids, prompt_text, response_json, extracted_claims_json, created_schema_ids, ts) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?)",
+            "(prototype_id, episode_ids, created_schema_ids, ts) "
+            "VALUES (?, ?, ?, ?)",
             (
                 int(prototype_id),
                 dumps_json({"ids": [int(e) for e in episode_ids]}),
-                "",
-                dumps_json({}),
-                dumps_json({"claims": []}),
                 dumps_json({"ids": [int(s) for s in created_schema_ids]}),
                 int(time.time()),
             ),

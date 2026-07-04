@@ -15,6 +15,7 @@ from slowave.utils.vec import pack_f32, to_f32, unpack_f32
 @dataclass(frozen=True)
 class SemanticStoreConfig:
     dim: int
+    faiss_index_path: str = ""
 
 
 class SemanticStore:
@@ -27,8 +28,25 @@ class SemanticStore:
         self.db = db
         self.cfg = cfg
 
+        self._index = self._load_or_create_index(cfg)
+
+    def _load_or_create_index(self, cfg: SemanticStoreConfig) -> faiss.Index:
+        if cfg.faiss_index_path:
+            try:
+                loaded = faiss.read_index(cfg.faiss_index_path)
+                if loaded.d == cfg.dim and loaded.ntotal > 0:
+                    return loaded
+            except Exception:
+                pass
         base = faiss.IndexFlatIP(cfg.dim)
-        self._index = faiss.IndexIDMap2(base)
+        return faiss.IndexIDMap2(base)
+
+    def _save_index(self) -> None:
+        if self.cfg.faiss_index_path and self._index.ntotal > 0:
+            try:
+                faiss.write_index(self._index, self.cfg.faiss_index_path)
+            except Exception:
+                pass
 
     def reset_faiss_from_db(self) -> None:
         conn = self.db.connect()
@@ -44,6 +62,7 @@ class SemanticStore:
         faiss.normalize_L2(X)
         self._index.reset()
         self._index.add_with_ids(X, np.asarray(ids, dtype=np.int64))
+        self._save_index()
 
     def upsert_prototype(
         self, *, prototype_id: int | None, centroid: np.ndarray,
@@ -92,6 +111,7 @@ class SemanticStore:
         except Exception:
             pass
         self._index.add_with_ids(x, np.asarray([prototype_id], dtype=np.int64))
+        self._save_index()
         return int(prototype_id)
 
     def get(self, prototype_id: int) -> SemanticPrototype:
