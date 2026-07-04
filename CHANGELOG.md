@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.4](https://github.com/mrsalty/slowave/compare/slowave-v0.9.3...slowave-v0.9.4) (2026-07-04)
+
+
+### Bug Fixes
+
+* generalization stage counts only admitted context recall items ([42e848c](https://github.com/mrsalty/slowave/commit/42e848cfdbcef88de10d4e2b45111dffc70556ba))
+* generalization stage counts only admitted context recall items ([7c61374](https://github.com/mrsalty/slowave/commit/7c6137434514783675a0b28adfd2207620720916))
+
 ## [0.9.3](https://github.com/mrsalty/slowave/compare/slowave-v0.9.2...slowave-v0.9.3) (2026-07-04)
 
 
