@@ -17,12 +17,6 @@ class GraphConfig:
     lambda_similarity: float = 1.0
     lambda_transition: float = 0.5
     lambda_coactivation: float = 0.3
-    # EMA decay factor for transition/coactivation accumulation across
-    # replay passes. Each pass contributes (1-decay) to the running
-    # estimate; old evidence fades at rate decay.
-    #   new_weight = old_weight * decay + current_count * (1 - decay)
-    # 0.7 = retain 70% of old evidence, 30% from current pass.
-    accumulate_decay: float = 0.7
 
 
 class GraphManager:
@@ -121,31 +115,12 @@ class GraphManager:
         self.prune_edges()
 
     def apply_transition_counts(self, counts: dict[tuple[int, int], float]) -> None:
-        """Accumulate transition probabilities across replay passes via EMA.
-
-        Before this change, each replay pass overwrote the previous pass's
-        transition weights. Now each pass contributes its evidence while
-        old evidence fades at rate ``accumulate_decay`` (default 0.7).
-        Similarity edges are NOT accumulated — they are recomputed fresh
-        from cosine each pass.
-        """
-        decay = self.cfg.accumulate_decay
-        alpha = 1.0 - decay
         for (src, dst), c in counts.items():
-            ws, old_wt, wc = self._get_components(src, dst)
-            new_wt = old_wt * decay + float(c) * alpha
-            self._upsert_edge(src, dst, w_similarity=ws, w_transition=new_wt, w_coactivation=wc)
+            ws, _wt, wc = self._get_components(src, dst)
+            self._upsert_edge(src, dst, w_similarity=ws, w_transition=float(c), w_coactivation=wc)
         self.prune_edges()
 
     def apply_coactivation_counts(self, counts: dict[tuple[int, int], float]) -> None:
-        """Accumulate coactivation counts across replay passes via EMA.
-
-        Same EMA logic as ``apply_transition_counts``: each pass
-        contributes to a running estimate rather than overwriting.
-        Top-k sparsity filter is applied after accumulation.
-        """
-        decay = self.cfg.accumulate_decay
-        alpha = 1.0 - decay
         # Keep only top-k coactivation per source to preserve sparsity.
         by_src: dict[int, list[tuple[int, float]]] = {}
         for (src, dst), c in counts.items():
@@ -156,9 +131,8 @@ class GraphManager:
         for src, items in by_src.items():
             items.sort(key=lambda t: t[1], reverse=True)
             for dst, c in items[: self.cfg.top_k_coactivation]:
-                ws, wt, old_wc = self._get_components(src, dst)
-                new_wc = old_wc * decay + float(c) * alpha
-                self._upsert_edge(src, dst, w_similarity=ws, w_transition=wt, w_coactivation=new_wc)
+                ws, wt, _wc = self._get_components(src, dst)
+                self._upsert_edge(src, dst, w_similarity=ws, w_transition=wt, w_coactivation=float(c))
         self.prune_edges()
 
     def prune_edges(self) -> None:
