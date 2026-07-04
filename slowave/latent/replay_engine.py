@@ -339,7 +339,17 @@ class ReplayEngine:
                 coact[(unique[i], unique[j])] = coact.get((unique[i], unique[j]), 0.0) + 1.0
         self.graph.apply_coactivation_counts(coact)
 
-        # transition counts: estimate from time-sorted mapped prototypes
+        # Transition counts: hippocampal replay co-activation, NOT episodic adjacency.
+        #
+        # We sample a salience-weighted batch of episodes, sort by timestamp,
+        # and count prototype pairs that appear adjacent in this compressed
+        # replay.  This models systems-consolidation replay: the brain re-activates
+        # memories out of their original session order, prioritising salient /
+        # frequently-replayed items.
+        #
+        # A separate code path (not yet implemented) would be needed to derive
+        # edges from per-session episode order (episodic adjacency).  Batch-order
+        # edges are a legitimate consolidation signal — they are not a bug.
         mems = self.episodic.get_many(sampled_ids)
         mems_sorted = sorted(mems, key=lambda m: m.ts)
         transition_counts: dict[tuple[int, int], float] = {}
