@@ -101,6 +101,22 @@ class Consolidator:
         contradicted = 0
         skipped = 0
 
+        # Build global background corpus for contrastive TF-IDF.
+        # Using all existing schema content texts as the background
+        # ensures IDF reflects global rarity, not intra-cluster
+        # commonality. Terms appearing across many schemas get low
+        # IDF (generic/stopword-like); terms unique to this cluster
+        # get high IDF (truly distinctive).
+        _global_corpus: list[str] = []
+        try:
+            _global_corpus = [
+                s.content_text
+                for s in self.schemas.list(limit=500)
+                if s.content_text
+            ]
+        except Exception:
+            pass
+
         for pid in prototype_ids:
             ep_ids = self._episodes_for_prototype(pid)
             if not ep_ids:
@@ -146,6 +162,7 @@ class Consolidator:
                 member_episodes=kept_eps,
                 member_episode_ids=kept_ids,
                 member_timestamps=ts_list,
+                background_corpus_texts=_global_corpus,
             )
             if schema is None:
                 skipped += 1
