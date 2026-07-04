@@ -48,10 +48,9 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   document.getElementById(b.dataset.tab).classList.add("active");
   const tab=b.dataset.tab;
   if(tab==="overview")renderPulse();
-  else if(tab==="schemas")loadSchemas();
+  else if(tab==="schemas"){loadSchemas();loadGeneralizationStats();}
   else if(tab==="graph")loadGraph();
   else if(tab==="worker")loadWorker();
-  else if(tab==="generalization")loadGeneralization();
   else if(tab==="db")loadDbHealth();
   else if(tab==="supersessions")loadSupersessions();
 });
@@ -230,7 +229,6 @@ async function loadStatus(){
 
   // PULSE GRAPH — refresh on every status poll cycle
   renderPulse();
-  renderSalienceHistogram();
 }
 
 async function renderPulse(){
@@ -426,29 +424,29 @@ function renderSchemasTable(schemas){
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function expandSchemaRow(tr,schemaId){
+  // Toggle: if already expanded, just collapse
+  const nextTr=tr.nextElementSibling;
+  if(nextTr&&nextTr.classList.contains("expand-row")){
+    nextTr.remove();tr.classList.remove("schema-row-expanded");return;
+  }
   // Collapse all other expanded rows first
   const allRows=tr.parentElement.querySelectorAll("tr.expand-row");
   allRows.forEach(r=>r.remove());
-  // Toggle existing
-  const nextTr=tr.nextElementSibling;
-  if(nextTr&&nextTr.classList.contains("expand-row")){
-    nextTr.remove();return;
-  }
+  // Clear highlight from any previously expanded row
+  tr.parentElement.querySelectorAll("tr.schema-row-expanded").forEach(r=>r.classList.remove("schema-row-expanded"));
   const d=await getJSON(`/api/schemas/${schemaId}`);
   const s=d.schema;
-  const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto">`+d.evidence.map((e,i)=>{
+  const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto"><div style="display:grid;grid-template-columns:auto auto auto auto;gap:0 14px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding-bottom:6px;margin-bottom:2px;border-bottom:1px solid var(--line)"><span>Episode</span><span>Kind</span><span>Session</span><span style="text-align:right">Weight</span></div>`+d.evidence.map((e,i)=>{
     const quote=e.quote||e.event_content||"";
-    const evLink=e.raw_event_id?` <span onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:12px">evt_${e.raw_event_id}</span>`:"";
-    const sessLink=e.episode_session?` <span onclick="loadSessionTimeline('${esc(e.episode_session)}')" style="cursor:pointer;color:var(--cyan);font-size:11px" title="Open session timeline">${esc((e.episode_session||"").slice(0,14))}…</span>`:"";
-    const kindBadge=e.episode_kind?`<span class="pill" style="font-size:9px;padding:1px 4px">${esc(e.episode_kind)}</span>`:"";
-    const evMeta=e.event_type?`<span class="pill" style="font-size:10px">${esc(e.event_type)}</span> `:"";
-    return `<div style="margin-bottom:6px;font-size:12px;padding:6px 8px;background:var(--panel2);border-radius:4px">
-      <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-        <span style="color:var(--muted)">epi_${e.episode_id||"—"}</span>${kindBadge}${evLink}${sessLink}
-        <span style="color:var(--green);font-size:11px">w${Number(e.weight||0).toFixed(3)}</span>
-        ${evMeta}
+    const sessLink=e.episode_session?`<span onclick="loadSessionTimeline('${esc(e.episode_session)}')" style="cursor:pointer;color:var(--cyan);font-size:11px;white-space:nowrap" title="Open session timeline">${esc(e.episode_session||"—")}</span>`:"";
+    const kindColor={"macro":"var(--amber)","micro":"var(--blue)","decision":"var(--purple)","fact":"var(--green)","lesson":"var(--red)"};
+    const kindBadge=e.episode_kind?`<span style="color:${kindColor[e.episode_kind]||"var(--muted)"};font-size:10px;font-weight:500">${esc(e.episode_kind)}</span>`:"";
+    return `<div style="margin-bottom:4px;padding:5px 8px;background:var(--panel2);border-radius:4px">
+      <div style="display:grid;grid-template-columns:auto auto auto auto;align-items:center;gap:0 14px;font-size:11px;color:var(--muted)">
+        <span>epi_${e.episode_id||"—"}</span>${kindBadge}${sessLink}
+        <span style="color:var(--green);font-size:11px;text-align:right">w${Number(e.weight||0).toFixed(3).replace(/0+$/,'').replace(/\.$/,'.0')}</span>
       </div>
-      ${quote?`<div style="color:var(--text);line-height:1.4;font-size:12px">${esc(quote.slice(0,300))}${quote.length>300?"…":""}</div>`:""}
+      ${quote?`<div style="color:var(--muted);line-height:1.4;font-size:11px;margin-top:3px;font-style:italic">${esc(quote.slice(0,200))}${quote.length>200?"…":""}</div>`:""}
       <div id="evt_detail_${schemaId}_${i}"></div>
     </div>`;}).join("")+`</div>`:`<em style="color:var(--muted)">No evidence.</em>`;
 const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence","Reason"],
@@ -470,7 +468,7 @@ const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence",
         ${(s.distinct_scope_count||0)} scope${s.distinct_scope_count!==1?"s":""} ·
         ${(s.distinct_scope_kind_count||0)} kind${s.distinct_scope_kind_count!==1?"s":""} ·
         ${(s.cross_scope_recall_count||0)} cross-scope recall${s.cross_scope_recall_count!==1?"s":""}
-        ${(s.all_scopes||s.recalled_scopes||[]).length?`<div style="margin-top:4px;font-size:11px;color:var(--cyan)">Scopes: ${(s.all_scopes||s.recalled_scopes||[]).slice(0,12).map(sc=>typeof sc==="string"?`<span style="margin-right:6px">${esc(sc)}</span>`:`<span style="margin-right:6px" title="${esc(sc.kind||"")}">${esc(sc.id)}</span>`).join("")}${(s.all_scopes||s.recalled_scopes||[]).length>12?" …":""}</div>`:""}
+        ${(s.recalled_scopes||[]).length?` <span class="scope-count-tip" data-tip="${esc((s.recalled_scopes||[]).join("\n"))}">(${(s.recalled_scopes||[]).length} scopes)</span>`:""}
       </div>`:"<div style='font-size:12px;color:var(--muted)'>Not yet recalled across multiple scopes.</div>"}
   </div>`;
   expTr.innerHTML=`<td colspan="9"><div class="expand-content">
@@ -494,6 +492,7 @@ const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence",
     </div>
     <div class="detail-section"><h4>Evidence</h4>${evHtml}</div>
   </div></td>`;
+  tr.classList.add("schema-row-expanded");
   tr.after(expTr);
 }
 
@@ -1138,63 +1137,6 @@ async function loadSupersessions(){
       +table(["Old","New","Confidence","Reason","Old content","New content","When"],rows,[0,1,2,3,4,5]);
   }finally{ld.classList.remove("show");}
 }
-// ── SALIENCE HISTOGRAM ──
-function renderSalienceHistogram(){
-  const d=window.lastStatus;
-  if(!d||!d.schema_health)return;
-  const canvas=document.getElementById("salienceHistCanvas");
-  if(!canvas)return;
-  const ctx=canvas.getContext("2d");
-  const W=canvas.clientWidth,H=canvas.height;
-  canvas.width=W;canvas.height=H;
-  const pad={top:10,right:16,bottom:22,left:40};
-  const pw=W-pad.left-pad.right,ph=H-pad.top-pad.bottom;
-  const sal=d.schema_health.active_salience||{};
-  const minS=Number(sal.min||0),maxS=Math.max(0.001,Number(sal.max||10));
-  const avgS=Number(sal.avg||0);
-  ctx.clearRect(0,0,W,H);
-  ctx.fillStyle="#080e1c";ctx.fillRect(0,0,W,H);
-  if(maxS<=0){ctx.fillStyle="#5a6e91";ctx.font="12px Inter,sans-serif";ctx.textAlign="center";ctx.fillText("No salience data",W/2,H/2);return;}
-  const bins=20;const binW=pw/bins;
-  const spread=Math.max(0.01,(maxS-minS)/4);
-  const vals=[];
-  for(let i=0;i<bins;i++){
-    const x=minS+((i+0.5)/bins)*(maxS-minS);
-    const z=(x-avgS)/spread;vals.push(Math.exp(-0.5*z*z));
-  }
-  const maxV=Math.max(0.01,...vals);
-  const colors=["#3ecf6e","#4f9bff","#f5b942","#9d71f0","#f04e6a"];
-  ctx.strokeStyle="#1e2d4a";ctx.lineWidth=1;
-  for(let i=0;i<bins;i++){
-    const h=(vals[i]/maxV)*ph;
-    ctx.fillStyle=colors[i%5]+"88";
-    ctx.fillRect(pad.left+i*binW,pad.top+ph-h,binW-1,h);
-    ctx.strokeRect(pad.left+i*binW,pad.top+ph-h,binW-1,h);
-  }
-  ctx.strokeStyle="#2a3d5a";ctx.lineWidth=1;
-  ctx.beginPath();ctx.moveTo(pad.left,pad.top);ctx.lineTo(pad.left,pad.top+ph);ctx.lineTo(pad.left+pw,pad.top+ph);ctx.stroke();
-  ctx.fillStyle="#5a6e91";ctx.font="10px Inter,sans-serif";ctx.textAlign="right";
-  for(let i=0;i<=3;i++){
-    const y=pad.top+ph-(i/3)*ph;
-    ctx.fillText(i===0?"0":(i/3).toFixed(1),pad.left-6,y+3);
-  }
-  ctx.textAlign="center";
-  for(let i=0;i<=4;i++){
-    const x=pad.left+(i/4)*pw;
-    ctx.fillText((minS+(i/4)*(maxS-minS)).toFixed(2),x,pad.top+ph+14);
-  }
-  // min/avg/max markers
-  ctx.setLineDash([3,4]);ctx.strokeStyle="#5a6e91";
-  [minS,avgS,maxS].forEach(v=>{
-    const x=pad.left+((v-minS)/(maxS-minS||1))*pw;
-    ctx.beginPath();ctx.moveTo(x,pad.top);ctx.lineTo(x,pad.top+ph);ctx.stroke();
-  });
-  ctx.setLineDash([]);ctx.fillStyle="#7a8db5";ctx.font="bold 10px Inter,sans-serif";
-  ctx.fillText("min",pad.left+((minS-minS)/(maxS-minS||1))*pw+8,pad.top+12);
-  ctx.fillText("avg",pad.left+((avgS-minS)/(maxS-minS||1))*pw,pad.top-2);
-  ctx.fillText("max",pad.left+((maxS-minS)/(maxS-minS||1))*pw-8,pad.top+12);
-}
-
 // ── GENERALIZATION ──
 const GEN_LABELS=['SCOPED','PORTABLE','CONTEXTUAL','GLOBAL'];
 const GEN_COLORS=['var(--gray)','var(--blue)','var(--amber)','var(--green)'];
@@ -1217,9 +1159,7 @@ function genBreadthBar(pct,label,color,count){
     <span style="font-size:11px;color:var(--muted);white-space:nowrap">${label}: ${(pct*100).toFixed(0)}%${detail}</span>
   </div>`;
 }
-async function loadGeneralization(){
-  const ld=document.getElementById("genLoading");
-  ld.classList.add("show");
+async function loadGeneralizationStats(){
   try{
     const d=await getJSON("/api/generalization");
     const sum=d.summary||{};
@@ -1230,7 +1170,6 @@ async function loadGeneralization(){
       {icon:"🚀",label:"Portable",val:num(dist[1]||0),sub:"stage 1",accent:"var(--blue)"},
       {icon:"🌍",label:"Contextual",val:num(dist[2]||0),sub:"stage 2",accent:"var(--amber)"},
       {icon:"✨",label:"Global",val:num(dist[3]||0),sub:"stage 3",accent:"var(--green)"},
-      {icon:"🗺",label:"Known scopes",val:num(sum.total_known_scopes),sub:num(sum.total_scope_kinds)+" kinds",accent:"var(--cyan)"},
     ];
     document.getElementById("genStatGrid").innerHTML=cards.map(c=>
       `<div class="stat-card" style="--accent:${c.accent}">
@@ -1240,61 +1179,7 @@ async function loadGeneralization(){
         <div class="sc-sub">${esc(c.sub||"")}</div>
       </div>`
     ).join("");
-    // Stage distribution visual
-    const totalActive=Math.max(1,sum.total_active_schemas);
-    let distHtml='<div style="margin-bottom:14px">';
-    [0,1,2,3].forEach(st=>{
-      const n=dist[st]||0;const pct=Math.round(n/totalActive*100);
-      distHtml+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        ${genBadge(st)}
-        <div class="gen-bar-track" style="flex:1"><div class="gen-bar" style="width:${pct}%;background:${GEN_COLORS[st]}"></div></div>
-        <span style="font-size:12px;color:var(--muted);width:40px;text-align:right">${num(n)}</span>
-      </div>`;
-    });
-    distHtml+='</div>';
-    // Promoted list
-    const items=d.top_promoted||[];
-    if(!items.length){
-      document.getElementById("genPromotedList").innerHTML=distHtml+emptyState("No promoted memories yet. Memories promote as they are recalled across multiple scopes.","🌐");
-    } else {
-      let listHtml=distHtml;
-      items.forEach(m=>{
-        listHtml+=`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:8px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            ${genBadge(m.stage)}
-            <code style="font-size:11px;color:var(--muted)">${esc(m.id)}</code>
-            <span style="font-size:11px;color:var(--muted)">origin: ${esc(m.scope||"—")}</span>
-          </div>
-          <div style="font-size:13px;line-height:1.5;margin-bottom:8px">${esc(m.content)}</div>
-          ${genBreadthBar(m.scope_breadth_pct||0,"scope breadth","var(--blue)",m.distinct_scope_count+" scope"+(m.distinct_scope_count!==1?"s":""))}
-          ${genBreadthBar(m.scope_kind_breadth_pct||0,"kind breadth","var(--amber)",m.distinct_scope_kind_count+" kind"+(m.distinct_scope_kind_count!==1?"s":""))}
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">
-            ${m.distinct_scope_count} scope${m.distinct_scope_count!==1?"s":""} · 
-            ${m.distinct_scope_kind_count} kind${m.distinct_scope_kind_count!==1?"s":""} · 
-            ${m.cross_scope_recall_count} cross-scope recall${m.cross_scope_recall_count!==1?"s":""}
-          </div>
-        </div>`;
-      });
-      document.getElementById("genPromotedList").innerHTML=listHtml;
-    }
-    // Scope registry
-    const reg=d.scope_registry||[];
-    if(!reg.length){
-      document.getElementById("genScopeRegistry").innerHTML=emptyState("No scopes registered yet. Scopes are recorded automatically when sessions start.","🗺");
-    } else {
-      document.getElementById("genScopeRegistry").innerHTML=reg.map(r=>`
-        <div class="scope-reg-card">
-          <div>
-            <div class="scope-reg-id">${esc(r.scope_id)}</div>
-            <div class="scope-reg-meta">${r.scope_kind||"generic"} · last active ${fmtDate(r.last_active_ts)}</div>
-          </div>
-          <div style="text-align:right;font-size:12px;color:var(--muted)">
-            <div>${num(r.session_count)} session${r.session_count!==1?"s":""}</div>
-            <div>${num(r.recall_count)} recall${r.recall_count!==1?"s":""}</div>
-          </div>
-        </div>`).join("");
-    }
-  }finally{ld.classList.remove("show");}
+  }catch(e){}
 }
 
 // ── INIT ──
