@@ -436,7 +436,7 @@ async function expandSchemaRow(tr,schemaId){
   const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto">`+d.evidence.map((e,i)=>{
     const quote=e.quote||e.event_content||"";
     const evLink=e.raw_event_id?` <span onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:12px">evt_${e.raw_event_id}</span>`:"";
-    const sessLink=e.episode_session?` <span onclick="loadSessionTimeline('${esc(e.episode_session)}')" style="cursor:pointer;color:var(--cyan);font-size:11px" title="Open session timeline">sess_${esc((e.episode_session||"").slice(0,12))}…</span>`:"";
+    const sessLink=e.episode_session?` <span onclick="loadSessionTimeline('${esc(e.episode_session)}')" style="cursor:pointer;color:var(--cyan);font-size:11px" title="Open session timeline">${esc((e.episode_session||"").slice(0,14))}…</span>`:"";
     const kindBadge=e.episode_kind?`<span class="pill" style="font-size:9px;padding:1px 4px">${esc(e.episode_kind)}</span>`:"";
     const evMeta=e.event_type?`<span class="pill" style="font-size:10px">${esc(e.event_type)}</span> `:"";
     return `<div style="margin-bottom:6px;font-size:12px;padding:6px 8px;background:var(--panel2);border-radius:4px">
@@ -1081,9 +1081,8 @@ async function loadSessionTimeline(sid){
   if(!detail){
     detail=document.createElement("div");
     detail.id="sessionTimeline";
-    detail.style.cssText="margin-top:10px;padding:12px;background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);max-height:500px;overflow-y:auto;display:none";
-    const sessPanel=document.getElementById("recentSessions");
-    if(sessPanel)sessPanel.parentNode.appendChild(detail);
+    detail.style.cssText="position:fixed;bottom:16px;right:16px;width:520px;max-height:70vh;padding:16px;background:var(--panel);border:2px solid var(--blue);border-radius:var(--radius);overflow-y:auto;display:none;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5)";
+    document.body.appendChild(detail);
   }
   detail.innerHTML=`<div style=\"text-align:center;padding:12px;color:var(--muted)\">Loading timeline…</div>`;
   detail.style.display="block";
