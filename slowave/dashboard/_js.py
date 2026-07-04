@@ -1050,92 +1050,101 @@ async function loadExplorer(){
   ld.classList.add("show");
   try{
     const d=await getJSON("/api/explorer");
-    // Schemas by stage
     let schemaHtml="";
     if(!d.schemas||!d.schemas.length){
       schemaHtml=emptyState("No schemas yet.","🧠");
     } else {
-      // Group by stage
       const byStage={};
       d.schemas.forEach(s=>{const st=s.generalization_stage||0;if(!byStage[st])byStage[st]=[];byStage[st].push(s);});
       STAGE_ORDER.forEach(st=>{
         const schemas=byStage[st];
         if(!schemas||!schemas.length)return;
-        schemaHtml+=`<div style="font-weight:600;font-size:12px;color:var(--blue);margin:10px 0 4px 0">${STAGE_LABELS[st]||'Stage '+st} (${schemas.length})</div>`;
-        schemas.forEach(s=>{
-          const stageBg=st===3?"#0a2018":st===2?"#1a2000":st===1?"#201a00":"#050b18";
-          schemaHtml+=`<div onclick="explorerSchemaDetail(${s.id})" style="cursor:pointer;background:${stageBg};border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:4px;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--line)'">`;
+        const gid=`exp_stage_${st}`;
+        schemaHtml+=`<div style="margin-bottom:6px">`;
+        // Collapsed header
+        schemaHtml+=`<div id="${gid}_head" onclick="toggleExplorerStage('${gid}')" style="cursor:pointer;font-weight:600;font-size:12px;color:var(--blue);padding:4px 0;border-bottom:1px solid var(--line)">${STAGE_LABELS[st]||'Stage '+st} (${schemas.length}) ▸</div>`;
+        // Expandable body (hidden)
+        schemaHtml+=`<div id="${gid}_body" class="hidden" style="padding-left:4px">`;
+        schemas.slice(0,10).forEach(s=>{
+          schemaHtml+=`<div onclick="explorerSchemaDetail(${s.id},event)" style="cursor:pointer;background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:3px;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--line)'">`;
           schemaHtml+=`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">`;
-          schemaHtml+=`<div style="flex:1;min-width:0"><span style="font-size:12px;line-height:1.4">${esc((s.content_text||"").slice(0,120))}${(s.content_text||"").length>120?"…":""}</span></div>`;
-          schemaHtml+=`<div style="flex-shrink:0;text-align:right;font-size:10px;color:var(--muted)">${pill(s.status)}<br><span style="font-size:10px">sal ${Number(s.salience).toFixed(3)} · ${s.episode_count} eps</span></div>`;
-          schemaHtml+=`</div></div>`;
+          schemaHtml+=`<div style="flex:1;min-width:0"><span style="font-size:12px;line-height:1.4">${esc((s.content_text||"").slice(0,100))}${(s.content_text||"").length>100?"…":""}</span></div>`;
+          schemaHtml+=`<div style="flex-shrink:0;text-align:right;font-size:10px;color:var(--muted)">${pill(s.status)}<br>sal ${Number(s.salience).toFixed(3)}</div>`;
+          schemaHtml+=`</div>`;
+          // Inline detail slot (hidden)
+          schemaHtml+=`<div id="exp_detail_${s.id}" class="hidden" style="margin-top:6px"></div>`;
+          schemaHtml+=`</div>`;
         });
+        if(schemas.length>10){
+          schemaHtml+=`<div style="font-size:11px;color:var(--muted);padding:4px 0;text-align:center">+ ${schemas.length-10} more</div>`;
+        }
+        schemaHtml+=`</div></div>`;
       });
     }
     document.getElementById("explorerSchemas").innerHTML=schemaHtml;
-
-    // Sessions with episodes
-    const sessions=d.sessions||[];
-    let sessHtml="";
-    if(!sessions.length){
-      sessHtml=emptyState("No sessions.","📦");
-    } else {
-      sessions.forEach(ss=>{
-        const shortId=esc(ss.session_id).slice(0,16);
-        sessHtml+=`<div style="margin-bottom:8px">`;
-        sessHtml+=`<div onclick="this.nextElementSibling.classList.toggle('hidden')" style="cursor:pointer;font-weight:600;font-size:12px;color:var(--blue);margin-bottom:2px">📋 ${shortId}… (${ss.episodes.length} eps)</div>`;
-        sessHtml+=`<div class="hidden" style="font-size:11px;padding-left:8px;border-left:2px solid var(--line2)">`;
-        ss.episodes.forEach(e=>{
-          sessHtml+=`<div style="margin-bottom:4px"><span style="color:var(--muted)">${fmtTsCompact(e.ts)}</span> `;
-          sessHtml+=`<span class="pill" style="font-size:9px;padding:1px 4px">${esc(e.kind||"?")}</span> `;
-          sessHtml+=`sal ${Number(e.salience).toFixed(3)}</div>`;
-        });
-        sessHtml+=`</div></div>`;
-      });
-    }
-    document.getElementById("explorerSessions").innerHTML=sessHtml;
-
-    // Prototypes
-    const protos=d.prototypes||[];
-    let protoHtml="";
-    if(!protos.length){
-      protoHtml=emptyState("No prototypes.","🔵");
-    } else {
-      protos.forEach(p=>{protoHtml+=`<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--cyan)">proto_${p.id}</span> <span style="color:var(--muted)">sup ${p.support_count} · ${p.member_count} eps · ${esc(p.scale||"fine")}</span></div>`;});
-    }
-    document.getElementById("explorerProtos").innerHTML=protoHtml;
+    document.getElementById("explorerDetail").innerHTML='<span style="color:var(--muted)">Click a schema on the left to see its evidence and relations here</span>';
   }finally{ld.classList.remove("show");}
 }
 
-async function explorerSchemaDetail(id){
-  const el=document.getElementById("explorerSchemaDetail");
-  el.innerHTML=`<div style="text-align:center;padding:8px;color:var(--muted)">Loading…</div>`;
+function toggleExplorerStage(gid){
+  const body=document.getElementById(gid+"_body");
+  const head=document.getElementById(gid+"_head");
+  if(!body||!head)return;
+  body.classList.toggle("hidden");
+  head.innerHTML=head.innerHTML.replace(/[▸▾]/g,body.classList.contains("hidden")?"▸":"▾");
+}
+
+async function explorerSchemaDetail(id,ev){
+  if(ev)ev.stopPropagation();
+  const detailSlot=document.getElementById("exp_detail_"+id);
+  if(!detailSlot)return;
+  // Toggle: if already visible, hide it
+  if(!detailSlot.classList.contains("hidden")){
+    detailSlot.classList.add("hidden");
+    return;
+  }
+  detailSlot.classList.remove("hidden");
+  detailSlot.innerHTML=`<div style="text-align:center;padding:6px;color:var(--muted)">Loading…</div>`;
   try{
     const d=await getJSON(`/api/schemas/${id}`);
-    if(d.error){el.innerHTML=emptyState(d.error,"⚠️");return;}
+    if(d.error){detailSlot.innerHTML=`<div style="color:var(--red);font-size:11px">${esc(d.error)}</div>`;return;}
     const s=d.schema||d;
     const sc=s.scope||s.scope_id||"";
     const eps=d.evidence||[];
     const rels=d.outgoing||[];
-    let html=`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;margin-top:8px">`;
-    html+=`<div style="display:flex;justify-content:space-between;align-items:center"><b>${esc(s.id||"sch_"+id)}</b>`;
-    html+=`<button class="btn" style="font-size:10px;padding:1px 6px" onclick="document.getElementById('explorerSchemaDetail').innerHTML=''">✕</button></div>`;
-    html+=`<div style="font-size:13px;line-height:1.5;margin:6px 0">${esc(s.content||s.content_text||"")}</div>`;
-    html+=`<div style="font-size:11px;color:var(--muted)">${pill(s.status)} · sal ${Number(s.salience).toFixed(3)} · stage ${s.generalization_stage||0} · scope ${esc(sc.slice(0,30))}</div>`;
+    // Inline detail
+    let h=`<div style="background:var(--panel3);border:1px solid var(--line2);border-radius:var(--radius-sm);padding:8px 12px">`;
+    h+=`<div style="font-size:13px;line-height:1.5;margin-bottom:4px">${esc(s.content||s.content_text||"")}</div>`;
+    h+=`<div style="font-size:10px;color:var(--muted)">${pill(s.status)} · sal ${Number(s.salience).toFixed(3)} · stage ${STAGE_LABELS[s.generalization_stage||0]} · ${esc(sc.slice(0,30))}</div>`;
+    if(eps.length)h+=`<div style="margin-top:6px;font-size:10px;color:var(--muted)">Evidence episodes: ${eps.length}</div>`;
+    if(rels.length)h+=`<div style="font-size:10px;color:var(--muted)">Relations: ${rels.map(r=>esc(r.relation)+"→sch_"+r.dst_schema_id).join(", ")}</div>`;
+    h+=`</div>`;
+    detailSlot.innerHTML=h;
+
+    // Right panel: full evidence + relations
+    let right=`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px">`;
+    right+=`<div style="font-weight:600;font-size:13px;margin-bottom:4px">${esc(s.id||"sch_"+id)}</div>`;
+    right+=`<div style="font-size:12px;line-height:1.4;margin-bottom:6px;color:var(--text)">${esc((s.content||s.content_text||"").slice(0,200))}${(s.content||s.content_text||"").length>200?"…":""}</div>`;
+    right+=`<div style="font-size:10px;color:var(--muted);margin-bottom:8px">${pill(s.status)} · sal ${Number(s.salience).toFixed(3)} · ${STAGE_LABELS[s.generalization_stage||0]} · scope ${esc(sc.slice(0,25))}</div>`;
+    right+=`<div style="font-weight:600;font-size:11px;color:var(--blue);margin-bottom:4px">Evidence episodes (${eps.length})</div>`;
     if(eps.length){
-      html+=`<div style="margin-top:8px;font-size:11px;color:var(--muted)">Evidence (${eps.length}):</div>`;
-      eps.slice(0,10).forEach(e=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">· ${esc((e.content_text||e.content||"").slice(0,150))}</div>`;});
-    }
+      eps.slice(0,15).forEach(e=>{
+        right+=`<div style="font-size:11px;margin:3px 0;padding-left:8px;border-left:1px solid var(--line2)">${esc((e.content_text||e.content||"").slice(0,180))}</div>`;
+      });
+    } else {right+=`<div style="color:var(--muted);font-size:11px">No evidence episodes</div>`;}
+    right+=`<div style="font-weight:600;font-size:11px;color:var(--blue);margin:8px 0 4px">Relations (${rels.length})</div>`;
     if(rels.length){
-      html+=`<div style="margin-top:8px;font-size:11px;color:var(--muted)">Relations:</div>`;
-      rels.slice(0,10).forEach(r=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">${esc(r.relation)} → sch_${r.dst_schema_id} (conf ${Number(r.confidence).toFixed(2)})</div>`;});
-    }
-    html+=`</div>`;
-    el.innerHTML=html;
-  }catch(e){el.innerHTML=emptyState("Error: "+esc(String(e)),"⚠️");}
+      rels.slice(0,15).forEach(r=>{
+        right+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">${esc(r.relation)} → <code style="font-size:10px">sch_${r.dst_schema_id}</code> <span style="color:var(--muted)">conf ${Number(r.confidence).toFixed(2)}</span></div>`;
+      });
+    } else {right+=`<div style="color:var(--muted);font-size:11px">No relations</div>`;}
+    right+=`</div>`;
+    document.getElementById("explorerDetail").innerHTML=right;
+  }catch(e){detailSlot.innerHTML=`<div style="color:var(--red);font-size:11px">${esc(String(e))}</div>`;}
 }
 
 window.loadExplorer = loadExplorer;
+window.toggleExplorerStage = toggleExplorerStage;
 window.explorerSchemaDetail = explorerSchemaDetail;
 
 // ── SESSION REPLAY ──
