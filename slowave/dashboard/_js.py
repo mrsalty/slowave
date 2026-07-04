@@ -1135,7 +1135,7 @@ async function loadSupersessions(){
       fmtTsCompact(s.created_ts)
     ]);
     el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} supersession chains</div>`
-      +table(["Old","New","Confidence","Reason","Old content","New content","When"],rows,[0,1,3,4,5]);
+      +table(["Old","New","Confidence","Reason","Old content","New content","When"],rows,[0,1,2,3,4,5]);
   }finally{ld.classList.remove("show");}
 }
 // ── SALIENCE HISTOGRAM ──
