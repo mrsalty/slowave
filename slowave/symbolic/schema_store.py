@@ -718,6 +718,7 @@ class SchemaStore:
             FROM context_recall_items cri
             JOIN context_recall_events cre ON cri.context_id = cre.context_id
             WHERE cri.memory_id = ?
+              AND cri.admitted = 1
               AND cre.scope_id IS NOT NULL
             """,
             (schema_id_key,),
