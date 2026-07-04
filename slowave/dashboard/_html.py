@@ -533,24 +533,23 @@ tr.expandable:hover td{background:var(--panel3)}
     <div id="dbHealth"></div>
   </div>
 </section>
-<!-- EPISODES -->
+<!-- EPISODES & PROTOTYPES -->
 <section id="episodes" class="section">
   <div class="panel" style="margin-bottom:10px">
     <div class="controls">
-      <input id="episodeQ" placeholder="search content…" style="flex:1;min-width:160px"/>
+      <input id="episodeQ" placeholder="search episode content…" style="flex:1;min-width:160px"/>
       <input id="episodeLimit" type="number" value="50" min="1" max="200" style="width:70px"/>
-      <button class="btn primary" onclick="loadEpisodes()">Load</button>
-      <button class="btn" onclick="loadPrototypes()">🔵 Prototypes</button>
+      <button class="btn primary" onclick="loadEpisodes()">Search</button>
     </div>
   </div>
   <div class="two-col">
     <div class="panel">
-      <div class="panel-title">🎞 Episodes</div>
+      <div class="panel-title">🎞 Episodes <span style="font-size:11px;color:var(--muted);font-weight:400">(hippocampus)</span></div>
       <div id="episodeLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
       <div id="episodeTable"></div>
     </div>
     <div class="panel">
-      <div class="panel-title">🔵 Prototypes</div>
+      <div class="panel-title">🔵 Prototypes <span style="font-size:11px;color:var(--muted);font-weight:400">(clustered episodes)</span></div>
       <div id="prototypeLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
       <div id="prototypeTable"></div>
       <div id="prototypeDetail" style="margin-top:10px"></div>
