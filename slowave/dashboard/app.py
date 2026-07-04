@@ -917,6 +917,35 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
 
 
 
+# Cached engine instance — created lazily on first recall request.
+# Avoids creating a new SlowaveEngine (with FAISS + encoder) per request.
+_cached_engine: Any = None
+_cached_engine_lock: Any = None
+
+
+def _get_cached_engine(db_path: str) -> Any:
+    import threading
+    global _cached_engine, _cached_engine_lock
+    if _cached_engine_lock is None:
+        _cached_engine_lock = threading.Lock()
+    if _cached_engine is not None:
+        return _cached_engine
+    with _cached_engine_lock:
+        if _cached_engine is not None:
+            return _cached_engine
+        from slowave.core.config import SlowaveConfig
+        from slowave.core.engine import SlowaveEngine
+        from slowave.symbolic.encoder import EncoderConfig
+        _cached_engine = SlowaveEngine(
+            SlowaveConfig(
+                db_path=db_path,
+                dim=384,
+                encoder=EncoderConfig(),
+            )
+        )
+        return _cached_engine
+
+
 def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
     query = str(payload.get("query") or "").strip()
     if not query:
@@ -925,26 +954,13 @@ def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
     evidence = bool(payload.get("evidence", True))
     from dataclasses import asdict as _asdict
 
-    from slowave.core.config import SlowaveConfig
-    from slowave.core.engine import SlowaveEngine
-    from slowave.symbolic.encoder import EncoderConfig
-
-    eng = SlowaveEngine(
-        SlowaveConfig(
-            db_path=db_path,
-            dim=384,
-            encoder=EncoderConfig(),
-        )
-    )
-    try:
-        r = eng.recall(query, top_k=top_k, evidence=evidence)
-        return {
-            "query": query,
-            "schemas": [_asdict(s) for s in r.schemas],
-            "episodes": r.episode_texts,
-            "raw_events": r.raw_events,
-            "expanded_neighbors": {str(k): v for k, v in r.expanded_neighbors.items()},
-        }
-    finally:
-        eng.close()
+    eng = _get_cached_engine(db_path)
+    r = eng.recall(query, top_k=top_k, evidence=evidence)
+    return {
+        "query": query,
+        "schemas": [_asdict(s) for s in r.schemas],
+        "episodes": r.episode_texts,
+        "raw_events": r.raw_events,
+        "expanded_neighbors": {str(k): v for k, v in r.expanded_neighbors.items()},
+    }
 from slowave.dashboard._html import _INDEX_HTML  # noqa: E402
