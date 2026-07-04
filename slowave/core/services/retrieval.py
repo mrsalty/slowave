@@ -149,10 +149,24 @@ class RetrievalService:
         schema_scores: dict[int, float] = {}
         for sid, score in self.schemas.search_embedding(q, limit=max(20, top_k * 4), scope_id=scope_id):
             schema_scores[sid] = max(schema_scores.get(sid, -1e9), score + 0.25)
+
+        # FTS candidates: scope-filter early to avoid collecting candidates
+        # that will be discarded later. FTS doesn't support scope natively,
+        # so we fetch schemas and filter by scope_id immediately.
         for sid in self.schemas.search_fts(query, limit=max(10, top_k * 2)):
+            if scope_id:
+                try:
+                    s = self.schemas.get(sid)
+                    if s.scope_id and s.scope_id != scope_id:
+                        continue
+                except KeyError:
+                    continue
             schema_scores[sid] = max(schema_scores.get(sid, -1e9), 0.35)
+
         proto_ids = [p.id for p in retrieved.prototypes]
         for s in self.schemas.get_many_by_prototypes(proto_ids):
+            if scope_id and s.scope_id and s.scope_id != scope_id:
+                continue
             schema_scores[s.id] = max(schema_scores.get(s.id, -1e9), 0.15 + s.salience * 0.05)
 
         # Profile-layer injection: always included, but needs_review schemas only
