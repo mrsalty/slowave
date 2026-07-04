@@ -240,6 +240,12 @@ svg{width:100%;height:100%}
 }
 .graph-controls-grid input,.graph-controls-grid select,#graphLimit,#graphScope,#graphMinSalience{background:linear-gradient(to bottom,rgba(20,30,51,.6),rgba(15,24,41,.4))!important;border:1px solid rgba(30,45,74,.6)!important;color:var(--text)!important;border-radius:8px;padding:7px 10px;font-size:13px;font-family:var(--font);-webkit-text-fill-color:var(--text)!important;-webkit-box-shadow:0 0 0 30px rgba(20,30,51,.6) inset!important}
 .graph-controls-grid input:focus,.graph-controls-grid select:focus{outline:none;border-color:var(--blue)!important;box-shadow:0 0 0 3px rgba(79,155,255,.2)}
+/* Cross-browser range slider */
+#graphMinSalience{-webkit-appearance:none;appearance:none;height:6px;padding:0!important;border:none!important;background:transparent!important;-webkit-box-shadow:none!important;cursor:pointer}
+#graphMinSalience::-webkit-slider-runnable-track{height:6px;border-radius:3px;background:var(--panel3);border:1px solid var(--line)}
+#graphMinSalience::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid #0f1829;margin-top:-6px;box-shadow:0 0 6px rgba(79,155,255,.3);cursor:pointer}
+#graphMinSalience::-moz-range-track{height:6px;border-radius:3px;background:var(--panel3);border:1px solid var(--line)}
+#graphMinSalience::-moz-range-thumb{width:16px;height:16px;border-radius:50%;background:var(--blue);border:2px solid #0f1829;box-shadow:0 0 6px rgba(79,155,255,.3);cursor:pointer}
 .edge{stroke-opacity:.7;transition:stroke-opacity .2s}
 .edge:hover{stroke-opacity:1}
 .node{cursor:pointer;transition:r .15s}
@@ -297,6 +303,7 @@ pre.code-block{
 /* ── EXPANDABLE ROWS ── */
 tr.expandable{cursor:pointer}
 tr.expandable:hover td{background:var(--panel3)}
+.schema-row-expanded td{background:rgba(20,37,60,.7)!important}
 .expand-row td{background:var(--panel2)!important;padding:0}
 .expand-content{padding:12px 16px}
 
@@ -320,6 +327,21 @@ tr.expandable:hover td{background:var(--panel3)}
 .scope-reg-card:hover{border-color:rgba(30,45,74,.7);box-shadow:0 2px 4px rgba(0,0,0,.1)}
 .scope-reg-id{font-family:"SF Mono","Fira Code",monospace;font-size:12px;font-weight:600}
 .scope-reg-meta{font-size:11px;color:var(--muted)}
+
+/* ── SCOPE TOOLTIP ── */
+.scope-count-tip{
+  color:var(--cyan);cursor:pointer;border-bottom:1px dashed var(--cyan);
+  position:relative;
+}
+.scope-count-tip:hover::after{
+  content:attr(data-tip);
+  position:absolute;bottom:100%;left:50%;transform:translateX(-50%);
+  background:rgba(8,14,28,.95);color:var(--cyan);
+  border:1px solid var(--line2);border-radius:var(--radius-sm);
+  padding:6px 10px;font-size:11px;white-space:pre;max-width:380px;
+  z-index:200;margin-bottom:4px;box-shadow:0 4px 16px rgba(0,0,0,.5);
+  line-height:1.6;pointer-events:none;
+}
 
 /* ── PULSE GRAPH ── */
 .pulse-panel{position:relative}
@@ -352,7 +374,6 @@ tr.expandable:hover td{background:var(--panel3)}
     <button class="tab" data-tab="recall">🔍 Recall</button>
     <button class="tab" data-tab="supersessions">🔄 Supersessions</button>
     <button class="tab" data-tab="worker">🧠 Worker</button>
-    <button class="tab" data-tab="generalization">🌐 Generalization</button>
     <button class="tab" data-tab="db">💾 DB Health</button>
   </nav>
 </header>
@@ -370,11 +391,7 @@ tr.expandable:hover td{background:var(--panel3)}
     <div class="pulse-stats" id="pulseStats"></div>
   </div>
   <div class="stat-grid" id="statGrid"></div>
-<div class="panel" style="margin-bottom:10px">
-    <div class="panel-title">📈 Salience distribution</div>
-    <canvas id="salienceHistCanvas" width="800" height="140" style="width:100%;height:140px"></canvas>
-  </div>
-  <div class="two-col">
+<div class="two-col">
     <div class="panel">
       <div class="panel-title">📊 Schema health</div>
       <div id="schemaHealthPanel"></div>
@@ -398,6 +415,7 @@ tr.expandable:hover td{background:var(--panel3)}
 
 <!-- SCHEMAS -->
 <section id="schemas" class="section">
+  <div class="stat-grid" id="genStatGrid"></div>
   <div class="panel">
     <div class="controls">
       <select id="schemaStatus">
@@ -413,25 +431,6 @@ tr.expandable:hover td{background:var(--panel3)}
     <div id="schemaLoading" class="loading-overlay"><div class="spinner"></div> Loading schemas…</div>
     <div class="table-wrap" id="schemaTable"></div>
     <div id="schemaDetail" style="margin-top:12px"></div>
-  </div>
-</section>
-
-<!-- GENERALIZATION -->
-<section id="generalization" class="section">
-  <div class="stat-grid" id="genStatGrid"></div>
-  <div class="two-col" style="margin-top:0">
-    <div class="panel">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-        <div class="panel-title" style="margin:0">🏆 Promoted memories</div>
-        <button class="btn" style="font-size:11px;padding:4px 10px" onclick="loadGeneralization()">↺ Refresh</button>
-      </div>
-      <div id="genLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
-      <div id="genPromotedList"></div>
-    </div>
-    <div class="panel">
-      <div class="panel-title">🗂 Scope registry</div>
-      <div id="genScopeRegistry"></div>
-    </div>
   </div>
 </section>
 
@@ -457,7 +456,7 @@ tr.expandable:hover td{background:var(--panel3)}
       <div class="gc-value" style="gap:8px">
         <span id="graphMinSalienceLabel" class="pill" style="min-width:38px;justify-content:center">0.00</span>
         <input id="graphMinSalience" type="range" value="0" min="0" max="25" step="0.1"
-          oninput="syncSalienceSlider()" style="flex:1;min-width:180px;accent-color:var(--blue)">
+          oninput="syncSalienceSlider()" style="flex:1;min-width:180px">
         <span style="font-size:11px;color:var(--muted);white-space:nowrap">max: <span id="graphObservedMaxSalienceLabel">25.00</span></span>
         <button class="btn" onclick="resetSalienceSlider()">Reset</button>
       </div>
