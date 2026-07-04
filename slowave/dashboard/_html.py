@@ -208,6 +208,7 @@ btn:hover,.btn:hover,button.btn:hover{background:linear-gradient(to bottom,rgba(
   display:none;align-items:center;justify-content:center;
   padding:40px;color:var(--muted);gap:10px;
 }
+.hidden{display:none!important}
 .loading-overlay.show{display:flex}
 
 /* ── GRAPH CONTROLS GRID ── */
@@ -349,7 +350,7 @@ tr.expandable:hover td{background:var(--panel3)}
     <button class="tab" data-tab="schemas">📖 Schemas</button>
     <button class="tab" data-tab="graph">🕸 Graph</button>
     <button class="tab" data-tab="recall">🔍 Recall</button>
-    <button class="tab" data-tab="episodes">🎞 Episodes</button>
+    <button class="tab" data-tab="episodes">🔬 Explorer</button>
     <button class="tab" data-tab="supersessions">🔄 Supersessions</button>
     <button class="tab" data-tab="worker">🧠 Worker</button>
     <button class="tab" data-tab="generalization">🌐 Generalization</button>
@@ -533,26 +534,22 @@ tr.expandable:hover td{background:var(--panel3)}
     <div id="dbHealth"></div>
   </div>
 </section>
-<!-- EPISODES & PROTOTYPES -->
+<!-- EXPLORER -->
 <section id="episodes" class="section">
-  <div class="panel" style="margin-bottom:10px">
-    <div class="controls">
-      <input id="episodeQ" placeholder="search episode content…" style="flex:1;min-width:160px"/>
-      <input id="episodeLimit" type="number" value="50" min="1" max="200" style="width:70px"/>
-      <button class="btn primary" onclick="loadEpisodes()">Search</button>
-    </div>
-  </div>
   <div class="two-col">
-    <div class="panel">
-      <div class="panel-title">🎞 Episodes <span style="font-size:11px;color:var(--muted);font-weight:400">(hippocampus)</span></div>
-      <div id="episodeLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
-      <div id="episodeTable"></div>
+    <div class="panel" style="flex:2">
+      <div class="panel-title">🧠 Schemas <span style="font-size:11px;color:var(--muted);font-weight:400">(stage ↓)</span></div>
+      <div id="explorerSchemaLoading" class="loading-overlay"><div class="spinner"></div></div>
+      <div id="explorerSchemas"></div>
+      <div id="explorerSchemaDetail" style="margin-top:10px"></div>
     </div>
-    <div class="panel">
-      <div class="panel-title">🔵 Prototypes <span style="font-size:11px;color:var(--muted);font-weight:400">(clustered episodes)</span></div>
-      <div id="prototypeLoading" class="loading-overlay"><div class="spinner"></div> Loading…</div>
-      <div id="prototypeTable"></div>
-      <div id="prototypeDetail" style="margin-top:10px"></div>
+    <div class="panel" style="flex:1">
+      <div class="panel-title">📦 Sessions & Prototypes</div>
+      <div id="explorerSessions"></div>
+      <div style="margin-top:12px">
+        <div class="panel-title" style="font-size:13px">🔵 Prototypes</div>
+        <div id="explorerProtos"></div>
+      </div>
     </div>
   </div>
 </section>

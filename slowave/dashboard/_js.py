@@ -53,7 +53,7 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   else if(tab==="worker")loadWorker();
   else if(tab==="generalization")loadGeneralization();
   else if(tab==="db")loadDbHealth();
-  else if(tab==="episodes"){loadEpisodes();loadPrototypes();}
+  else if(tab==="episodes"){loadExplorer();}
   else if(tab==="supersessions")loadSupersessions();
 });
 
@@ -1041,72 +1041,103 @@ async function loadDbHealth(){
     el.innerHTML=html;
   }finally{ld.classList.remove("show");}
 }
-// ── EPISODES & PROTOTYPES ──
-async function loadEpisodes(){
-  const ld=document.getElementById("episodeLoading");
-  const el=document.getElementById("episodeTable");
-  ld.classList.add("show");el.innerHTML="";
-  try{
-    const q=document.getElementById("episodeQ")?.value?.trim()||"";
-    const limit=document.getElementById("episodeLimit")?.value||50;
-    const d=await getJSON(`/api/episodes?limit=${limit}&q=${encodeURIComponent(q)}`);
-    if(!d.episodes||!d.episodes.length){el.innerHTML=emptyState("No episodes found.","🎞");return;}
-    const rows=d.episodes.map(e=>[
-      `<code>event_${esc(e.event_id)}</code>`,
-      fmtTsCompact(e.ts)+"<br><span style=\"font-size:10px;color:var(--muted)\">"+fmtTsCompactSub(e.ts)+"</span>",
-      `<span class=\"pill\" style=\"font-size:10px\">${esc(e.type||"?")}</span>`,
-      `<span title=\"${esc(e.content_preview||"")}\">${truncContent(e.content_preview||"",120)}</span>`,
-      Number(e.salience).toFixed(3),
-      num(e.recalled_count||0),
-      esc(e.session_id||"").slice(0,12)+"…"
-    ]);
-    el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} episodes</div>`
-      +table(["ID","Time","Type","Content","Salience","Recalls","Session"],rows,[1,2,3]);
-  }finally{ld.classList.remove("show");}
-}
+// ── EXPLORER ──
+const STAGE_LABELS = {0:"📍 Scoped", 1:"📦 Portable", 2:"🏠 Contextual", 3:"🌐 Global"};
+const STAGE_ORDER = [3,2,1,0];
 
-async function loadPrototypes(){
-  const ld=document.getElementById("prototypeLoading");
-  const el=document.getElementById("prototypeTable");
-  ld.classList.add("show");el.innerHTML="";
+async function loadExplorer(){
+  const ld=document.getElementById("explorerSchemaLoading");
+  ld.classList.add("show");
   try{
-    const d=await getJSON("/api/prototypes?limit=50");
-    if(!d.prototypes||!d.prototypes.length){el.innerHTML=emptyState("No prototypes formed yet.","🔵");return;}
-    const rows=d.prototypes.map(p=>[
-      `<code>proto_${p.id}</code>`,
-      `<button class=\"btn\" style=\"font-size:11px;padding:2px 8px\" onclick=\"loadPrototypeDetail(${p.id})\">view</button>`,
-      num(p.member_count||p.support_count),
-      num(p.support_count),
-      Number(p.variance).toFixed(4),
-      esc(p.scale||"fine"),
-      fmtTsCompact(p.last_updated_ts)
-    ]);
-    el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} prototypes</div>`
-      +table(["ID","","Members","Support","Variance","Scale","Updated"],rows,[0,1]);
-  }finally{ld.classList.remove("show");}
-}
-
-async function loadPrototypeDetail(id){
-  const el=document.getElementById("prototypeDetail");
-  el.innerHTML=`<div style=\"text-align:center;padding:12px;color:var(--muted)\">Loading…</div>`;
-  try{
-    const d=await getJSON(`/api/prototypes/${id}/members`);
-    if(d.error){el.innerHTML=emptyState(d.error,"⚠️");return;}
-    const proto=d.prototype;const eps=d.episodes||[];
-    let html=`<div style=\"background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 14px\">`;
-    html+=`<div style=\"font-weight:600;margin-bottom:4px\">proto_${proto.id}</div>`;
-    html+=`<div style=\"font-size:12px;color:var(--muted)\">Support: ${num(proto.support_count)} · Variance: ${Number(proto.variance).toFixed(4)} · Scale: ${esc(proto.scale||"fine")}</div></div>`;
-    if(eps.length){
-      html+=`<div style=\"margin-top:8px;font-size:12px;color:var(--muted);margin-bottom:4px\">${num(eps.length)} member episodes:</div>`;
-      eps.forEach(e=>{
-        html+=`<div style=\"background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:4px;font-size:12px\">`;
-        html+=`<code style=\"font-size:10px\">event_${esc(e.event_id)}</code> <span style=\"color:var(--muted)\">sal ${Number(e.salience).toFixed(3)}</span><br>`;
-        html+=truncContent(e.content_preview||"",200)+`</div>`;
+    const d=await getJSON("/api/explorer");
+    // Schemas by stage
+    let schemaHtml="";
+    if(!d.schemas||!d.schemas.length){
+      schemaHtml=emptyState("No schemas yet.","🧠");
+    } else {
+      // Group by stage
+      const byStage={};
+      d.schemas.forEach(s=>{const st=s.generalization_stage||0;if(!byStage[st])byStage[st]=[];byStage[st].push(s);});
+      STAGE_ORDER.forEach(st=>{
+        const schemas=byStage[st];
+        if(!schemas||!schemas.length)return;
+        schemaHtml+=`<div style="font-weight:600;font-size:12px;color:var(--blue);margin:10px 0 4px 0">${STAGE_LABELS[st]||'Stage '+st} (${schemas.length})</div>`;
+        schemas.forEach(s=>{
+          const stageBg=st===3?"#0a2018":st===2?"#1a2000":st===1?"#201a00":"#050b18";
+          schemaHtml+=`<div onclick="explorerSchemaDetail(${s.id})" style="cursor:pointer;background:${stageBg};border:1px solid var(--line);border-radius:var(--radius-sm);padding:6px 10px;margin-bottom:4px;transition:all .15s" onmouseover="this.style.borderColor='var(--blue)'" onmouseout="this.style.borderColor='var(--line)'">`;
+          schemaHtml+=`<div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px">`;
+          schemaHtml+=`<div style="flex:1;min-width:0"><span style="font-size:12px;line-height:1.4">${esc((s.content_text||"").slice(0,120))}${(s.content_text||"").length>120?"…":""}</span></div>`;
+          schemaHtml+=`<div style="flex-shrink:0;text-align:right;font-size:10px;color:var(--muted)">${pill(s.status)}<br><span style="font-size:10px">sal ${Number(s.salience).toFixed(3)} · ${s.episode_count} eps</span></div>`;
+          schemaHtml+=`</div></div>`;
+        });
       });
     }
+    document.getElementById("explorerSchemas").innerHTML=schemaHtml;
+
+    // Sessions with episodes
+    const sessions=d.sessions||[];
+    let sessHtml="";
+    if(!sessions.length){
+      sessHtml=emptyState("No sessions.","📦");
+    } else {
+      sessions.forEach(ss=>{
+        const shortId=esc(ss.session_id).slice(0,16);
+        sessHtml+=`<div style="margin-bottom:8px">`;
+        sessHtml+=`<div onclick="this.nextElementSibling.classList.toggle('hidden')" style="cursor:pointer;font-weight:600;font-size:12px;color:var(--blue);margin-bottom:2px">📋 ${shortId}… (${ss.episodes.length} eps)</div>`;
+        sessHtml+=`<div class="hidden" style="font-size:11px;padding-left:8px;border-left:2px solid var(--line2)">`;
+        ss.episodes.forEach(e=>{
+          sessHtml+=`<div style="margin-bottom:4px"><span style="color:var(--muted)">${fmtTsCompact(e.ts)}</span> `;
+          sessHtml+=`<span class="pill" style="font-size:9px;padding:1px 4px">${esc(e.kind||"?")}</span> `;
+          sessHtml+=`sal ${Number(e.salience).toFixed(3)}</div>`;
+        });
+        sessHtml+=`</div></div>`;
+      });
+    }
+    document.getElementById("explorerSessions").innerHTML=sessHtml;
+
+    // Prototypes
+    const protos=d.prototypes||[];
+    let protoHtml="";
+    if(!protos.length){
+      protoHtml=emptyState("No prototypes.","🔵");
+    } else {
+      protos.forEach(p=>{protoHtml+=`<div style="font-size:11px;margin-bottom:3px"><span style="color:var(--cyan)">proto_${p.id}</span> <span style="color:var(--muted)">sup ${p.support_count} · ${p.member_count} eps · ${esc(p.scale||"fine")}</span></div>`;});
+    }
+    document.getElementById("explorerProtos").innerHTML=protoHtml;
+  }finally{ld.classList.remove("show");}
+}
+
+async function explorerSchemaDetail(id){
+  const el=document.getElementById("explorerSchemaDetail");
+  el.innerHTML=`<div style="text-align:center;padding:8px;color:var(--muted)">Loading…</div>`;
+  try{
+    const d=await getJSON(`/api/schemas/${id}`);
+    if(d.error){el.innerHTML=emptyState(d.error,"⚠️");return;}
+    const s=d.schema||d;
+    let html=`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius);padding:10px 14px;margin-top:8px">`;
+    html+=`<div style="display:flex;justify-content:space-between;align-items:center"><b>sch_${id}</b>`;
+    html+=`<button class="btn" style="font-size:10px;padding:1px 6px" onclick="document.getElementById('explorerSchemaDetail').innerHTML=''">✕</button></div>`;
+    html+=`<div style="font-size:13px;line-height:1.5;margin:6px 0">${esc(s.content_text||"")}</div>`;
+    html+=`<div style="font-size:11px;color:var(--muted)">${pill(s.status)} · sal ${Number(s.salience).toFixed(3)} · stage ${s.generalization_stage||0} · scope ${esc(s.scope_id||"—")}</div>`;
+    // Evidence episodes
+    const eps=d.evidence_episodes||[];
+    if(eps.length){
+      html+=`<div style="margin-top:8px;font-size:11px;color:var(--muted)">Evidence (${eps.length}):</div>`;
+      eps.forEach(e=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">· ${esc((e.content_text||"").slice(0,150))}</div>`;});
+    }
+    // Relations
+    const rels=d.outgoing_relations||[];
+    if(rels.length){
+      html+=`<div style="margin-top:8px;font-size:11px;color:var(--muted)">Relations:</div>`;
+      rels.forEach(r=>{html+=`<div style="font-size:11px;margin:2px 0;padding-left:8px">${esc(r.relation)} → sch_${r.dst_schema_id} (conf ${Number(r.confidence).toFixed(2)})</div>`;});
+    }
+    html+=`</div>`;
     el.innerHTML=html;
   }catch(e){el.innerHTML=emptyState("Error: "+esc(String(e)),"⚠️");}
 }
+
+window.loadExplorer = loadExplorer;
+window.explorerSchemaDetail = explorerSchemaDetail;
 
 // ── SESSION REPLAY ──
 async function loadSessionTimeline(sid){
@@ -1330,8 +1361,8 @@ async function loadGeneralization(){
 
 // ── INIT ──
 // Ensure new functions are globally accessible
-window.loadEpisodes = loadEpisodes;
-window.loadPrototypes = loadPrototypes;
+window.loadExplorer = loadExplorer;
+window.explorerSchemaDetail = explorerSchemaDetail;
 window.loadSessionTimeline = loadSessionTimeline;
 window.loadSupersessions = loadSupersessions;
 
