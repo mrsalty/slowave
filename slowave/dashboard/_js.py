@@ -1104,6 +1104,10 @@ async function loadPrototypeDetail(id){
         html+=truncContent(e.content||"",200)+`</div>`;
       });
     }
+    el.innerHTML=html;
+  }catch(e){el.innerHTML=emptyState("Error: "+esc(String(e)),"⚠️");}
+}
+
 // ── SESSION REPLAY ──
 async function loadSessionTimeline(sid){
   let detail=document.getElementById("sessionTimeline");
@@ -1164,9 +1168,6 @@ async function loadSupersessions(){
     el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} supersession chains</div>`
       +table(["Old","New","Confidence","Reason","Old content","New content","When"],rows,[0,1,3,4,5]);
   }finally{ld.classList.remove("show");}
-}
-    el.innerHTML=html;
-  }catch(e){el.innerHTML=emptyState("Error: "+esc(String(e)),"⚠️");}
 }
 // ── SALIENCE HISTOGRAM ──
 function renderSalienceHistogram(){
