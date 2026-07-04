@@ -350,7 +350,6 @@ tr.expandable:hover td{background:var(--panel3)}
     <button class="tab" data-tab="schemas">📖 Schemas</button>
     <button class="tab" data-tab="graph">🕸 Graph</button>
     <button class="tab" data-tab="recall">🔍 Recall</button>
-    <button class="tab" data-tab="episodes">🔬 Explorer</button>
     <button class="tab" data-tab="supersessions">🔄 Supersessions</button>
     <button class="tab" data-tab="worker">🧠 Worker</button>
     <button class="tab" data-tab="generalization">🌐 Generalization</button>
@@ -534,22 +533,6 @@ tr.expandable:hover td{background:var(--panel3)}
     <div id="dbHealth"></div>
   </div>
 </section>
-<!-- EXPLORER -->
-<section id="episodes" class="section">
-  <div class="two-col">
-    <div class="panel" style="flex:2">
-      <div class="panel-title">🧠 Schemas <span style="font-size:11px;color:var(--muted);font-weight:400">(stage ↓)</span></div>
-      <div id="explorerSchemaLoading" class="loading-overlay"><div class="spinner"></div></div>
-      <div id="explorerSchemas"></div>
-      <div id="explorerSchemaDetail" style="margin-top:10px"></div>
-    </div>
-    <div class="panel" style="flex:1">
-      <div class="panel-title">🔍 Detail</div>
-      <div id="explorerDetail">Click a schema to see evidence here</div>
-    </div>
-  </div>
-</section>
-
 <!-- SUPERSESSIONS -->
 <section id="supersessions" class="section">
   <div class="panel">
