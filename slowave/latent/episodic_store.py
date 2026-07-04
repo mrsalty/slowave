@@ -39,13 +39,27 @@ class EpisodicStore:
         # Use cosine similarity as inner product on L2-normalized vectors.
         base = faiss.IndexFlatIP(dim)
         index = faiss.IndexIDMap2(base)
+        # Try loading persisted index first; fall back to DB rebuild
+        path = getattr(self.cfg, "faiss_index_path", "")
+        if path:
+            try:
+                loaded = faiss.read_index(path)
+                if loaded.d == dim and loaded.ntotal > 0:
+                    return loaded
+            except Exception:
+                pass
         return index
 
-    def reset_faiss_from_db(self) -> None:
-        """Rebuild FAISS index by scanning SQLite.
+    def _save_index(self) -> None:
+        path = getattr(self.cfg, "faiss_index_path", "")
+        if path and self._index.ntotal > 0:
+            try:
+                faiss.write_index(self._index, path)
+            except Exception:
+                pass
 
-        For the MVP we do this at startup (fast for ~1k-100k vectors).
-        """
+    def reset_faiss_from_db(self) -> None:
+        """Rebuild FAISS index by scanning SQLite."""
         conn = self.db.connect()
         cur = conn.execute(
             "SELECT id, embedding, dim FROM episodic_memories ORDER BY id"
@@ -61,6 +75,7 @@ class EpisodicStore:
         faiss.normalize_L2(X)
         self._index.reset()
         self._index.add_with_ids(X, np.asarray(ids, dtype=np.int64))
+        self._save_index()
 
     def add(
         self,
