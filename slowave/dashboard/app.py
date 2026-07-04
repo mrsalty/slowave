@@ -959,7 +959,7 @@ def _get_cached_engine(db_path: str) -> Any:
 
 
 def _episodes_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
-    """Return paginated episode list with content from raw_events."""
+    """Return paginated episode list."""
     if not os.path.exists(db_path):
         return {"episodes": [], "total": 0}
     limit = max(1, min(200, int((qs.get("limit") or [50])[0])))
@@ -967,34 +967,29 @@ def _episodes_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
     search = (qs.get("q") or [""])[0].strip()
     conn = _connect(db_path)
     try:
+        base_sql = "FROM episodic_memories e"
+        base_params: list[Any] = []
         if search:
-            total_row = conn.execute(
-                "SELECT COUNT(*) AS n FROM episodic_memories e "
-                "JOIN raw_events r ON r.id = e.event_id "
-                "WHERE r.content LIKE ?",
-                (f"%{search}%",),
-            ).fetchone()
-            rows = conn.execute(
-                "SELECT e.id, e.event_id, e.ts, e.salience, e.recalled_count, "
-                "r.content, r.session_id, r.type "
-                "FROM episodic_memories e "
-                "JOIN raw_events r ON r.id = e.event_id "
-                "WHERE r.content LIKE ? "
-                "ORDER BY e.ts DESC LIMIT ? OFFSET ?",
-                (f"%{search}%", limit, offset),
-            ).fetchall()
-        else:
-            total_row = conn.execute("SELECT COUNT(*) AS n FROM episodic_memories").fetchone()
-            rows = conn.execute(
-                "SELECT e.id, e.event_id, e.ts, e.salience, e.recalled_count, "
-                "r.content, r.session_id, r.type "
-                "FROM episodic_memories e "
-                "JOIN raw_events r ON r.id = e.event_id "
-                "ORDER BY e.ts DESC LIMIT ? OFFSET ?",
-                (limit, offset),
-            ).fetchall()
+            base_sql += " WHERE e.metadata_json LIKE ?"
+            base_params.append(f"%{search}%")
+        total_row = conn.execute(f"SELECT COUNT(*) AS n {base_sql}", base_params).fetchone()
+        rows = conn.execute(
+            f"SELECT e.id, e.event_id, e.ts, e.salience, e.recalled_count, "
+            f"e.metadata_json {base_sql} "
+            f"ORDER BY e.ts DESC LIMIT ? OFFSET ?",
+            base_params + [limit, offset],
+        ).fetchall()
+        episodes = []
+        for r in rows:
+            rec = dict(r)
+            meta = _json_loads(rec.pop("metadata_json", None), {})
+            rec["content_preview"] = str(meta.get("text", meta.get("content",
+                f'{meta.get("kind","")} session={meta.get("session_id","")}')))[:200]
+            rec["type"] = str(meta.get("type", meta.get("event_type", "")))
+            rec["session_id"] = str(meta.get("session_id", rec.get("event_id", "")))
+            episodes.append(rec)
         return {
-            "episodes": [dict(r) for r in rows],
+            "episodes": episodes,
             "total": int(total_row["n"]) if total_row else 0,
         }
     finally:
@@ -1100,8 +1095,8 @@ def _supersessions_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, 
         rows = conn.execute(
             "SELECT sr.src_schema_id, sr.dst_schema_id, sr.confidence, sr.reason, "
             "sr.created_ts, "
-            "src.content AS src_content, src.status AS src_status, "
-            "dst.content AS dst_content, dst.status AS dst_status "
+            "src.content_text AS src_content, src.status AS src_status, "
+            "dst.content_text AS dst_content, dst.status AS dst_status "
             "FROM schema_relations sr "
             "JOIN schemas src ON src.id = sr.src_schema_id "
             "JOIN schemas dst ON dst.id = sr.dst_schema_id "
