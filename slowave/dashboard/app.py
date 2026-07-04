@@ -123,8 +123,6 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                     self._send_json(_session_timeline(db_path, session_id))
                 elif path == "/api/supersessions":
                     self._send_json(_supersessions_payload(db_path, qs))
-                elif path == "/api/explorer":
-                    self._send_json(_explorer_payload(db_path, qs))
                 else:
                     self._send_json({"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND)
             except Exception as e:
@@ -1113,69 +1111,6 @@ def _supersessions_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, 
     finally:
         conn.close()
 
-
-def _explorer_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
-    """Return schemas ordered by stage DESC + episodes grouped by session."""
-    if not os.path.exists(db_path):
-        return {"schemas": [], "sessions": [], "prototypes": []}
-    conn = _connect(db_path)
-    try:
-        # Top schemas by stage DESC, salience DESC
-        schemas = [
-            dict(r) for r in conn.execute(
-                "SELECT id, content_text, status, salience, scope_id, scope_kind, "
-                "generalization_stage, first_formed_ts, prototype_id, "
-                "supporting_episode_ids, facets_json "
-                "FROM schemas ORDER BY generalization_stage DESC, salience DESC LIMIT 80"
-            ).fetchall()
-        ]
-        for s in schemas:
-            s["episode_count"] = len(_ids_from_json(s.pop("supporting_episode_ids", "[]")))
-            facets = _json_loads(s.pop("facets_json", None), {})
-            s["schema_class"] = _schema_class(facets)
-
-        # Episodes grouped by session (most recent 10 sessions, 5 episodes each)
-        sess_rows = conn.execute(
-            "SELECT DISTINCT e.metadata_json FROM episodic_memories e "
-            "ORDER BY e.ts DESC LIMIT 30"
-        ).fetchall()
-        seen_sids: set[str] = set()
-        sessions: list[dict[str, Any]] = []
-        for r in sess_rows:
-            meta = _json_loads(r["metadata_json"], {})
-            sid = str(meta.get("session_id", ""))
-            if not sid or sid in seen_sids:
-                continue
-            seen_sids.add(sid)
-            eps = [
-                dict(e) for e in conn.execute(
-                    "SELECT id, event_id, ts, salience, recalled_count, metadata_json "
-                    "FROM episodic_memories WHERE metadata_json LIKE ? "
-                    "ORDER BY ts DESC LIMIT 5",
-                    (f"%{sid}%",),
-                ).fetchall()
-            ]
-            for ep in eps:
-                ep_meta = _json_loads(ep.pop("metadata_json", None), {})
-                ep["kind"] = ep_meta.get("kind", "")
-                ep["session_id"] = sid
-            sessions.append({"session_id": sid, "episodes": eps})
-            if len(sessions) >= 10:
-                break
-
-        # Prototypes summary
-        prototypes = [
-            dict(r) for r in conn.execute(
-                "SELECT p.id, p.support_count, p.variance, p.scale, "
-                "COUNT(epm.episode_id) AS member_count "
-                "FROM semantic_prototypes p "
-                "LEFT JOIN episode_prototype_map epm ON epm.prototype_id = p.id "
-                "GROUP BY p.id ORDER BY p.support_count DESC LIMIT 30"
-            ).fetchall()
-        ]
-        return {"schemas": schemas, "sessions": sessions, "prototypes": prototypes}
-    finally:
-        conn.close()
 
 
 def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
