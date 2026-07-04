@@ -209,8 +209,7 @@ async function loadStatus(){
     document.getElementById("recentSessions").innerHTML=table(
       ["Session","Agent","Scope","Started","Duration","Events","Ep."],
       sess.map(r=>[
-        `<a href=\"#\" onclick=\"loadSessionTimeline('${esc(r.id)}');return false\" style=\"color:var(--blue);font-family:monospace;font-size:11px\">${esc((r.id||\"\").slice(0,12))}…</a>`,
-        r.agent||"—",r.scope_id||"(none)",
+        `<a href="#" onclick="loadSessionTimeline('${esc(r.id)}');return false" style="color:var(--blue);font-family:monospace;font-size:11px">${esc((r.id||"").slice(0,12))}…</a>`,        r.agent||"—",r.scope_id||"(none)",
         fmtTs(r.started_ts),dur(r.duration_seconds),
         num(r.events),num(r.episodes)
       ]),
