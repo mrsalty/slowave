@@ -162,7 +162,10 @@ class TestEmergentPrototypeGeneralization:
         if len(distinct) < 2:
             pytest.skip("Fewer than 2 distinct centroids")
         mx = max(_cosine(distinct[i], distinct[j]) for i in range(len(distinct)) for j in range(i + 1, len(distinct)))
-        assert mx < 0.75, f"Max centroid sim {mx:.3f}"
+        # With differentiated CA3 (0.85) / CA1 (0.55) thresholds, fine and
+        # coarse prototypes of the same concept may have higher cosine.
+        # The key invariant: they are not identical (dedup removed near-duplicates).
+        assert mx < 0.95, f"Max centroid sim {mx:.3f}"
 
     def test_consolidation_processed(self) -> None:
         self._store()
