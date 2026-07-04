@@ -433,9 +433,13 @@ async function expandSchemaRow(tr,schemaId){
   }
   const d=await getJSON(`/api/schemas/${schemaId}`);
   const s=d.schema;
-  const evHtml=d.evidence&&d.evidence.length?table(["Episode","Event","Weight","Quote"],
-    d.evidence.map(e=>[e.episode_id?`epi_${e.episode_id}`:"—",e.raw_event_id?`evt_${e.raw_event_id}`:"—",
-      Number(e.weight||0).toFixed(3),e.quote||"—"])):"<em style='color:var(--muted)'>No evidence.</em>";
+  const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto">`+d.evidence.map((e,i)=>{
+    const evLink=e.raw_event_id?`<a href="#" onclick="loadEventInline(${e.raw_event_id},'evt_detail_${schemaId}_${i}');return false" style="color:var(--blue);font-size:11px">evt_${e.raw_event_id}</a>`:"—";
+    return `<div style="margin-bottom:4px;font-size:11px">
+      <span style="color:var(--muted)">epi_${e.episode_id||"—"}</span> ${evLink} <span style="color:var(--green)">w${Number(e.weight||0).toFixed(3)}</span>
+      <div style="color:var(--text);margin:2px 0">${esc((e.quote||"?").slice(0,200))}</div>
+      <div id="evt_detail_${schemaId}_${i}"></div>
+    </div>`;}).join("")+`</div>`:`<em style="color:var(--muted)">No evidence.</em>`;
   const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence","Reason"],
     d.outgoing.map(e=>[`sch_${e.dst_schema_id}`,e.relation,Number(e.confidence||0).toFixed(2),e.reason||"—"])):"<em style='color:var(--muted)'>None.</em>";
   const inHtml=d.incoming&&d.incoming.length?table(["From","Relation","Confidence","Reason"],
@@ -480,6 +484,28 @@ async function expandSchemaRow(tr,schemaId){
   </div></td>`;
   tr.after(expTr);
 }
+
+async function loadEventInline(eventId, slotId){
+  const slot=document.getElementById(slotId);
+  if(!slot)return;
+  // Toggle
+  if(slot.innerHTML&&!slot.innerHTML.includes("Loading")){
+    slot.innerHTML="";return;
+  }
+  slot.innerHTML=`<div style="color:var(--muted);font-size:10px;padding:4px 0">Loading event…</div>`;
+  try{
+    const d=await getJSON(`/api/events/${eventId}`);
+    if(d.error){slot.innerHTML=`<div style="color:var(--red);font-size:10px">${esc(d.error)}</div>`;return;}
+    const ev=d.event;
+    slot.innerHTML=`<div style="background:var(--panel3);border:1px solid var(--line2);border-radius:4px;padding:6px 10px;margin-top:4px;font-size:11px">
+      <span class="pill" style="font-size:9px">${esc(ev.type||"?")}</span>
+      <span style="color:var(--muted)">${fmtTsCompact(ev.ts)}</span>
+      <span style="color:var(--muted)"> · session ${esc((ev.session_id||"").slice(0,12))}…</span>
+      <div style="margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word">${esc(ev.content||"")}</div>
+    </div>`;
+  }catch(e){slot.innerHTML=`<div style="color:var(--red);font-size:10px">${esc(String(e))}</div>`;}
+}
+window.loadEventInline = loadEventInline;
 
 // ── WORKER ──
 async function loadWorker(){

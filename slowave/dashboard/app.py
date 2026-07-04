@@ -121,6 +121,9 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                 elif path.startswith("/api/sessions/") and path.endswith("/timeline"):
                     session_id = path.split("/")[-2]
                     self._send_json(_session_timeline(db_path, session_id))
+                elif path.startswith("/api/events/"):
+                    event_id = int(path.split("/")[-1])
+                    self._send_json(_event_detail(db_path, event_id))
                 elif path == "/api/supersessions":
                     self._send_json(_supersessions_payload(db_path, qs))
                 else:
@@ -1045,6 +1048,23 @@ def _prototype_members(db_path: str, proto_id: int) -> dict[str, Any]:
             "prototype": dict(proto_row),
             "episodes": [dict(r) for r in eps],
         }
+    finally:
+        conn.close()
+
+
+def _event_detail(db_path: str, event_id: int) -> dict[str, Any]:
+    """Return a single raw event with its content."""
+    if not os.path.exists(db_path):
+        return {"error": "db not found"}
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT id, ts, type, content, session_id, metadata_json "
+            "FROM raw_events WHERE id = ?", (event_id,)
+        ).fetchone()
+        if not row:
+            return {"error": "event not found"}
+        return {"event": dict(row)}
     finally:
         conn.close()
 
