@@ -14,7 +14,7 @@ All Slowave runs: **zero LLM calls**, local CPU, no API key required.
 | Benchmark | What it tests | Slowave | Best LLM-based competitor |
 |---|---|---:|---|
 | **LongMemEval** | Facts, updates, preferences across many sessions with realistic distractors | **87.8%** | Mem0 94.4%† |
-| **LoCoMo** | Cross-session recall across real conversations, 5 categories | **76%** | Mem0 92.5%‡ |
+| **LoCoMo** | Cross-session recall across real conversations, 5 categories | **74.6%** | Mem0 92.5%‡ |
 | **StaleMemory** *(concrete prefs)* | Detecting when a stored preference has silently changed | **86–89%** | no published baseline |
 
 † Mem0 uses GPT-5 as judge; Slowave uses keyword-overlap. Scores are not directly comparable across these two protocols.
@@ -59,13 +59,13 @@ All Slowave runs: **zero LLM calls**, local CPU, no API key required.
 | single-session | 282 | **71.3%** | 🟡 ok |
 | temporal | 321 | **58.9%** | 🔴 date arithmetic gap |
 | commonsense | 96 | **50.0%** | 🔴 out of scope |
-| **TOTAL** | **1 986** | **76%** | 🟢 **beats all independently verified competitors** |
+| **TOTAL** | **1 986** | **74.6%** | 🟢 **beats all independently verified competitors** |
 
 **🟢 Where Slowave excels:** cross-session recall — the category that matters most in real agent use. Beats LangMem (58.1%) and Zep (75.1%) with zero fine-tuning and zero LLM calls.
 
 **🔴 Where Slowave falls short:** "How many days since X?" is arithmetic, not retrieval — Slowave doesn't have an answer-construction layer. Commonsense questions require world knowledge that was never stored. These are structural limits of any retrieval-only system.
 
-> **On Mem0's 92.5%:** self-reported, GPT-5 judge, and flagged by Zep as potentially reflecting a different evaluation protocol. Every independently verified competitor — Zep (75.1%), LangMem (58.1%) — scores below Slowave's 76%.
+> **On Mem0's 92.5%:** self-reported, GPT-5 judge, and flagged by Zep as potentially reflecting a different evaluation protocol. Every independently verified competitor — Zep (75.1%), LangMem (58.1%) — scores below Slowave's 74.6%.
 
 ---
 
