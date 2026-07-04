@@ -230,4 +230,14 @@ class SQLiteDB:
             "WHERE raw_event_id IS NULL"
         )
 
+        # B-14: drop LLM-era columns from consolidation_debug (2026-07-04).
+        # Consolidation is zero-LLM; these columns were always empty.
+        for col in ("prompt_text", "response_json", "extracted_claims_json"):
+            try:
+                conn.execute(
+                    f"ALTER TABLE consolidation_debug DROP COLUMN {col}"
+                )
+            except Exception:
+                pass  # column already gone or table doesn't exist
+
         conn.commit()
