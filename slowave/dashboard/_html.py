@@ -544,12 +544,8 @@ tr.expandable:hover td{background:var(--panel3)}
       <div id="explorerSchemaDetail" style="margin-top:10px"></div>
     </div>
     <div class="panel" style="flex:1">
-      <div class="panel-title">📦 Sessions & Prototypes</div>
-      <div id="explorerSessions"></div>
-      <div style="margin-top:12px">
-        <div class="panel-title" style="font-size:13px">🔵 Prototypes</div>
-        <div id="explorerProtos"></div>
-      </div>
+      <div class="panel-title">🔍 Detail</div>
+      <div id="explorerDetail">Click a schema to see evidence here</div>
     </div>
   </div>
 </section>
