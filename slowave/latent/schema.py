@@ -247,6 +247,13 @@ class LatentSchemaBuilder:
         member_episodes: list[EpisodeText],
         member_episode_ids: list[int],
         member_timestamps: list[int] | None = None,
+        # Optional background corpus for contrastive TF-IDF.
+        # When provided, IDF is computed against this global corpus
+        # instead of the cluster's own texts. This makes the lexical
+        # signature surface terms distinctive to this cluster vs the
+        # rest of the system, rather than penalising theme-defining
+        # terms that appear across the cluster's own episodes.
+        background_corpus_texts: list[str] | None = None,
     ) -> Optional[LatentSchema]:
         if len(member_episodes) == 0 or member_embeddings.size == 0:
             return None
@@ -303,15 +310,17 @@ class LatentSchemaBuilder:
             within_var = 0.0
             confidence = 1.0
 
-        # Lexical signature: contrastive TF-IDF over cluster episode texts.
-        # Pass all episode texts as the "corpus" so the contrast is relative
-        # to what the cluster itself contains (intra-cluster distinctiveness).
-        # With more context (e.g. all schemas' texts) the contrast would be
-        # even sharper; this is the minimal-dependency version.
+        # Lexical signature: contrastive TF-IDF against a global background
+        # corpus when available, falling back to intra-cluster distinctiveness
+        # if no background corpus is provided.
         cluster_texts = [str(ep.content_text) for ep in member_episodes if ep.content_text]
+        if background_corpus_texts:
+            corpus_texts = background_corpus_texts
+        else:
+            corpus_texts = cluster_texts  # fallback: intra-cluster
         lexical_sig = _build_lexical_signature(
             cluster_texts=cluster_texts,
-            corpus_texts=cluster_texts,  # intra-cluster distinctiveness
+            corpus_texts=corpus_texts,
             top_n=8,
         )
         top_terms = list(lexical_sig.keys())[:3]
@@ -382,6 +391,10 @@ class GeometricJudgeConfig:
     # New schema must have at least this much support to supersede
     # an older one.
     min_support_to_supersede: int = 2
+    # Minimum time (seconds) between old and new schema for the newer
+    # one to supersede. Prevents rapid toggling where two schemas
+    # contradict each other within a very short window.
+    min_time_delta_to_supersede_s: float = 3600.0  # 1 hour
 
 
 class GeometricContradictionJudge:

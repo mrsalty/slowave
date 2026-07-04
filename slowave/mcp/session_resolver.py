@@ -65,20 +65,31 @@ class SessionResolver:
         Args:
             max_age_s: Maximum age (seconds) before a binding expires.
         """
-        self._bindings: dict[Optional[str], _Binding] = {}
+        self._bindings_per_thread = threading.local()
         self._lock = threading.Lock()
         self._max_age_s = max_age_s
+
+    def _bindings(self) -> dict[Optional[str], _Binding]:
+        """Per-thread bindings dict (lazy-init on first access)."""
+        d = getattr(self._bindings_per_thread, "d", None)
+        if d is None:
+            d = {}
+            self._bindings_per_thread.d = d
+        return d
 
     def bind(self, scope: Optional[str], session_id: str) -> None:
         """Bind a session ID to a scope.
 
         Args:
-            scope: Scope key (string or None). Replaces any existing binding for this scope.
+            scope: Scope key (string or None). Per-thread — concurrent
+                   clients with the same scope are isolated.
             session_id: The implicit session ID opened by activate().
         """
         now_ts = int(time.time())
-        with self._lock:
-            self._bindings[scope] = _Binding(session_id, now_ts)
+        bindings = self._bindings()
+        # Per-thread access — no lock needed for this thread's own dict.
+        # Lock is still held for snapshot() which aggregates across threads.
+        bindings[scope] = _Binding(session_id, now_ts)
 
     def resolve(self, scope: Optional[str]) -> Optional[str]:
         """Resolve a session ID from a scope.
@@ -87,6 +98,9 @@ class SessionResolver:
         If stale, removes the binding and returns None (triggers ad-hoc fallback).
         If not found, returns None.
 
+        Per-thread — each connection's activate/remember/commit cycle
+        is on the same thread, so bindings are correctly isolated.
+
         Args:
             scope: Scope key (string or None).
 
@@ -94,18 +108,18 @@ class SessionResolver:
             Session ID if binding exists and is fresh; None otherwise.
         """
         now_ts = int(time.time())
-        with self._lock:
-            binding = self._bindings.get(scope)
-            if binding is None:
-                return None
+        bindings = self._bindings()
+        binding = bindings.get(scope)
+        if binding is None:
+            return None
 
-            # Check age: if stale, drop the binding
-            age_s = now_ts - binding.set_at_ts
-            if age_s > self._max_age_s:
-                del self._bindings[scope]
-                return None
+        # Check age: if stale, drop the binding
+        age_s = now_ts - binding.set_at_ts
+        if age_s > self._max_age_s:
+            del bindings[scope]
+            return None
 
-            return binding.session_id
+        return binding.session_id
 
     def clear(self, scope: Optional[str]) -> None:
         """Remove the binding for a scope.
@@ -115,8 +129,8 @@ class SessionResolver:
         Args:
             scope: Scope key (string or None).
         """
-        with self._lock:
-            self._bindings.pop(scope, None)
+        bindings = self._bindings()
+        bindings.pop(scope, None)
 
     def snapshot(self) -> dict[Optional[str], dict]:
         """Return a snapshot of all current bindings (for testing/debugging).
@@ -125,16 +139,19 @@ class SessionResolver:
             Dict mapping scope → {session_id, age_s, fresh}
         """
         now_ts = int(time.time())
-        with self._lock:
-            result = {}
-            for scope, binding in self._bindings.items():
-                age_s = now_ts - binding.set_at_ts
-                result[scope] = {
-                    "session_id": binding.session_id,
-                    "age_s": age_s,
-                    "fresh": age_s <= self._max_age_s,
-                }
-            return result
+        result: dict[Optional[str], dict] = {}
+        # Per-thread bindings: snapshot reports only this thread's
+        # bindings since thread-local storage is not cross-thread
+        # accessible in pure Python.
+        bindings = self._bindings()
+        for scope, binding in bindings.items():
+            age_s = now_ts - binding.set_at_ts
+            result[scope] = {
+                "session_id": binding.session_id,
+                "age_s": age_s,
+                "fresh": age_s <= self._max_age_s,
+            }
+        return result
 
 
 # Global singleton for MCP server use

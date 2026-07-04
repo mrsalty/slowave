@@ -17,6 +17,24 @@ class GraphConfig:
     lambda_similarity: float = 1.0
     lambda_transition: float = 0.5
     lambda_coactivation: float = 0.3
+    # EMA decay factor for transition/coactivation accumulation across
+    # replay passes. Each pass contributes (1-decay) to the running
+    # estimate; old evidence fades at rate decay.
+    #   new_weight = old_weight * decay + current_count * (1 - decay)
+    # 0.3 = aggressive learning — 70% from current pass, 30% from past.
+    # Single-exposure traces fade quickly unless reinforced (hippocampal LTP).
+    accumulate_decay: float = 0.3
+    # Homeostatic scaling (synaptic scaling): after each accumulation
+    # pass, L1-normalize outgoing edge weights per source prototype
+    # to this target sum. Prevents runaway graph densification from
+    # Hebbian accumulation — the brain's solution to exactly this problem.
+    homeostatic_enabled: bool = True
+    homeostatic_target: float = 0.5
+    # Relative pruning threshold: edges below this fraction of the
+    # max weight for their source prototype are pruned. Replaces
+    # absolute prune_below for per-source competition.
+    # 0.2 = prune edges weaker than 20% of the strongest edge.
+    prune_ratio: float = 0.2
 
 
 class GraphManager:
@@ -115,13 +133,31 @@ class GraphManager:
         self.prune_edges()
 
     def apply_transition_counts(self, counts: dict[tuple[int, int], float]) -> None:
+        """Accumulate transition probabilities across replay passes via EMA.
+
+        Each pass contributes its evidence while old evidence fades at
+        ``accumulate_decay``. Homeostatic normalization runs after
+        accumulation to prevent graph densification.
+        """
+        decay = self.cfg.accumulate_decay
+        alpha = 1.0 - decay
         for (src, dst), c in counts.items():
-            ws, _wt, wc = self._get_components(src, dst)
-            self._upsert_edge(src, dst, w_similarity=ws, w_transition=float(c), w_coactivation=wc)
-        self.prune_edges()
+            ws, old_wt, wc = self._get_components(src, dst)
+            new_wt = old_wt * decay + float(c) * alpha
+            self._upsert_edge(src, dst, w_similarity=ws, w_transition=new_wt, w_coactivation=wc)
+        if self.cfg.homeostatic_enabled:
+            self._homeostatic_normalize()
+        else:
+            self.prune_edges()
 
     def apply_coactivation_counts(self, counts: dict[tuple[int, int], float]) -> None:
-        # Keep only top-k coactivation per source to preserve sparsity.
+        """Accumulate coactivation counts across replay passes via EMA.
+
+        Top-k sparsity filter is applied first, then each surviving edge
+        accumulates via EMA. Homeostatic normalization runs after.
+        """
+        decay = self.cfg.accumulate_decay
+        alpha = 1.0 - decay
         by_src: dict[int, list[tuple[int, float]]] = {}
         for (src, dst), c in counts.items():
             if src == dst:
@@ -131,13 +167,86 @@ class GraphManager:
         for src, items in by_src.items():
             items.sort(key=lambda t: t[1], reverse=True)
             for dst, c in items[: self.cfg.top_k_coactivation]:
-                ws, wt, _wc = self._get_components(src, dst)
-                self._upsert_edge(src, dst, w_similarity=ws, w_transition=wt, w_coactivation=float(c))
-        self.prune_edges()
+                ws, wt, old_wc = self._get_components(src, dst)
+                new_wc = old_wc * decay + float(c) * alpha
+                self._upsert_edge(src, dst, w_similarity=ws, w_transition=wt, w_coactivation=new_wc)
+        if self.cfg.homeostatic_enabled:
+            self._homeostatic_normalize()
+        else:
+            self.prune_edges()
 
     def prune_edges(self) -> None:
         conn = self.db.connect()
         conn.execute("DELETE FROM prototype_edges WHERE weight < ?", (float(self.cfg.prune_below),))
+        conn.commit()
+
+    def _homeostatic_normalize(self) -> None:
+        """Per-source L1 normalization + relative pruning (synaptic scaling).
+
+        For each source prototype, L1-normalize outgoing edge weights to
+        sum ≤ ``homeostatic_target``, then prune edges below
+        ``prune_ratio * max_weight`` for that source.
+
+        This is the biological solution to Hebbian densification:
+        accumulation strengthens co-active synapses, but homeostatic
+        scaling forces competition for a fixed total budget, starving
+        weak edges naturally.
+        """
+        conn = self.db.connect()
+        # Fetch all edges grouped by source
+        rows = conn.execute(
+            """SELECT src_prototype_id, dst_prototype_id, weight
+               FROM prototype_edges
+               ORDER BY src_prototype_id, weight DESC"""
+        ).fetchall()
+
+        if not rows:
+            return
+
+        # Group by source
+        by_src: dict[int, list[tuple[int, float]]] = {}
+        for r in rows:
+            src = int(r["src_prototype_id"])
+            dst = int(r["dst_prototype_id"])
+            w = float(r["weight"])
+            by_src.setdefault(src, []).append((dst, w))
+
+        target = float(self.cfg.homeostatic_target)
+        ratio = float(self.cfg.prune_ratio)
+        updates: list[tuple[float, int, int]] = []  # (new_weight, src, dst)
+        deletes: list[tuple[int, int]] = []
+
+        for src, edges in by_src.items():
+            total = sum(w for _, w in edges)
+            if total <= 0.0:
+                continue
+            max_w = edges[0][1]  # edges sorted by weight DESC
+            threshold = max_w * ratio
+
+            for dst, w in edges:
+                # L1-normalize: scale to target sum
+                new_w = w * target / total
+                if new_w < threshold or new_w < float(self.cfg.prune_below):
+                    deletes.append((src, dst))
+                else:
+                    updates.append((new_w, src, dst))
+
+        # Batch update surviving edges
+        for new_w, src, dst in updates:
+            conn.execute(
+                "UPDATE prototype_edges SET weight = ? "
+                "WHERE src_prototype_id = ? AND dst_prototype_id = ?",
+                (new_w, src, dst),
+            )
+
+        # Batch delete pruned edges
+        for src, dst in deletes:
+            conn.execute(
+                "DELETE FROM prototype_edges "
+                "WHERE src_prototype_id = ? AND dst_prototype_id = ?",
+                (src, dst),
+            )
+
         conn.commit()
 
     def neighbors(self, prototype_id: int, top_k: int = 8) -> list[tuple[int, float]]:

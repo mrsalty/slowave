@@ -222,7 +222,7 @@ Default `SlowaveConfig` with all retrieval parameters at defaults:
 | LongMemEval (oracle) | default (`--assignment-threshold 0.85 --top-k 10`) | **~87.8%** |
 | LongMemEval (full haystack) | `--assignment-threshold 0.85 --top-k 10` | not maintained† |
 | LoCoMo | `--no-consolidate` (episode-only) | ~74.6% |
-| LoCoMo | `--assignment-threshold 0.85` (with consolidation) | **~76%** |
+| LoCoMo | `--assignment-threshold 0.85` (with consolidation) | **~74.6%** |
 | DMR | default | **~93–94%** |
 | StaleMemory | full, ts-injected | **~45% detection overall; 86–99% concrete prefs** |
 

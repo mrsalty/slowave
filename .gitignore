@@ -48,6 +48,7 @@ htmlcov/
 
 # Generated benchmark run outputs
 /results/
+tests/wiki_scenarios/results/
 # Benchmark run outputs (keep datasets, not results)
 data/*/runs/
 data/runs/
@@ -87,3 +88,4 @@ data/locomo/locomo10.json
 .uv/
 
 docs/iterations/
+episodic.faiss
