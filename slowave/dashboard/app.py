@@ -806,29 +806,33 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
             ).fetchall()
         ]
         # Fill missing quote with event_content or episode metadata
+        ep_ids = [e["episode_id"] for e in evidence if e.get("episode_id")]
+        ep_meta: dict[int, dict[str, Any]] = {}
+        if ep_ids:
+            placeholders = ",".join(["?"] * len(ep_ids))
+            ep_rows = conn.execute(
+                f"SELECT id, metadata_json FROM episodic_memories WHERE id IN ({placeholders})",
+                ep_ids,
+            ).fetchall()
+            for r in ep_rows:
+                ep_meta[r["id"]] = _json_loads(r["metadata_json"], {})
         for ev in evidence:
-            if not ev.get("quote") and ev.get("raw_event_id"):
-                ev["quote"] = (ev.get("event_content") or "")[:300]
-            elif not ev.get("quote"):
-                # Try episode metadata
-                ep_row = conn.execute(
-                    "SELECT metadata_json FROM episodic_memories WHERE id = ?",
-                    (ev.get("episode_id"),)
-                ).fetchone()
-                if ep_row:
-                    meta = _json_loads(ep_row["metadata_json"], {})
+            eid = ev.get("episode_id")
+            if eid and eid in ep_meta:
+                meta = ep_meta[eid]
+                ev["episode_kind"] = str(meta.get("kind", ""))
+                ev["episode_session"] = str(meta.get("session_id", ""))
+                if not ev.get("quote"):
                     ev["quote"] = str(meta.get("text", meta.get("content", "")))[:300]
-        # Collect scopes via evidence → raw_events → sessions
-        scope_rows = conn.execute(
-            "SELECT DISTINCT s2.scope_id FROM schema_evidence se "
-            "JOIN raw_events re ON re.id = se.raw_event_id "
-            "JOIN sessions s2 ON s2.id = re.session_id "
-            "WHERE se.schema_id = ? AND s2.scope_id IS NOT NULL",
-            (schema_id,),
-        ).fetchall()
-        schema["recalled_scopes"] = [str(r["scope_id"]) for r in scope_rows if r["scope_id"]]
-        if not schema["recalled_scopes"] and schema.get("scope"):
-            schema["recalled_scopes"] = [schema["scope"]]
+        # Collect scopes: origin scope + all known from scope_registry
+        schema["recalled_scopes"] = [schema["scope"]] if schema.get("scope") else []
+        try:
+            sr_rows = conn.execute(
+                "SELECT scope_id, scope_kind FROM scope_registry ORDER BY last_active_ts DESC LIMIT 20"
+            ).fetchall()
+            schema["all_scopes"] = [{"id": str(r["scope_id"]), "kind": r["scope_kind"]} for r in sr_rows]
+        except Exception:
+            schema["all_scopes"] = []
         outgoing = [dict(r) for r in conn.execute(
             "SELECT * FROM schema_relations WHERE src_schema_id = ? ORDER BY created_ts DESC",
             (schema_id,),
