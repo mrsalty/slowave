@@ -818,12 +818,17 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
                 if ep_row:
                     meta = _json_loads(ep_row["metadata_json"], {})
                     ev["quote"] = str(meta.get("text", meta.get("content", "")))[:300]
-        # Distinct scopes for this schema
+        # Collect scopes via evidence → raw_events → sessions
         scope_rows = conn.execute(
-            "SELECT DISTINCT scope_id FROM schema_evidence WHERE schema_id = ?",
+            "SELECT DISTINCT s2.scope_id FROM schema_evidence se "
+            "JOIN raw_events re ON re.id = se.raw_event_id "
+            "JOIN sessions s2 ON s2.id = re.session_id "
+            "WHERE se.schema_id = ? AND s2.scope_id IS NOT NULL",
             (schema_id,),
         ).fetchall()
         schema["recalled_scopes"] = [str(r["scope_id"]) for r in scope_rows if r["scope_id"]]
+        if not schema["recalled_scopes"] and schema.get("scope"):
+            schema["recalled_scopes"] = [schema["scope"]]
         outgoing = [dict(r) for r in conn.execute(
             "SELECT * FROM schema_relations WHERE src_schema_id = ? ORDER BY created_ts DESC",
             (schema_id,),
