@@ -347,13 +347,13 @@ tr.expandable:hover td{background:var(--panel3)}
   <nav class="nav-tabs">
     <button class="tab active" data-tab="overview">📊 Overview</button>
     <button class="tab" data-tab="schemas">📖 Schemas</button>
-    <button class="tab" data-tab="generalization">🌐 Generalization</button>
     <button class="tab" data-tab="graph">🕸 Graph</button>
     <button class="tab" data-tab="recall">🔍 Recall</button>
-    <button class="tab" data-tab="worker">🧠 Worker</button>
-    <button class="tab" data-tab="db">💾 DB Health</button>
     <button class="tab" data-tab="episodes">🎞 Episodes</button>
     <button class="tab" data-tab="supersessions">🔄 Supersessions</button>
+    <button class="tab" data-tab="worker">🧠 Worker</button>
+    <button class="tab" data-tab="generalization">🌐 Generalization</button>
+    <button class="tab" data-tab="db">💾 DB Health</button>
   </nav>
 </header>
 
