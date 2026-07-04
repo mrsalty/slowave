@@ -573,11 +573,31 @@ class SlowaveEngine:
                         continue
 
                     candidate_emb = self._fetch_schema_embedding(candidate_id)
-                    if candidate_emb is None:
-                        # A missing embedding is not evidence for supersession.
+
+                    # Missing embedding → no geometric verdict possible.
+                    # Profile-layer memories → geometry supersession suppressed.
+
+                    # Profile-layer memories (preferences, constraints, habits)
+                    # must not be geometry-superseded. The SVD1 supersession
+                    # manifold is anti-aligned with personal preference (−0.17)
+                    # and calibrated on concrete value-substitution pairs
+                    # (tech/medical/business etc.). A preference flipping from
+                    # "dark mode" to "light mode" is a divergence, not a
+                    # replacement; treat as reinforcement.
+                    _mem_layer = str(candidate.facets.get("memory_layer", "")).lower()
+                    _mem_class = str(candidate.facets.get("schema_class", "")).lower()
+                    _is_profile = (
+                        _mem_layer == "profile"
+                        or _mem_class in {
+                            "preference", "interaction_preference",
+                            "constraint", "habit", "relationship",
+                        }
+                    )
+
+                    if candidate_emb is None or _is_profile:
+                        # Missing embedding or profile memory — no geometric verdict.
                         # Fall through to reinforcement (same-scope) or skip
-                        # (cross-scope) — we cannot form a geometric verdict
-                        # without both embeddings.
+                        # (cross-scope / extended-range).
                         dir_score = 0.0
                     else:
                         dir_score = (
