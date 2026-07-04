@@ -291,6 +291,18 @@ class Consolidator:
             )
             return "reinforced", new_schema_id
         if verdict.verdict == "contradicts":
+            # Gate: only supersede when the new schema has enough support
+            # AND sufficient temporal distance from the old one.
+            # A single episode or a near-simultaneous contradiction
+            # should not bury a well-established schema.
+            min_support = getattr(self.geometric_judge.cfg, "min_support_to_supersede", 2)
+            if schema.support_count < min_support:
+                return "reinforced", new_schema_id
+
+            min_dt = getattr(self.geometric_judge.cfg, "min_time_delta_to_supersede_s", 3600.0)
+            if 0 < verdict.time_delta_s < min_dt:
+                return "reinforced", new_schema_id
+
             relation = "supersedes" if verdict.time_delta_s > 0 else "contradicts"
             old_status = "superseded" if relation == "supersedes" else "contradicted"
             # Transition the old schema out of active so belief-revision
