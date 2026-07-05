@@ -10,7 +10,7 @@ Automates:
   4. Running `slowave doctor` to verify the result.
 
 All steps are idempotent — re-running is always safe.
-Start the HTTP MCP daemon separately: slowave serve start
+The HTTP MCP daemon and background worker are installed as system services and started automatically.
 """
 
 from __future__ import annotations
@@ -80,6 +80,10 @@ class Summary:
     def add_manual_step(self, step: str) -> None:
         """Add a manual step required after setup."""
         self.manual_steps.append(step)
+
+    def has_changes(self) -> bool:
+        """Return True if any change has status other than SKIP."""
+        return any(c.status != ChangeStatus.SKIP for c in self.changes)
     
     def _group_changes(self) -> dict[ChangeType, list[Change]]:
         """Group changes by type."""
@@ -403,6 +407,7 @@ def _clients() -> list[ClientSpec]:
             hooks_config_path=_claude_settings_path,
             hooks_patch_fn=_patch_claude_code_hooks,
             hooks_cleanup_fn=_remove_claude_code_hooks,
+            require_dir_exists=True,
             restart_note="Restart Claude Code to apply changes.",
         ),
         ClientSpec(
@@ -417,6 +422,7 @@ def _clients() -> list[ClientSpec]:
                 "     Settings → General → Instructions for Claude\n"
                 "     https://github.com/mrsalty/slowave/blob/main/integrations/claude-desktop/README.md"
             ),
+            require_dir_exists=True,
             # No scriptable enforcement: Custom Instructions field is server-side.
             restart_note="Restart Claude Desktop to apply changes.",
         ),
@@ -426,7 +432,7 @@ def _clients() -> list[ClientSpec]:
             mcp_path=_cline_mcp_settings_path,
             lifecycle_path=_clinerules_path,
             lifecycle_agent="cline-tui",
-            require_dir_exists=False,  # create dir if absent — Cline TUI picks it up on first start
+            require_dir_exists=True,
             # No enforcement hooks yet — lifecycle relies on .clinerules instructions.
             # When Cline adds a hook/trigger surface, add hooks_config_path + hooks_patch_fn here.
             restart_note="Reload Cline (or restart VS Code / Cursor) to apply changes.",
@@ -464,6 +470,7 @@ def _clients() -> list[ClientSpec]:
             mcp_path=_opencode_config_path,
             lifecycle_path=_opencode_instructions_path,
             lifecycle_agent="opencode",
+            require_dir_exists=True,
             restart_note="Restart OpenCode to apply changes.",
         ),
     ]
@@ -1221,26 +1228,28 @@ def _build_summary(client: str, worker: bool, install_hooks: bool,
 
     for spec in _clients_for(client):
         mcp_file = spec.mcp_path()
-        if not spec.require_dir_exists or mcp_file.parent.exists():
-            cfg = _read_json(mcp_file)
-            if spec.key == "claude-desktop":
-                slowave_mcp_bin = _find_mcp_binary(slowave_bin)
-                _, changed_mcp = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
-            elif spec.key == "opencode":
-                _, changed_mcp = _patch_opencode_mcp(cfg)
-                # Also check instructions registration
-                _, _ = _patch_opencode_instructions(
-                    cfg, str(_opencode_instructions_path().resolve())
-                )
-            else:
-                _, changed_mcp = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
-            summary.add_change(Change(
-                change_type=ChangeType.MCP_CONFIG,
-                client=spec.label,
-                status=ChangeStatus.UPDATE if changed_mcp else ChangeStatus.SKIP,
-                path=str(mcp_file),
-                description="MCP server configuration",
-            ))
+        if spec.require_dir_exists and not mcp_file.parent.exists():
+            continue
+
+        cfg = _read_json(mcp_file)
+        if spec.key == "claude-desktop":
+            slowave_mcp_bin = _find_mcp_binary(slowave_bin)
+            _, changed_mcp = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
+        elif spec.key == "opencode":
+            _, changed_mcp = _patch_opencode_mcp(cfg)
+            # Also check instructions registration
+            _, _ = _patch_opencode_instructions(
+                cfg, str(_opencode_instructions_path().resolve())
+            )
+        else:
+            _, changed_mcp = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
+        summary.add_change(Change(
+            change_type=ChangeType.MCP_CONFIG,
+            client=spec.label,
+            status=ChangeStatus.UPDATE if changed_mcp else ChangeStatus.SKIP,
+            path=str(mcp_file),
+            description="MCP server configuration",
+        ))
         if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None and install_hooks:
             hooks_file = spec.hooks_config_path()
             _, changed_hooks = spec.hooks_patch_fn(_read_json(hooks_file))
@@ -1319,19 +1328,6 @@ def _build_summary(client: str, worker: bool, install_hooks: bool,
     return summary
 
 
-def _ask_confirmation() -> bool:
-    """Ask user for confirmation to proceed. Returns True if confirmed.
-
-    Auto-confirms in non-interactive contexts (Homebrew hooks, CI, pipes).
-    """
-    if not sys.stdin.isatty() or not sys.stdout.isatty():
-        return True
-    try:
-        return click.confirm("\nProceed with these changes?", default=False)
-    except click.Abort:
-        return False
-
-
 # Output helpers
 # ---------------------------------------------------------------------------
 
@@ -1376,12 +1372,11 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     """One-command post-install wiring for Claude Code, Claude Desktop, Cline, Cursor, Windsurf, and OpenCode.
 
     Configures every detected client to connect to the Slowave HTTP MCP daemon
-    at http://127.0.0.1:8766/mcp.  Start the daemon separately with:
-
-        slowave serve start
+    at http://127.0.0.1:8766/mcp.  The daemon and background worker start
+    automatically as system services — no manual steps needed.
 
     Automates MCP config, lifecycle instruction injection, enforcement hooks,
-    and the background worker service. All steps are idempotent.
+    and the daemon + worker services. All steps are idempotent.
 
     \b
     Examples:
@@ -1398,49 +1393,72 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     _section("1. Locating binaries")
     slowave_bin = _find_slowave_binary()
     _ok(f"slowave: {slowave_bin}")
-    _ok("MCP endpoint: http://127.0.0.1:8766/mcp  (start daemon: slowave serve start)")
+    _ok("MCP endpoint: http://127.0.0.1:8766/mcp  (daemon auto-starts via system service)")
+
+    # Quick detection pass — show which clients were found
+    _section("2. Detecting clients")
+    detected: list[str] = []
+    skipped: list[str] = []
+    for spec in _clients_for(client):
+        mcp_file = spec.mcp_path()
+        if spec.require_dir_exists and not mcp_file.parent.exists():
+            skipped.append(spec.label)
+        else:
+            detected.append(spec.label)
+    if detected:
+        _ok(f"Found: {', '.join(detected)}")
+    if skipped:
+        _warn(f"Not installed — skipping: {', '.join(skipped)}")
 
     # Build and display summary
     summary = _build_summary(client, worker, install_hooks, slowave_bin)
     click.echo(summary.format())
-    
-    # Confirm unless dry-run
+
+    # Confirm unless dry-run — skip if nothing to do
     if not dry_run:
-        if not _ask_confirmation():
+        if not summary.has_changes():
+            click.echo(click.style("\nEverything already configured. Nothing to do.", fg="green"))
+            if summary.manual_steps:
+                click.echo(click.style("\nReminders:", bold=True))
+                for step in summary.manual_steps:
+                    _warn(step)
+            sys.exit(0)
+        if not click.confirm("\nConfigure detected clients?", default=True):
             click.echo(click.style("\nSetup cancelled.", fg="yellow"))
             sys.exit(0)
 
-    # 2-6. Clients (data-driven — add new clients in _clients() only)
-    for i, spec in enumerate(_clients_for(client), start=2):
+    # 3-N. Clients (data-driven — add new clients in _clients() only)
+    for i, spec in enumerate(_clients_for(client), start=3):
         _section(f"{i}. {spec.label}")
         mcp_file = spec.mcp_path()
 
         # Skip if the config directory doesn't exist and client marks require_dir_exists
         if spec.require_dir_exists and not mcp_file.parent.exists():
             _warn(f"{spec.label} config dir not found: {mcp_file.parent}  ({spec.label} installed?)")
+            continue
+
+        cfg = _read_json(mcp_file)
+        if spec.key == "claude-desktop":
+            slowave_mcp_bin = _find_mcp_binary(slowave_bin)
+            cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
+            transport_label = "stdio"
+        elif spec.key == "opencode":
+            cfg, changed = _patch_opencode_mcp(cfg)
+            transport_label = "remote"
+            # Also register the instructions file in the config
+            instructions_path = str(_opencode_instructions_path().resolve())
+            cfg, _ = _patch_opencode_instructions(cfg, instructions_path)
         else:
-            cfg = _read_json(mcp_file)
-            if spec.key == "claude-desktop":
-                slowave_mcp_bin = _find_mcp_binary(slowave_bin)
-                cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
-                transport_label = "stdio"
-            elif spec.key == "opencode":
-                cfg, changed = _patch_opencode_mcp(cfg)
-                transport_label = "remote"
-                # Also register the instructions file in the config
-                instructions_path = str(_opencode_instructions_path().resolve())
-                cfg, _ = _patch_opencode_instructions(cfg, instructions_path)
+            cfg, changed = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
+            transport_label = "HTTP"
+        if changed:
+            if dry_run:
+                _ok(f"Would set MCP server ({transport_label}) → {mcp_file}")
             else:
-                cfg, changed = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
-                transport_label = "HTTP"
-            if changed:
-                if dry_run:
-                    _ok(f"Would set MCP server ({transport_label}) → {mcp_file}")
-                else:
-                    _write_json(mcp_file, cfg)
-                    _ok(f"MCP server set ({transport_label}) → {mcp_file}")
-            else:
-                _skip(f"MCP server already configured ({transport_label}) in {mcp_file}")
+                _write_json(mcp_file, cfg)
+                _ok(f"MCP server set ({transport_label}) → {mcp_file}")
+        else:
+            _skip(f"MCP server already configured ({transport_label}) in {mcp_file}")
 
         # Enforcement hooks — data-driven via spec.hooks_patch_fn
         if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None:

@@ -15,9 +15,9 @@ slowave setup --client claude-code
 - Adds the MCP server entry to `~/.claude.json` (user-scope MCP registry)
 - Injects `UserPromptSubmit` + `Stop` enforcement hooks into `~/.claude/settings.json` (fire every turn)
 - Injects the lifecycle instruction block into `~/.claude/CLAUDE.md`
-- Installs the background worker service
+- Installs and starts the background worker and HTTP daemon as system services
 
-Restart Claude Code, then [verify](#verify).
+Restart Claude Code.
 
 ---
 
@@ -55,23 +55,19 @@ Edit `~/.claude.json` (create it if it doesn't exist):
 }
 ```
 
-Make sure the daemon is running (`slowave serve start`). Restart Claude Code after editing.
+Make sure the daemon is running (`slowave serve status`). Restart Claude Code after editing.
 
 ---
 
 ## Verify
 
-Ask Claude Code:
+Open Claude Code and start any coding task. If Slowave is configured correctly, the `slowave_*` tools appear in the tool list and the lifecycle (activate → commit) runs automatically on every session — no manual invocation needed.
 
-```text
-Remember that my preferred food is spaghetti.
-```
-
-Then in a terminal:
+To confirm from the terminal:
 
 ```bash
-slowave stats
-slowave recall "what is my favourite food"
+slowave stats     # shows session/event counts
+slowave doctor    # shows client detection and daemon health
 ```
 
 ---
@@ -80,6 +76,6 @@ slowave recall "what is my favourite food"
 
 | Symptom | Fix |
 |---|---|
-| Tools don't appear | Run `slowave serve start`, then `slowave serve status`; restart Claude Code |
+| Tools don't appear | Run `slowave serve status`; restart Claude Code |
 | Tools appear but aren't called | `CLAUDE.md` block or hooks missing — re-run `slowave setup` |
 | Sessions are empty | Hooks should enforce this on every turn; check `~/.claude/settings.json` has the hook entries |
