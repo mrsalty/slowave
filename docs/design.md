@@ -17,12 +17,10 @@ The architectural separation is simple:
 > Use language models for language.
 >
 > Use memory mechanisms for memory.
->
-> Use one shared memory layer across tools, not one fragmented memory per tool.
 
 Slowave is not a replacement for a language model, a reasoning engine, or an autonomous agent framework. It is the persistent memory layer those systems can use. The downstream client remains responsible for reasoning, planning, answer construction, tool execution, and final user-facing behavior.
 
-This document explains *why* Slowave is designed this way. For *how* the memory model is structured — the layers, the lifecycle, and the brain analogy behind them — see [architecture.md](architecture.md).
+This document explains *why* Slowave exists and what it chooses to be. For *how* the memory model works — the two learning systems, the lifecycle, and the brain analogy they're built on — see [architecture.md](architecture.md).
 
 ---
 
@@ -34,6 +32,8 @@ Most AI tools still treat memory as one of a few familiar things:
 - a static note store;
 - an LLM-generated summary of past interactions;
 - a tool-specific memory silo that disappears when the user switches clients.
+
+Imagine switching from Claude Code to Cursor mid-task. In most setups, the new tool knows nothing — not your project conventions, not the decision you just made, not the bug you were tracking. You re-explain. You rebuild context from scratch.
 
 Those approaches can work, but they have drawbacks. They often depend on remote model calls, grow with conversation length, are difficult to inspect, and are tied to one assistant or vendor.
 
@@ -138,7 +138,7 @@ Incoming events are converted into local memory representations. Retrieval is sh
 
 This keeps the memory layer independent from the reasoning layer. The same memory store can support different clients, models, and tools without being tied to one assistant or one LLM provider.
 
-How this is structured — the episodic and semantic layers, offline consolidation, scoped recall, and the working-memory brief — is described in [architecture.md](architecture.md).
+How this is structured — the episodic and schema layers, offline consolidation, scoped recall, and the working-memory brief — is described in [architecture.md](architecture.md).
 
 ---
 

@@ -64,14 +64,26 @@ Slowave mirrors this separation: the language model is a client of memory, not t
 
 ### Biological mapping
 
+Neuroscience describes human memory as two complementary learning systems:
+
+- the **hippocampus** learns fast — it captures individual experiences in one shot, keeping them distinct;
+- the **neocortex** learns slowly — it extracts the statistical regularities across many experiences into stable, general knowledge.
+
+Neither system alone is enough. Fast learning without abstraction produces a pile of anecdotes; slow learning without an episodic buffer forgets everything that happened only once.
+
+Slowave mirrors this division:
+
 | Human brain | Slowave | What it does |
 |---|---|---|
 | Hippocampus | Episodic layer | Captures individual experiences as they happen |
-| Neocortex | Semantic layer | Extracts recurring patterns across many experiences |
-| Slow-wave sleep | Offline consolidation | Replays and groups episodes into prototypes, without the LLM |
-| Spreading activation | Graph-based retrieval | Activation propagates across associations; partial cues recover whole memories |
-| Hebbian reinforcement | Recall reinforcement | Memories that prove useful strengthen; unused ones fade |
-| Reconsolidation | Post-retrieval feedback | Recalling a memory reopens it — feedback can strengthen, suppress, or supersede |
+| Slow-wave sleep | Offline consolidation | Replays and groups episodes into prototypes, building a graph of associations — without the LLM |
+| Neocortex | Schema layer | Holds stable, abstracted knowledge as typed claims: decisions, preferences, constraints, conventions |
+
+Three additional mechanisms emerge from this architecture:
+
+- **Spreading activation.** Recall propagates across the prototype association graph — a partial cue can recover a whole memory, the way a fragment of a song brings back the entire experience.
+- **Hebbian reinforcement.** Memories that prove useful strengthen and become easier to retrieve; unused memories gradually fade. Forgetting is a feature that keeps the signal-to-noise ratio high.
+- **Reconsolidation.** Recalling a memory reopens it. Feedback after retrieval — useful, stale, wrong — modifies the memory itself. Memory is a living state, not an append-only log.
 
 > [Design rationale](docs/design.md)
 > 
