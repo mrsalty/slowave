@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.11.1](https://github.com/mrsalty/slowave/compare/slowave-v0.11.0...slowave-v0.11.1) (2026-07-05)
+
+
+### Bug Fixes
+
+* tighten install docs and client detection logic ([61d727c](https://github.com/mrsalty/slowave/commit/61d727c4e73d303d0bd7966594b8a477bc538981))
+* tighten install docs and client detection logic ([bcee030](https://github.com/mrsalty/slowave/commit/bcee030a4a73d69f275c11f6be45e08a575b432f))
+
 ## [0.11.0](https://github.com/mrsalty/slowave/compare/slowave-v0.10.0...slowave-v0.11.0) (2026-07-05)
 
 
