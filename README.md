@@ -145,8 +145,8 @@ Work in progress — suggest more integrations or report broken ones with setup 
 | Cursor         | ✅ | ✅ | ⬜ | `slowave setup --client cursor` ¹        |
 | Windsurf       | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
 | Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
+| OpenCode       | ✅ | ⬜ | ⬜ | `slowave setup --client opencode`        |
 | All the above  |  |  |  | `slowave setup`                          |
-| OpenCode       | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
 | Codex          | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
 
 ¹ requires one manual paste after setup
