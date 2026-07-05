@@ -122,11 +122,15 @@ The database is fully inspectable and remains on your machine. It is not encrypt
 
 ## Dashboard
 
-Inspect stored memories, browse recall results, visualize relationships, and observe consolidation over time.
+Monitor Slowave’s health, incoming events, and memory consolidation in real time.
 
 ![dashboard.png](img/dashboard.png)
 
-Watch memory evolve through the local dashboard.
+Drill down from consolidated schemas to the underlying episodes, sessions, and raw events.
+
+![dashboard.png](img/dashboard_schemas.png)
+
+Explore the evolving memory graph as Slowave forms connections across experiences.
 
 ![dashboard_graph.png](img/dashboard_graph.png)
 
