@@ -296,6 +296,30 @@ def _cline_mcp_settings_path() -> Path:
     return _home() / ".cline" / "mcp.json"
 
 
+def _opencode_config_dir() -> Path:
+    """OpenCode global config directory — respects XDG_CONFIG_HOME."""
+    xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
+    return Path(xdg) / "opencode"
+
+
+def _opencode_config_path() -> Path:
+    """OpenCode global config file — ~/.config/opencode/opencode.json (or .jsonc).
+
+    OpenCode supports both JSON and JSONC formats.  If a .jsonc already
+    exists, prefer it so existing user config is preserved.  Otherwise
+    default to .json.
+    """
+    jsonc = _opencode_config_dir() / "opencode.jsonc"
+    if jsonc.exists():
+        return jsonc
+    return _opencode_config_dir() / "opencode.json"
+
+
+def _opencode_instructions_path() -> Path:
+    """Slowave-owned lifecycle instruction file for OpenCode."""
+    return _opencode_config_dir() / "slowave-instructions.md"
+
+
 # ---------------------------------------------------------------------------
 # ClientSpec — single source of truth for every supported client
 # ---------------------------------------------------------------------------
@@ -433,6 +457,14 @@ def _clients() -> list[ClientSpec]:
             # No enforcement hooks yet — lifecycle relies on global_rules.md instructions.
             # When Windsurf adds a hook surface, add hooks_config_path + hooks_patch_fn here.
             restart_note="Restart Windsurf to apply changes.",
+        ),
+        ClientSpec(
+            key="opencode",
+            label="OpenCode",
+            mcp_path=_opencode_config_path,
+            lifecycle_path=_opencode_instructions_path,
+            lifecycle_agent="opencode",
+            restart_note="Restart OpenCode to apply changes.",
         ),
     ]
 
@@ -608,6 +640,43 @@ def _patch_mcp_servers_stdio(
     if existing == want:
         return config, False
     servers["slowave"] = want
+    return config, True
+
+
+def _patch_opencode_mcp(
+    config: dict[str, Any],
+    url: str = "http://127.0.0.1:8766/mcp",
+) -> tuple[dict[str, Any], bool]:
+    """Patch MCP config for OpenCode (uses ``mcp`` key, ``"type": "remote"``).
+
+    OpenCode MCP entry shape:
+        {"type": "remote", "url": "http://127.0.0.1:8766/mcp", "enabled": true}
+
+    Returns (updated_config, changed).
+    """
+    mcp = config.setdefault("mcp", {})
+    existing = mcp.get("slowave", {})
+    want = {"type": "remote", "url": url, "enabled": True}
+    if existing == want:
+        return config, False
+    mcp["slowave"] = want
+    return config, True
+
+
+def _patch_opencode_instructions(
+    config: dict[str, Any],
+    instructions_path: str,
+) -> tuple[dict[str, Any], bool]:
+    """Register a Slowave instruction file in OpenCode's ``instructions`` array.
+
+    Appends the absolute path to the instructions array if not already present.
+    Returns (updated_config, changed).
+    """
+    instructions: list[str] = config.setdefault("instructions", [])
+    if instructions_path in instructions:
+        return config, False
+    # Idempotent: only add if the path is not already present
+    instructions.append(instructions_path)
     return config, True
 
 
@@ -1157,6 +1226,12 @@ def _build_summary(client: str, worker: bool, install_hooks: bool,
             if spec.key == "claude-desktop":
                 slowave_mcp_bin = _find_mcp_binary(slowave_bin)
                 _, changed_mcp = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
+            elif spec.key == "opencode":
+                _, changed_mcp = _patch_opencode_mcp(cfg)
+                # Also check instructions registration
+                _, _ = _patch_opencode_instructions(
+                    cfg, str(_opencode_instructions_path().resolve())
+                )
             else:
                 _, changed_mcp = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
             summary.add_change(Change(
@@ -1287,7 +1362,7 @@ def _section(title: str) -> None:
 @click.command("setup")
 @click.option(
     "--client",
-    type=click.Choice(["claude-code", "claude-desktop", "cline", "cursor", "windsurf", "all"], case_sensitive=False),
+    type=click.Choice(["claude-code", "claude-desktop", "cline", "cursor", "windsurf", "opencode", "all"], case_sensitive=False),
     default="all", show_default=True,
     help="Which client(s) to configure.",
 )
@@ -1298,7 +1373,7 @@ def _section(title: str) -> None:
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing any files.")
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
 def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_json: bool = False) -> None:
-    """One-command post-install wiring for Claude Code, Claude Desktop, Cline, Cursor, and Windsurf.
+    """One-command post-install wiring for Claude Code, Claude Desktop, Cline, Cursor, Windsurf, and OpenCode.
 
     Configures every detected client to connect to the Slowave HTTP MCP daemon
     at http://127.0.0.1:8766/mcp.  Start the daemon separately with:
@@ -1349,6 +1424,12 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
                 slowave_mcp_bin = _find_mcp_binary(slowave_bin)
                 cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
                 transport_label = "stdio"
+            elif spec.key == "opencode":
+                cfg, changed = _patch_opencode_mcp(cfg)
+                transport_label = "remote"
+                # Also register the instructions file in the config
+                instructions_path = str(_opencode_instructions_path().resolve())
+                cfg, _ = _patch_opencode_instructions(cfg, instructions_path)
             else:
                 cfg, changed = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
                 transport_label = "HTTP"
