@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.10.0](https://github.com/mrsalty/slowave/compare/slowave-v0.9.4...slowave-v0.10.0) (2026-07-05)
+
+
+### Features
+
+* **dashboard:** drill-down from evidence episodes to raw events in schemas tab ([c10e54d](https://github.com/mrsalty/slowave/commit/c10e54df46d32196d3e9b5020f7608be13214deb))
+* **dashboard:** episode session links, all scopes display, batch episode metadata ([ac8ff7d](https://github.com/mrsalty/slowave/commit/ac8ff7d9169b4c5a7e6865fed3dcde2f2efe024d))
+* **dashboard:** replace Episodes tab with Explorer — schemas by stage, drill-down ([877cfb7](https://github.com/mrsalty/slowave/commit/877cfb7e8a09923132546e1a60da23dbc38052a5))
+* **dashboard:** Tier 1 improvements — episode browser, session replay, salience histogram, supersession timeline ([5bbc4a2](https://github.com/mrsalty/slowave/commit/5bbc4a2680c2a2fcb4c99e9aa7f1eb04a3408c49))
+
+
+### Bug Fixes
+
+* **dashboard:** accordion collapse others, larger session timeline fonts ([0fb9026](https://github.com/mrsalty/slowave/commit/0fb90264852c5cdd6958a0e3ad4fc664292ed8ca))
+* **dashboard:** auto-scroll to expanded schema header ([b025c9a](https://github.com/mrsalty/slowave/commit/b025c9ad999a1883339932c9d984c13a3b176c09))
+* **dashboard:** episodes API reads metadata, supersessions uses content_text, explicit window globals ([a63de90](https://github.com/mrsalty/slowave/commit/a63de90f612b7fe8b3b3e0bcb1fadfd0fa19632e))
+* **dashboard:** evidence quotes now show real content, scope list, larger font ([ec7d6cb](https://github.com/mrsalty/slowave/commit/ec7d6cb6576c38cc486d97d9f23daee91db896f1))
+* **dashboard:** Explorer — collapsed stages, inline accordion detail, right panel shows evidence ([08fdb2d](https://github.com/mrsalty/slowave/commit/08fdb2d30458df67ab5d8f1acc275ae2c45f8b4f))
+* **dashboard:** explorer schema detail uses correct API keys (evidence/outgoing/content) ([8165d18](https://github.com/mrsalty/slowave/commit/8165d18c14067368aa0d8dfa713e6f6b4c69e617))
+* **dashboard:** JS syntax error in session click handler, reorder tabs ([482f0be](https://github.com/mrsalty/slowave/commit/482f0be7637c3855a262652c009e0ffa9491d9a2))
+* **dashboard:** loadPrototypeDetail missing catch block caused loadSessionTimeline to be local ([caa24dd](https://github.com/mrsalty/slowave/commit/caa24ddb47493361514802c7d33d4f5243173bb6))
+* **dashboard:** remove double sess_ prefix, timeline panel as fixed bottom-right overlay ([e9a3f97](https://github.com/mrsalty/slowave/commit/e9a3f97877ce7b1a4400f28a3f4558bfeb0cb1cf))
+* **dashboard:** replace all &lt;a href="#"&gt; with &lt;span&gt; to avoid extension message channel errors ([2a8f889](https://github.com/mrsalty/slowave/commit/2a8f889ad0401f7a267e1c481902874d6f0ebc2f))
+* **dashboard:** scope query uses evidence→events→sessions chain, handle missing scope_id column ([1148485](https://github.com/mrsalty/slowave/commit/1148485e8c93ba4e1d4f765f22eb7646d92f4943))
+* **dashboard:** session replay click, episodes auto-load, prototype UX ([7bf46fd](https://github.com/mrsalty/slowave/commit/7bf46fdc7d49e0fbf1de30f414b27e1ff6a59f35))
+* **dashboard:** supersessions confidence column renders as HTML bar, not escaped text ([fc9746a](https://github.com/mrsalty/slowave/commit/fc9746a00149b5d6b9af4a1de42fa99d716cdb16))
+
+
+### Documentation
+
+* update dashboard review with progress tracking and polish items ([c674f68](https://github.com/mrsalty/slowave/commit/c674f68170188a815284c729af87837db4530f87))
+
 ## [0.9.4](https://github.com/mrsalty/slowave/compare/slowave-v0.9.3...slowave-v0.9.4) (2026-07-04)
 
 
