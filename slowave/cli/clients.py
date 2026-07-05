@@ -133,6 +133,25 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             name="Windsurf",
             mcp_configured=_any_json_has_slowave_mcp(windsurf_mcp_paths),
         )
+
+        # OpenCode detection — uses `mcp` key (not `mcpServers`) and `instructions` array
+        from slowave.cli.setup import _opencode_config_path, _opencode_instructions_path
+        oc_config = _opencode_config_path()
+        oc_has_mcp = oc_has_lifecycle = False
+        if oc_config.exists():
+            try:
+                cfg = _read_json(oc_config)
+                oc_has_mcp = "slowave" in cfg.get("mcp", {})
+            except: pass
+        oc_inst = _opencode_instructions_path()
+        if oc_inst.exists():
+            try: oc_has_lifecycle = _MARKER_START in oc_inst.read_text(encoding="utf-8", errors="ignore")
+            except: pass
+        if oc_config.exists() or oc_inst.exists():
+            statuses["opencode"] = ClientStatus(
+                name="OpenCode", mcp_configured=oc_has_mcp,
+                lifecycle_enabled=oc_has_lifecycle,
+            )
     except ImportError: pass
 
     import platform

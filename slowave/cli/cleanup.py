@@ -22,6 +22,7 @@ from slowave.cli.setup import (
     _MARKER_START,
     _MARKER_END,
     _strip_legacy_slowave_section,
+    _opencode_instructions_path,
 )
 
 SYSTEM = platform.system()
@@ -285,7 +286,30 @@ def _remove_mcp_configs(dry_run: bool) -> int:
             _skip(f"{spec.label}: {mcp_file} not found")
         else:
             cfg = _read_json(mcp_file)
-            if "mcpServers" not in cfg or "slowave" not in cfg["mcpServers"]:
+            # OpenCode uses `mcp` key; other clients use `mcpServers`
+            if spec.key == "opencode":
+                if "mcp" not in cfg or "slowave" not in cfg["mcp"]:
+                    _skip(f"{spec.label}: no slowave entry in {mcp_file}")
+                else:
+                    if dry_run:
+                        _ok(f"Would remove slowave MCP entry from: {mcp_file}")
+                    else:
+                        del cfg["mcp"]["slowave"]
+                        _write_json(mcp_file, cfg)
+                        _ok(f"Removed slowave MCP entry from: {mcp_file}")
+                        count += 1
+                    # Also remove instructions entry
+                    if "instructions" in cfg:
+                        inst_path = str(_opencode_instructions_path().resolve())
+                        instructions = cfg.get("instructions", [])
+                        if inst_path in instructions:
+                            instructions.remove(inst_path)
+                            if not instructions:
+                                del cfg["instructions"]
+                            if not dry_run:
+                                _write_json(mcp_file, cfg)
+                            _ok(f"Removed slowave instructions entry from: {mcp_file}")
+            elif "mcpServers" not in cfg or "slowave" not in cfg["mcpServers"]:
                 _skip(f"{spec.label}: no slowave entry in {mcp_file}")
             else:
                 if dry_run:
