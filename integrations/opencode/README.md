@@ -16,13 +16,9 @@ slowave setup --client opencode
 - Registers Slowave as a remote MCP server under the `mcp` key
 - Writes a Slowave-owned lifecycle instruction file
 - Registers the instruction file in OpenCode's `instructions` config
-- Installs the background worker service
+- Installs and starts the background worker and HTTP daemon as system services
 
-Then start the daemon and restart OpenCode:
-
-```bash
-slowave serve start
-```
+Restart OpenCode.
 
 ---
 
@@ -66,23 +62,19 @@ Edit `~/.config/opencode/opencode.json` (create it if it doesn't exist):
 }
 ```
 
-Make sure the daemon is running (`slowave serve start`). Restart OpenCode after editing.
+Make sure the daemon is running (`slowave serve status`). Restart OpenCode after editing.
 
 ---
 
 ## Verify
 
-Ask OpenCode:
+Open OpenCode and start a conversation. If Slowave is configured correctly, the `slowave_*` tools appear in the tool list and the lifecycle (activate → commit) runs automatically on every session — no manual invocation needed.
 
-```text
-Remember that my preferred food is spaghetti.
-```
-
-Then in a terminal:
+To confirm from the terminal:
 
 ```bash
-slowave stats
-slowave recall "what is my favourite food"
+slowave stats     # shows session/event counts
+slowave doctor    # shows client detection and daemon health
 ```
 
 ---
@@ -91,7 +83,7 @@ slowave recall "what is my favourite food"
 
 | Symptom | Fix |
 |---|---|
-| Tools don't appear | Run `slowave serve start`, then `slowave serve status`; restart OpenCode |
+| Tools don't appear | Run `slowave serve status`; restart OpenCode |
 | Tools appear but aren't called | `~/.config/opencode/slowave-instructions.md` block missing — re-run `slowave setup` |
 | Sessions are empty | Verify `slowave-instructions.md` is present and registered in `instructions` — re-run `slowave setup` |
 | Config not detected | Ensure `~/.config/opencode/opencode.json` exists and has a `mcp.slowave` entry with `"type": "local"` |
@@ -103,4 +95,4 @@ slowave recall "what is my favourite food"
 - OpenCode uses the **`mcp`** config key (not `mcpServers` like Claude/Cline/Cursor).
 - Remote MCP servers use `"type": "remote"` with a `"url"` field.
 - Lifecycle instructions use a **Slowave-owned file** (`slowave-instructions.md`) registered through OpenCode's `instructions` array — this avoids modifying `AGENTS.md` and keeps setup/uninstall clean.
-- OpenCode connects to the **same HTTP daemon** (`slowave serve start`) as all other clients — no per-session subprocess overhead.
+- OpenCode connects to the **same HTTP daemon** (auto-started by `slowave setup`) as all other clients — no per-session subprocess overhead.
