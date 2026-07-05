@@ -30,7 +30,7 @@ You work daily with your AI tools:
 Multiple AI clients continuously build and reuse the same evolving memory over time:
 - no markdown management
 - no static RAG
-- no LLM loops
+- no LLM extra calls
 
 ---
 
@@ -143,7 +143,7 @@ Work in progress — suggest more integrations or report broken ones with setup 
 | Claude Code    | ✅ | ✅ | ✅ | `slowave setup --client claude-code`     |
 | Cline          | ✅ | ✅ | ✅ | `slowave setup --client cline`           |
 | Cursor         | ✅ | ✅ | ⬜ | `slowave setup --client cursor` ¹        |
-| Windsurf       | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
+| Windsurf (Devin)    | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
 | Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
 | OpenCode       | ✅ | ⬜ | ⬜ | `slowave setup --client opencode`        |
 | All the above  |  |  |  | `slowave setup`                          |
