@@ -1,12 +1,13 @@
 # Slowave
 
-**A living local memory layer for your AI tools.**
+**A living local memory layer across your AI tools.**
 
-Install once. Your AI tools share the same evolving local memory across sessions and across clients.
+Install once. Your AI tools share a persistent local memory across sessions and clients.
 
-Keep using your favorite AI clients — Slowave learns and evolves with your work.
-- No additional LLM calls for memory operations.
-- No memory leaves your machine.
+Slowave continuously adapts to your work — capturing decisions, preferences, and context over time.
+
+- No additional LLM calls for memory operations
+- No data leaves your machine
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
@@ -45,25 +46,25 @@ Slowave becomes more useful the more you use it.
 
 Slowave does not just store information — it compounds it into usable context.
 
+The result is a continuous working context that follows you across tools and time.
+
 ---
 
 ## Why Slowave is different
 
 Slowave is a brain-inspired architecture.
 
-The human brain does not need language to remember: experiences are encoded, replayed during sleep, abstracted into patterns, and strengthened or forgotten — all before conscious recall puts any of it into words.
+### Principle
 
-That's Slowave approach: the language model is the memory client. Memory activity — consolidation, ranking, decay, retrieval — runs over embeddings, not over rewritten text.
+The human brain does not need language to remember: experiences are encoded, replayed during sleep, abstracted into patterns, and strengthened or forgotten.
 
-Three things follow directly from this separation:
+Language acts as the interface, not the storage medium.
 
-- **No LLM in the memory loop.** Every memory operation runs locally; zero model calls.
-- **Local-first.** The entire store lives on-device — no cloud, no API keys.
-- **Shared across tools.** Memory sits outside any single client’s prompt, so every MCP-compatible tool reads and writes the same store.
+Slowave mirrors this separation: the language model is a client of memory, not the memory system itself. Memory activity — consolidation, ranking, decay, retrieval — operates over embeddings rather than rewritten text.
 
-The architecture follows biological memory:
+### Biological mapping
 
-| Brain | Slowave | What it does |
+| Human brain | Slowave | What it does |
 |---|---|---|
 | Hippocampus | Episodic layer | Captures individual experiences as they happen |
 | Neocortex | Semantic layer | Extracts recurring patterns across many experiences |
@@ -72,10 +73,11 @@ The architecture follows biological memory:
 | Hebbian reinforcement | Recall reinforcement | Memories that prove useful strengthen; unused ones fade |
 | Reconsolidation | Post-retrieval feedback | Recalling a memory reopens it — feedback can strengthen, suppress, or supersede |
 
+### See:
 
-See:
 > [Design rationale](docs/design.md)
-
+> 
+> [Architecture](docs/architecture.md)
 ---
 
 ## Installation
