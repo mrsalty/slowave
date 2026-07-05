@@ -121,7 +121,7 @@ To configure a single client, or to find client-specific details:
 
 ¹ requires one manual paste after setup
 
-See the complete installation guide: [docs/install.md](docs/install.md)
+See the complete setup reference: [docs/setup.md](docs/setup.md)
 
 ### Storage
 
@@ -223,7 +223,7 @@ Slowave only provides persistent, evolving context injection based on prior inte
 
 - [design.md](docs/design.md) — design rationale, boundaries, and positioning
 - [architecture.md](docs/architecture.md) — brain-inspired memory model and lifecycle
-- [install.md](docs/install.md) — setup and client integration
+- [setup.md](docs/setup.md) — setup reference, lifecycle block, files modified
 - [benchmarks.md](docs/benchmarks.md) — evaluation methodology and results
 - [limitations.md](docs/limitations.md) — known constraints and trade-offs
 - [token_efficiency.md](docs/token_efficiency.md) — context efficiency analysis
