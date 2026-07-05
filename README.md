@@ -145,12 +145,11 @@ Work in progress — suggest more integrations or report broken ones with setup 
 | Cursor         | ✅ | ✅ | ⬜ | `slowave setup --client cursor` ¹        |
 | Windsurf       | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
 | Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
-| OpenCode       | ✅ | ⬜ | ⬜ | `slowave setup --client opencode` ²      |
+| OpenCode       | ✅ | ⬜ | ⬜ | `slowave setup --client opencode`        |
 | All the above  |  |  |  | `slowave setup`                          |
 | Codex          | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
 
-¹ requires one manual paste after setup  
-² uses `"type": "remote"` with `mcp` config key (not `mcpServers`). Connects to the same HTTP daemon as other clients. Lifecycle instructions delivered via Slowave-owned file registered in OpenCode's `instructions` array.
+¹ requires one manual paste after setup
 
 ---
 
