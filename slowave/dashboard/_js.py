@@ -48,11 +48,11 @@ document.querySelectorAll(".tab").forEach(b=>b.onclick=()=>{
   document.getElementById(b.dataset.tab).classList.add("active");
   const tab=b.dataset.tab;
   if(tab==="overview")renderPulse();
-  else if(tab==="schemas")loadSchemas();
+  else if(tab==="schemas"){loadSchemas();loadGeneralizationStats();}
   else if(tab==="graph")loadGraph();
   else if(tab==="worker")loadWorker();
-  else if(tab==="generalization")loadGeneralization();
   else if(tab==="db")loadDbHealth();
+  else if(tab==="supersessions")loadSupersessions();
 });
 
 // ── HELPERS ──
@@ -207,10 +207,12 @@ async function loadStatus(){
     document.getElementById("recentSessions").innerHTML=table(
       ["Session","Agent","Scope","Started","Duration","Events","Ep."],
       sess.map(r=>[
-        r.id,r.agent||"—",r.scope_id||"(none)",
+        `<span onclick="loadSessionTimeline('${esc(r.id)}')" style="cursor:pointer;color:var(--blue);font-family:monospace;font-size:11px" title="Click to replay session">${esc((r.id||"").slice(0,12))}…</span>`,
+        r.agent||"—",r.scope_id||"(none)",
         fmtTs(r.started_ts),dur(r.duration_seconds),
         num(r.events),num(r.episodes)
-      ])
+      ]),
+      [0]
     );
   }
 
@@ -422,17 +424,32 @@ function renderSchemasTable(schemas){
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function expandSchemaRow(tr,schemaId){
-  // Toggle existing
+  // Toggle: if already expanded, just collapse
   const nextTr=tr.nextElementSibling;
   if(nextTr&&nextTr.classList.contains("expand-row")){
-    nextTr.remove();return;
+    nextTr.remove();tr.classList.remove("schema-row-expanded");return;
   }
+  // Collapse all other expanded rows first
+  const allRows=tr.parentElement.querySelectorAll("tr.expand-row");
+  allRows.forEach(r=>r.remove());
+  // Clear highlight from any previously expanded row
+  tr.parentElement.querySelectorAll("tr.schema-row-expanded").forEach(r=>r.classList.remove("schema-row-expanded"));
   const d=await getJSON(`/api/schemas/${schemaId}`);
   const s=d.schema;
-  const evHtml=d.evidence&&d.evidence.length?table(["Episode","Event","Weight","Quote"],
-    d.evidence.map(e=>[e.episode_id?`epi_${e.episode_id}`:"—",e.raw_event_id?`evt_${e.raw_event_id}`:"—",
-      Number(e.weight||0).toFixed(3),e.quote||"—"])):"<em style='color:var(--muted)'>No evidence.</em>";
-  const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence","Reason"],
+  const evHtml=d.evidence&&d.evidence.length?`<div style="max-height:400px;overflow-y:auto"><div style="display:grid;grid-template-columns:auto auto auto auto;gap:0 14px;font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;padding-bottom:6px;margin-bottom:2px;border-bottom:1px solid var(--line)"><span>Episode</span><span>Kind</span><span>Session</span><span style="text-align:right">Weight</span></div>`+d.evidence.map((e,i)=>{
+    const quote=e.quote||e.event_content||"";
+    const sessLink=e.episode_session?`<span onclick="loadSessionTimeline('${esc(e.episode_session)}')" style="cursor:pointer;color:var(--cyan);font-size:11px;white-space:nowrap" title="Open session timeline">${esc(e.episode_session||"—")}</span>`:"";
+    const kindColor={"macro":"var(--amber)","micro":"var(--blue)","decision":"var(--purple)","fact":"var(--green)","lesson":"var(--red)"};
+    const kindBadge=e.episode_kind?`<span style="color:${kindColor[e.episode_kind]||"var(--muted)"};font-size:10px;font-weight:500">${esc(e.episode_kind)}</span>`:"";
+    return `<div style="margin-bottom:4px;padding:5px 8px;background:var(--panel2);border-radius:4px">
+      <div style="display:grid;grid-template-columns:auto auto auto auto;align-items:center;gap:0 14px;font-size:11px;color:var(--muted)">
+        <span>epi_${e.episode_id||"—"}</span>${kindBadge}${sessLink}
+        <span style="color:var(--green);font-size:11px;text-align:right">w${Number(e.weight||0).toFixed(3).replace(/0+$/,'').replace(/\.$/,'.0')}</span>
+      </div>
+      ${quote?`<div style="color:var(--muted);line-height:1.4;font-size:11px;margin-top:3px;font-style:italic">${esc(quote.slice(0,200))}${quote.length>200?"…":""}</div>`:""}
+      <div id="evt_detail_${schemaId}_${i}"></div>
+    </div>`;}).join("")+`</div>`:`<em style="color:var(--muted)">No evidence.</em>`;
+const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence","Reason"],
     d.outgoing.map(e=>[`sch_${e.dst_schema_id}`,e.relation,Number(e.confidence||0).toFixed(2),e.reason||"—"])):"<em style='color:var(--muted)'>None.</em>";
   const inHtml=d.incoming&&d.incoming.length?table(["From","Relation","Confidence","Reason"],
     d.incoming.map(e=>[`sch_${e.src_schema_id}`,e.relation,Number(e.confidence||0).toFixed(2),e.reason||"—"])):"<em style='color:var(--muted)'>None.</em>";
@@ -447,10 +464,11 @@ async function expandSchemaRow(tr,schemaId){
     ${stage>0?`
       ${genBreadthBar((s.scope_breadth_pct||0),"scope breadth")}
       ${genBreadthBar((s.scope_kind_breadth_pct||0),"kind breadth")}
-      <div style="font-size:11px;color:var(--muted);margin-top:4px">
+      <div style="font-size:12px;color:var(--muted);margin-top:6px">
         ${(s.distinct_scope_count||0)} scope${s.distinct_scope_count!==1?"s":""} ·
         ${(s.distinct_scope_kind_count||0)} kind${s.distinct_scope_kind_count!==1?"s":""} ·
         ${(s.cross_scope_recall_count||0)} cross-scope recall${s.cross_scope_recall_count!==1?"s":""}
+        ${(s.recalled_scopes||[]).length?` <span class="scope-count-tip" data-tip="${esc((s.recalled_scopes||[]).join("\n"))}">(${(s.recalled_scopes||[]).length} scopes)</span>`:""}
       </div>`:"<div style='font-size:12px;color:var(--muted)'>Not yet recalled across multiple scopes.</div>"}
   </div>`;
   expTr.innerHTML=`<td colspan="9"><div class="expand-content">
@@ -474,8 +492,32 @@ async function expandSchemaRow(tr,schemaId){
     </div>
     <div class="detail-section"><h4>Evidence</h4>${evHtml}</div>
   </div></td>`;
+  tr.classList.add("schema-row-expanded");
   tr.after(expTr);
+  tr.scrollIntoView({behavior:"smooth",block:"start"});
 }
+
+async function loadEventInline(eventId, slotId){
+  const slot=document.getElementById(slotId);
+  if(!slot)return;
+  // Toggle
+  if(slot.innerHTML&&!slot.innerHTML.includes("Loading")){
+    slot.innerHTML="";return;
+  }
+  slot.innerHTML=`<div style="color:var(--muted);font-size:10px;padding:4px 0">Loading event…</div>`;
+  try{
+    const d=await getJSON(`/api/events/${eventId}`);
+    if(d.error){slot.innerHTML=`<div style="color:var(--red);font-size:10px">${esc(d.error)}</div>`;return;}
+    const ev=d.event;
+    slot.innerHTML=`<div style="background:var(--panel3);border:1px solid var(--line2);border-radius:4px;padding:6px 10px;margin-top:4px;font-size:11px">
+      <span class="pill" style="font-size:9px">${esc(ev.type||"?")}</span>
+      <span style="color:var(--muted)">${fmtTsCompact(ev.ts)}</span>
+      <span style="color:var(--muted)"> · session ${esc((ev.session_id||"").slice(0,12))}…</span>
+      <div style="margin-top:4px;line-height:1.4;white-space:pre-wrap;word-break:break-word">${esc(ev.content||"")}</div>
+    </div>`;
+  }catch(e){slot.innerHTML=`<div style="color:var(--red);font-size:10px">${esc(String(e))}</div>`;}
+}
+window.loadEventInline = loadEventInline;
 
 // ── WORKER ──
 async function loadWorker(){
@@ -982,7 +1024,7 @@ async function runRecall(){
       html+=`<div style="font-size:12px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.5px;margin:14px 0 6px">🗒 Evidence events (${d.raw_events.length})</div>`;
       html+=table(
         ["ID","Type","Content"],
-        d.raw_events.map(e=>[`evt_${e.id}`,e.type||"—",esc((e.content||"").slice(0,200))]),
+        d.raw_events.map(e=>[`evt_${e.id}`,e.type||"—",esc((e.content_preview||"").slice(0,200))]),
         [0]
       );
     }
@@ -1036,7 +1078,66 @@ async function loadDbHealth(){
     el.innerHTML=html;
   }finally{ld.classList.remove("show");}
 }
+// ── SESSION REPLAY ──
+async function loadSessionTimeline(sid){
+  let detail=document.getElementById("sessionTimeline");
+  if(!detail){
+    detail=document.createElement("div");
+    detail.id="sessionTimeline";
+    detail.style.cssText="position:fixed;bottom:16px;right:16px;width:600px;max-height:70vh;padding:16px;background:var(--panel);border:2px solid var(--blue);border-radius:var(--radius);overflow-y:auto;display:none;z-index:9999;box-shadow:0 8px 32px rgba(0,0,0,.5)";
+    document.body.appendChild(detail);
+  }
+  detail.innerHTML=`<div style=\"text-align:center;padding:12px;color:var(--muted)\">Loading timeline…</div>`;
+  detail.style.display="block";
+  try{
+    const d=await getJSON(`/api/sessions/${encodeURIComponent(sid)}/timeline`);
+    if(d.error){detail.innerHTML=emptyState(d.error,"⚠️");return;}
+    const sess=d.session;
+    let html=`<div style=\"background:var(--panel2);border:1px solid var(--line);padding:12px;margin-bottom:10px\">`;
+    html+=`<div style=\"display:flex;justify-content:space-between;align-items:center\">`;
+    html+=`<div><b>Session ${esc(sess.id).slice(0,16)}…</b></div>`;
+    html+=`<button class=\"btn\" style=\"font-size:11px;padding:2px 8px\" onclick=\"document.getElementById('sessionTimeline').style.display='none'\">✕ Close</button></div>`;
+    html+=`<div style=\"font-size:13px;color:var(--muted);margin-top:4px\">Agent: ${esc(sess.agent)} · Scope: ${esc(sess.scope_id||"—")} · Goal: ${esc(sess.goal||"—")}</div>`;
+    html+=`<div style=\"font-size:12px;color:var(--muted)\">${fmtTs(sess.started_ts)} → ${sess.ended_ts?fmtTs(sess.ended_ts):"ongoing"} · Outcome: ${esc(sess.outcome||"—")}</div></div>`;
+    const events=d.events||[];
+    if(!events.length){
+      html+=emptyState("No events in this session.","📭");
+    } else {
+      html+=`<div style=\"position:relative;padding-left:20px;border-left:2px solid var(--line2)\">`;
+      events.forEach(ev=>{
+        const icon=ev.type==="user_message"?"👤":ev.type==="assistant_message"?"🤖":ev.type==="activate"?"▶️":"📌";
+        html+=`<div style=\"margin-bottom:10px;position:relative\">`;
+        html+=`<span style=\"position:absolute;left:-29px;top:2px;font-size:14px\">${icon}</span>`;
+        html+=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:3px\">${fmtTsCompact(ev.ts)} · <span class=\"pill\" style=\"font-size:10px;padding:2px 5px\">${esc(ev.type)}</span></div>`;
+        html+=`<div style=\"font-size:13px;line-height:1.5\">${truncContent(ev.content||"",300)}</div></div>`;
+      });
+      html+=`</div>`;
+    }
+    detail.innerHTML=html;detail.scrollIntoView({behavior:"smooth"});
+  }catch(e){detail.innerHTML=emptyState("Error: "+esc(String(e)),"⚠️");}
+}
 
+// ── SUPERSESSIONS ──
+async function loadSupersessions(){
+  const ld=document.getElementById("supersessionLoading");
+  const el=document.getElementById("supersessionTable");
+  ld.classList.add("show");el.innerHTML="";
+  try{
+    const d=await getJSON("/api/supersessions?limit=100");
+    if(!d.supersessions||!d.supersessions.length){el.innerHTML=emptyState("No supersessions found.","🔄");return;}
+    const rows=d.supersessions.map(s=>[
+      `<code style=\"color:var(--purple)\">sch_${s.src_schema_id}</code>`,
+      `<code style=\"color:var(--green)\">sch_${s.dst_schema_id}</code>`,
+      confBar(s.confidence),
+      `<div style=\"max-width:240px\">${esc((s.reason||"n/a").slice(0,60))}${(s.reason||"").length>60?"…":""}</div>`,
+      `<div style=\"font-size:11px\">${esc((s.src_content||"").slice(0,80))}…<br><span style=\"color:var(--purple);font-size:10px\">${esc(s.src_status)}</span></div>`,
+      `<div style=\"font-size:11px\">${esc((s.dst_content||"").slice(0,80))}…<br><span style=\"color:var(--green);font-size:10px\">${esc(s.dst_status)}</span></div>`,
+      fmtTsCompact(s.created_ts)
+    ]);
+    el.innerHTML=`<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} supersession chains</div>`
+      +table(["Old","New","Confidence","Reason","Old content","New content","When"],rows,[0,1,2,3,4,5]);
+  }finally{ld.classList.remove("show");}
+}
 // ── GENERALIZATION ──
 const GEN_LABELS=['SCOPED','PORTABLE','CONTEXTUAL','GLOBAL'];
 const GEN_COLORS=['var(--gray)','var(--blue)','var(--amber)','var(--green)'];
@@ -1059,9 +1160,7 @@ function genBreadthBar(pct,label,color,count){
     <span style="font-size:11px;color:var(--muted);white-space:nowrap">${label}: ${(pct*100).toFixed(0)}%${detail}</span>
   </div>`;
 }
-async function loadGeneralization(){
-  const ld=document.getElementById("genLoading");
-  ld.classList.add("show");
+async function loadGeneralizationStats(){
   try{
     const d=await getJSON("/api/generalization");
     const sum=d.summary||{};
@@ -1072,7 +1171,6 @@ async function loadGeneralization(){
       {icon:"🚀",label:"Portable",val:num(dist[1]||0),sub:"stage 1",accent:"var(--blue)"},
       {icon:"🌍",label:"Contextual",val:num(dist[2]||0),sub:"stage 2",accent:"var(--amber)"},
       {icon:"✨",label:"Global",val:num(dist[3]||0),sub:"stage 3",accent:"var(--green)"},
-      {icon:"🗺",label:"Known scopes",val:num(sum.total_known_scopes),sub:num(sum.total_scope_kinds)+" kinds",accent:"var(--cyan)"},
     ];
     document.getElementById("genStatGrid").innerHTML=cards.map(c=>
       `<div class="stat-card" style="--accent:${c.accent}">
@@ -1082,64 +1180,14 @@ async function loadGeneralization(){
         <div class="sc-sub">${esc(c.sub||"")}</div>
       </div>`
     ).join("");
-    // Stage distribution visual
-    const totalActive=Math.max(1,sum.total_active_schemas);
-    let distHtml='<div style="margin-bottom:14px">';
-    [0,1,2,3].forEach(st=>{
-      const n=dist[st]||0;const pct=Math.round(n/totalActive*100);
-      distHtml+=`<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-        ${genBadge(st)}
-        <div class="gen-bar-track" style="flex:1"><div class="gen-bar" style="width:${pct}%;background:${GEN_COLORS[st]}"></div></div>
-        <span style="font-size:12px;color:var(--muted);width:40px;text-align:right">${num(n)}</span>
-      </div>`;
-    });
-    distHtml+='</div>';
-    // Promoted list
-    const items=d.top_promoted||[];
-    if(!items.length){
-      document.getElementById("genPromotedList").innerHTML=distHtml+emptyState("No promoted memories yet. Memories promote as they are recalled across multiple scopes.","🌐");
-    } else {
-      let listHtml=distHtml;
-      items.forEach(m=>{
-        listHtml+=`<div style="background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm);padding:10px 14px;margin-bottom:8px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
-            ${genBadge(m.stage)}
-            <code style="font-size:11px;color:var(--muted)">${esc(m.id)}</code>
-            <span style="font-size:11px;color:var(--muted)">origin: ${esc(m.scope||"—")}</span>
-          </div>
-          <div style="font-size:13px;line-height:1.5;margin-bottom:8px">${esc(m.content)}</div>
-          ${genBreadthBar(m.scope_breadth_pct||0,"scope breadth","var(--blue)",m.distinct_scope_count+" scope"+(m.distinct_scope_count!==1?"s":""))}
-          ${genBreadthBar(m.scope_kind_breadth_pct||0,"kind breadth","var(--amber)",m.distinct_scope_kind_count+" kind"+(m.distinct_scope_kind_count!==1?"s":""))}
-          <div style="font-size:11px;color:var(--muted);margin-top:4px">
-            ${m.distinct_scope_count} scope${m.distinct_scope_count!==1?"s":""} · 
-            ${m.distinct_scope_kind_count} kind${m.distinct_scope_kind_count!==1?"s":""} · 
-            ${m.cross_scope_recall_count} cross-scope recall${m.cross_scope_recall_count!==1?"s":""}
-          </div>
-        </div>`;
-      });
-      document.getElementById("genPromotedList").innerHTML=listHtml;
-    }
-    // Scope registry
-    const reg=d.scope_registry||[];
-    if(!reg.length){
-      document.getElementById("genScopeRegistry").innerHTML=emptyState("No scopes registered yet. Scopes are recorded automatically when sessions start.","🗺");
-    } else {
-      document.getElementById("genScopeRegistry").innerHTML=reg.map(r=>`
-        <div class="scope-reg-card">
-          <div>
-            <div class="scope-reg-id">${esc(r.scope_id)}</div>
-            <div class="scope-reg-meta">${r.scope_kind||"generic"} · last active ${fmtDate(r.last_active_ts)}</div>
-          </div>
-          <div style="text-align:right;font-size:12px;color:var(--muted)">
-            <div>${num(r.session_count)} session${r.session_count!==1?"s":""}</div>
-            <div>${num(r.recall_count)} recall${r.recall_count!==1?"s":""}</div>
-          </div>
-        </div>`).join("");
-    }
-  }finally{ld.classList.remove("show");}
+  }catch(e){}
 }
 
 // ── INIT ──
+// Ensure new functions are globally accessible
+window.loadSessionTimeline = loadSessionTimeline;
+window.loadSupersessions = loadSupersessions;
+
 loadStatus();
 renderPulse();
 setInterval(loadStatus,REFRESH_MS);

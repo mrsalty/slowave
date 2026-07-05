@@ -111,6 +111,21 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                     self._send_json(_worker_runs_payload(db_path, qs))
                 elif path == "/api/generalization":
                     self._send_json(_generalization_payload(db_path))
+                elif path == "/api/episodes":
+                    self._send_json(_episodes_payload(db_path, qs))
+                elif path == "/api/prototypes":
+                    self._send_json(_prototypes_payload(db_path, qs))
+                elif path.startswith("/api/prototypes/") and path.endswith("/members"):
+                    proto_id = int(path.split("/")[-2])
+                    self._send_json(_prototype_members(db_path, proto_id))
+                elif path.startswith("/api/sessions/") and path.endswith("/timeline"):
+                    session_id = path.split("/")[-2]
+                    self._send_json(_session_timeline(db_path, session_id))
+                elif path.startswith("/api/events/"):
+                    event_id = int(path.split("/")[-1])
+                    self._send_json(_event_detail(db_path, event_id))
+                elif path == "/api/supersessions":
+                    self._send_json(_supersessions_payload(db_path, qs))
                 else:
                     self._send_json({"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND)
             except Exception as e:
@@ -780,10 +795,48 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
             return {"error": "schema not found", "schema_id": schema_id}
         proto_map = _prototype_map(conn, [schema_id])
         schema = _schema_row_to_node(row, proto_map.get(schema_id, []))
-        evidence = [dict(r) for r in conn.execute(
-            "SELECT * FROM schema_evidence WHERE schema_id = ? ORDER BY weight DESC LIMIT 50",
-            (schema_id,),
-        ).fetchall()]
+        evidence = [
+            dict(r) for r in conn.execute(
+                "SELECT se.*, re.content AS event_content, re.type AS event_type, "
+                "re.ts AS event_ts, re.session_id AS event_session "
+                "FROM schema_evidence se "
+                "LEFT JOIN raw_events re ON re.id = se.raw_event_id "
+                "WHERE se.schema_id = ? ORDER BY se.weight DESC LIMIT 50",
+                (schema_id,),
+            ).fetchall()
+        ]
+        # Fill missing quote with event_content or episode metadata
+        ep_ids = [e["episode_id"] for e in evidence if e.get("episode_id")]
+        ep_meta: dict[int, dict[str, Any]] = {}
+        if ep_ids:
+            placeholders = ",".join(["?"] * len(ep_ids))
+            ep_rows = conn.execute(
+                f"SELECT id, metadata_json FROM episodic_memories WHERE id IN ({placeholders})",
+                ep_ids,
+            ).fetchall()
+            for r in ep_rows:
+                ep_meta[r["id"]] = _json_loads(r["metadata_json"], {})
+        for ev in evidence:
+            eid = ev.get("episode_id")
+            if eid and eid in ep_meta:
+                meta = ep_meta[eid]
+                ev["episode_kind"] = str(meta.get("kind", ""))
+                ev["episode_session"] = str(meta.get("session_id", ""))
+                if not ev.get("quote"):
+                    ev["quote"] = str(meta.get("text", meta.get("content", "")))[:300]
+        # Collect scopes this schema was actually recalled in
+        schema["recalled_scopes"] = []
+        try:
+            scope_rows = conn.execute(
+                "SELECT DISTINCT cre.scope_id FROM context_recall_items cri "
+                "JOIN context_recall_events cre ON cre.id = cri.context_recall_id "
+                "WHERE cri.schema_id = ? AND cri.admitted = 1 AND cre.scope_id IS NOT NULL "
+                "ORDER BY cre.scope_id LIMIT 30",
+                (schema_id,),
+            ).fetchall()
+            schema["recalled_scopes"] = [str(r["scope_id"]) for r in scope_rows]
+        except Exception:
+            pass
         outgoing = [dict(r) for r in conn.execute(
             "SELECT * FROM schema_relations WHERE src_schema_id = ? ORDER BY created_ts DESC",
             (schema_id,),
@@ -944,6 +997,178 @@ def _get_cached_engine(db_path: str) -> Any:
             )
         )
         return _cached_engine
+
+
+def _episodes_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Return paginated episode list."""
+    if not os.path.exists(db_path):
+        return {"episodes": [], "total": 0}
+    limit = max(1, min(200, int((qs.get("limit") or [50])[0])))
+    offset = max(0, int((qs.get("offset") or [0])[0]))
+    search = (qs.get("q") or [""])[0].strip()
+    conn = _connect(db_path)
+    try:
+        base_sql = "FROM episodic_memories e"
+        base_params: list[Any] = []
+        if search:
+            base_sql += " WHERE e.metadata_json LIKE ?"
+            base_params.append(f"%{search}%")
+        total_row = conn.execute(f"SELECT COUNT(*) AS n {base_sql}", base_params).fetchone()
+        rows = conn.execute(
+            f"SELECT e.id, e.event_id, e.ts, e.salience, e.recalled_count, "
+            f"e.metadata_json {base_sql} "
+            f"ORDER BY e.ts DESC LIMIT ? OFFSET ?",
+            base_params + [limit, offset],
+        ).fetchall()
+        episodes = []
+        for r in rows:
+            rec = dict(r)
+            meta = _json_loads(rec.pop("metadata_json", None), {})
+            rec["content_preview"] = str(meta.get("text", meta.get("content",
+                f'{meta.get("kind","")} session={meta.get("session_id","")}')))[:200]
+            rec["type"] = str(meta.get("type", meta.get("event_type", "")))
+            rec["session_id"] = str(meta.get("session_id", rec.get("event_id", "")))
+            episodes.append(rec)
+        return {
+            "episodes": episodes,
+            "total": int(total_row["n"]) if total_row else 0,
+        }
+    finally:
+        conn.close()
+
+
+def _prototypes_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Return prototype list with member counts."""
+    if not os.path.exists(db_path):
+        return {"prototypes": [], "total": 0}
+    limit = max(1, min(100, int((qs.get("limit") or [50])[0])))
+    conn = _connect(db_path)
+    try:
+        total_row = conn.execute("SELECT COUNT(*) AS n FROM semantic_prototypes").fetchone()
+        rows = conn.execute(
+            "SELECT p.id, p.support_count, p.variance, p.scale, p.last_updated_ts, "
+            "COUNT(epm.episode_id) AS member_count "
+            "FROM semantic_prototypes p "
+            "LEFT JOIN episode_prototype_map epm ON epm.prototype_id = p.id "
+            "GROUP BY p.id "
+            "ORDER BY p.support_count DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return {
+            "prototypes": [dict(r) for r in rows],
+            "total": int(total_row["n"]) if total_row else 0,
+        }
+    finally:
+        conn.close()
+
+
+def _prototype_members(db_path: str, proto_id: int) -> dict[str, Any]:
+    """Return episodes belonging to a prototype."""
+    if not os.path.exists(db_path):
+        return {"error": "db not found"}
+    conn = _connect(db_path)
+    try:
+        proto_row = conn.execute(
+            "SELECT * FROM semantic_prototypes WHERE id = ?", (proto_id,)
+        ).fetchone()
+        if not proto_row:
+            return {"error": "prototype not found"}
+        eps = conn.execute(
+            "SELECT e.id, e.event_id, e.ts, e.salience, r.content, r.type "
+            "FROM episodic_memories e "
+            "JOIN episode_prototype_map epm ON epm.episode_id = e.id "
+            "JOIN raw_events r ON r.id = e.event_id "
+            "WHERE epm.prototype_id = ? "
+            "ORDER BY e.ts DESC",
+            (proto_id,),
+        ).fetchall()
+        return {
+            "prototype": dict(proto_row),
+            "episodes": [dict(r) for r in eps],
+        }
+    finally:
+        conn.close()
+
+
+def _event_detail(db_path: str, event_id: int) -> dict[str, Any]:
+    """Return a single raw event with its content."""
+    if not os.path.exists(db_path):
+        return {"error": "db not found"}
+    conn = _connect(db_path)
+    try:
+        row = conn.execute(
+            "SELECT id, ts, type, content, session_id, metadata_json "
+            "FROM raw_events WHERE id = ?", (event_id,)
+        ).fetchone()
+        if not row:
+            return {"error": "event not found"}
+        return {"event": dict(row)}
+    finally:
+        conn.close()
+
+
+def _session_timeline(db_path: str, session_id: str) -> dict[str, Any]:
+    """Return chronological timeline of a session with raw events and episodes."""
+    if not os.path.exists(db_path):
+        return {"error": "db not found"}
+    conn = _connect(db_path)
+    try:
+        sess = conn.execute(
+            "SELECT * FROM sessions WHERE id = ?", (session_id,)
+        ).fetchone()
+        if not sess:
+            return {"error": "session not found"}
+        events = conn.execute(
+            "SELECT id, ts, type, content, metadata_json "
+            "FROM raw_events WHERE session_id = ? ORDER BY ts ASC",
+            (session_id,),
+        ).fetchall()
+        episodes = conn.execute(
+            "SELECT e.id, e.event_id, e.ts, e.salience, e.recalled_count, r.content "
+            "FROM episodic_memories e "
+            "JOIN raw_events r ON r.id = e.event_id "
+            "WHERE r.session_id = ? "
+            "ORDER BY e.ts ASC",
+            (session_id,),
+        ).fetchall()
+        return {
+            "session": dict(sess),
+            "events": [dict(r) for r in events],
+            "episodes": [dict(r) for r in episodes],
+        }
+    finally:
+        conn.close()
+
+
+def _supersessions_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Return supersession chains: schemas that superseded others."""
+    if not os.path.exists(db_path):
+        return {"supersessions": [], "total": 0}
+    limit = max(1, min(200, int((qs.get("limit") or [50])[0])))
+    conn = _connect(db_path)
+    try:
+        total_row = conn.execute(
+            "SELECT COUNT(*) AS n FROM schema_relations WHERE relation = 'supersedes'"
+        ).fetchone()
+        rows = conn.execute(
+            "SELECT sr.src_schema_id, sr.dst_schema_id, sr.confidence, sr.reason, "
+            "sr.created_ts, "
+            "src.content_text AS src_content, src.status AS src_status, "
+            "dst.content_text AS dst_content, dst.status AS dst_status "
+            "FROM schema_relations sr "
+            "JOIN schemas src ON src.id = sr.src_schema_id "
+            "JOIN schemas dst ON dst.id = sr.dst_schema_id "
+            "WHERE sr.relation = 'supersedes' "
+            "ORDER BY sr.created_ts DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return {
+            "supersessions": [dict(r) for r in rows],
+            "total": int(total_row["n"]) if total_row else 0,
+        }
+    finally:
+        conn.close()
+
 
 
 def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
