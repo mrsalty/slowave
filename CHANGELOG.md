@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.11.0](https://github.com/mrsalty/slowave/compare/slowave-v0.10.0...slowave-v0.11.0) (2026-07-05)
+
+
+### Features
+
+* **setup:** add OpenCode client integration ([678bc7e](https://github.com/mrsalty/slowave/commit/678bc7e551a2bafebe2649de0f8a39804abf8086))
+* **setup:** add OpenCode client integration ([c59bc27](https://github.com/mrsalty/slowave/commit/c59bc27ab3e7ae237e6587cb770c597d4bee2a18))
+
+
+### Documentation
+
+* remove opencode footnote from supported clients table ([7f5e9d6](https://github.com/mrsalty/slowave/commit/7f5e9d68570f0b35d566346fae50ec1f7ab1691a))
+
 ## [0.10.0](https://github.com/mrsalty/slowave/compare/slowave-v0.9.4...slowave-v0.10.0) (2026-07-05)
 
 
