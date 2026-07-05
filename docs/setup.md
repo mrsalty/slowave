@@ -341,4 +341,4 @@ Claude Desktop and Cursor require manual paste.
 ## Questions?
 
 - 🩺 Run `slowave doctor` to check status
-- 💬 [GitHub Discussions](https://github.com/mrsalty/slowave/discussions)
+- 🐛 Report issues on [GitHub](https://github.com/mrsalty/slowave/issues)
