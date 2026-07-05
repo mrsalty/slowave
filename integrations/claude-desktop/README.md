@@ -59,17 +59,13 @@ Replace `/path/to/slowave-mcp` with the actual path — run `which slowave-mcp` 
 
 ## Verify
 
-Ask Claude Desktop:
+Open Claude Desktop and start a conversation. If Slowave is configured correctly, the `slowave_*` tools appear in the tool list and the lifecycle (activate → commit) runs automatically — no manual invocation needed.
 
-```text
-Remember that my preferred food is spaghetti.
-```
-
-Then in a terminal:
+To confirm from the terminal:
 
 ```bash
-slowave stats
-slowave recall "what is my favourite food" 
+slowave stats     # shows session/event counts
+slowave doctor    # shows client detection and daemon health
 ```
 
 ---

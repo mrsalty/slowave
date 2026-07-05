@@ -51,23 +51,19 @@ Edit `~/.cursor/mcp.json` (create it if missing):
 }
 ```
 
-Make sure the daemon is running (`slowave serve start`). Restart Cursor after editing.
+Make sure the daemon is running (`slowave serve status`). Restart Cursor after editing.
 
 ---
 
 ## Verify
 
-Ask Cursor (with a model that supports tool use):
+Open Cursor and start a conversation with a model that supports tool use. If Slowave is configured correctly, the `slowave_*` tools appear in the tool list and the lifecycle (activate → commit) runs automatically — no manual invocation needed.
 
-```text
-Remember that my preferred food is spaghetti.
-```
-
-Then in a terminal:
+To confirm from the terminal:
 
 ```bash
-slowave stats
-slowave recall "what is my favourite food"
+slowave stats     # shows session/event counts
+slowave doctor    # shows client detection and daemon health
 ```
 
 ---
@@ -76,7 +72,7 @@ slowave recall "what is my favourite food"
 
 | Symptom | Fix |
 |---|---|
-| Tools don't appear | Run `slowave serve start`, then `slowave serve status`; restart Cursor |
+| Tools don't appear | Run `slowave serve status`; restart Cursor |
 | Tools appear but aren't called | Rules for AI block not set — complete Step 1 above |
 | Sessions are empty | Confirm Rules for AI block is set — complete Step 1 above |
 
