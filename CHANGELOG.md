@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.11.2](https://github.com/mrsalty/slowave/compare/slowave-v0.11.1...slowave-v0.11.2) (2026-07-05)
+
+
+### Documentation
+
+* consolidate and refine design & architecture documentation ([375336e](https://github.com/mrsalty/slowave/commit/375336e176865a49ad2937ead211ea0c50a27955))
+* merge install.md into setup.md, streamline setup docs ([fde6b87](https://github.com/mrsalty/slowave/commit/fde6b87dd6c7eb843d05e660374414d6ab815bb0))
+* replace Discussions link with Issues ([96c0d0a](https://github.com/mrsalty/slowave/commit/96c0d0a1ded2f7bd51f91037c0fab6b5bacec44a))
+
 ## [0.11.1](https://github.com/mrsalty/slowave/compare/slowave-v0.11.0...slowave-v0.11.1) (2026-07-05)
 
 
