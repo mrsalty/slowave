@@ -17,7 +17,7 @@ Slowave continuously adapts to your work — capturing decisions, preferences, a
 
 ---
 
-## How if feels like
+## How it feels like
 
 ![Demo](img/demo.gif)
 
