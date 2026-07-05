@@ -1,6 +1,6 @@
 # Claude Code + Slowave — quick-ref
 
-Full guide: **[../../docs/install.md](../../docs/install.md)**
+Full guide: **[../../docs/setup.md](../../docs/setup.md)**
 
 ---
 
@@ -36,7 +36,7 @@ Restart Claude Code.
 
 `slowave setup` injects the lifecycle block into `~/.claude/CLAUDE.md` and installs enforcement hooks.
 
-**Full lifecycle documentation:** [docs/install.md#lifecycle-instruction-block](../../docs/install.md#lifecycle-instruction-block)
+**Full lifecycle documentation:** [docs/setup.md#lifecycle-instruction-block](../../docs/setup.md#lifecycle-instruction-block)
 
 ---
 
