@@ -33,6 +33,20 @@ Multiple AI clients continuously build and reuse the same evolving memory over t
 
 ---
 
+## What you gain over time
+
+Slowave becomes more useful the more you use it.
+
+- **Less repetition** — you stop re-explaining the same context across sessions
+- **Faster continuity** — returning to a project feels like resuming, not restarting
+- **Cross-tool consistency** — your working context follows you across AI clients
+- **Persistent working memory** — decisions, patterns, and preferences are retained beyond individual chats
+- **Lower cognitive overhead** — no need to maintain external memory files or prompt scaffolding
+
+Slowave does not just store information — it compounds it into usable context.
+
+---
+
 ## Why Slowave is different
 
 Slowave is a brain-inspired architecture.
@@ -114,6 +128,8 @@ Inspect stored memories, browse recall results, visualize relationships, and obs
 ![dashboard.png](img/dashboard.png)
 
 ![dashboard_graph.png](img/dashboard_graph.png)
+
+---
 
 ## Benchmarks
 
