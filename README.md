@@ -1,12 +1,12 @@
 # Slowave
 
-**A shared local memory layer for your AI tools.**
+**A living local memory layer for your AI tools.**
 
-Install once. Your AI tools share the same evolving local memory across sessions and across tools.
+Install once. Your AI tools share the same evolving local memory across sessions and across clients.
 
-Slowave lets Claude Code, Cursor, Cline, Windsurf, Claude Desktop, and any MCP-compatible client read from and write to the same local memory. 
-
-Everything runs locally with no cloud backend and no additional LLM calls for memory operations.
+Keep using your favorite AI clients — Slowave learns and evolves with your work.
+- No additional LLM calls for memory operations.
+- No memory leaves your machine.
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
@@ -16,7 +16,7 @@ Everything runs locally with no cloud backend and no additional LLM calls for me
 
 ---
 
-## Typical workflow
+## How if feels like
 
 ![Demo](img/demo.gif)
 
@@ -31,54 +31,34 @@ Instead of relying on chat history or project-specific markdown files, multiple 
 
 ---
 
-## How memory evolves
+## Why Slowave is different
 
-Slowave is designed around memory consolidation rather than note storage.
+Slowave is a brain-inspired architecture.
 
-Individual interactions become **episodes**. Related episodes are consolidated into **prototypes**. Repeated prototypes become **schemas** representing recurring conventions, preferences, and project knowledge.
+The human brain does not need language to remember: experiences are encoded, replayed during sleep, abstracted into patterns, and strengthened or forgotten — all before conscious recall puts any of it into words.
 
-Useful memories become easier to retrieve through reinforcement. Outdated memories gradually weaken through decay. When newer information replaces older facts, supersession allows recent knowledge to take precedence.
+That's Slowave approach: the language model is the memory client. Memory activity — consolidation, ranking, decay, retrieval — runs over embeddings, not over rewritten text.
 
-Over time, recall shifts from isolated facts toward recurring project patterns and decisions.
+Three things follow directly from this separation:
 
-The overall feedback loop looks like this:
+- **No LLM in the memory loop.** Every memory operation runs locally; zero model calls.
+- **Local-first.** The entire store lives on-device — no cloud, no API keys.
+- **Shared across tools.** Memory sits outside any single client’s prompt, so every MCP-compatible tool reads and writes the same store.
 
-```text
-use your AI tools
-    → Slowave stores durable memory
-        → offline consolidation
-            → more useful recall
-                → better context in future sessions
-```
+The architecture follows biological memory:
 
-The first sessions mostly accumulate experience. As more work is stored, recall increasingly reflects recurring project conventions, previous decisions, debugging history, and personal workflows rather than isolated conversations.
+| Brain | Slowave | What it does |
+|---|---|---|
+| Hippocampus | Episodic layer | Captures individual experiences as they happen |
+| Neocortex | Semantic layer | Extracts recurring patterns across many experiences |
+| Slow-wave sleep | Offline consolidation | Replays and groups episodes into prototypes, without the LLM |
+| Spreading activation | Graph-based retrieval | Activation propagates across associations; partial cues recover whole memories |
+| Hebbian reinforcement | Recall reinforcement | Memories that prove useful strengthen; unused ones fade |
+| Reconsolidation | Post-retrieval feedback | Recalling a memory reopens it — feedback can strengthen, suppress, or supersede |
 
----
-
-### Why Slowave is different
-
-Slowave is built around one central idea:
-
-> Memory consolidation does not require language.
-
-In Slowave, memory is not managed as prompts or replayed transcripts. Stored claims live alongside evolving embedding-based state, and consolidation, reinforcement, decay, supersession, and retrieval all operate directly over that representation.
-
-The language model does not maintain memory. It authors what gets remembered and receives the final recalled context — but no LLM call is involved in consolidating, ranking, or revising what is stored.
-
-This separation has direct consequences:
-
-- Memory is shared across all MCP-compatible clients, since it lives outside any single tool’s prompt or history.
-- No cloud or external service is required, because all operations are local.
-- Memory operations do not require LLM calls, since consolidation and retrieval happen in embedding space.
-- Context injected into the model is compact and selective, rather than a replay of past conversations.
-- Memory can evolve through reinforcement and decay rather than static accumulation of notes.
-- Scope control (project, domain, global) prevents unrelated contexts from interfering with each other.
-Additional background:
 
 See:
 > [Design rationale](docs/design.md)
-> 
-> [Architecture](docs/architecture.md)
 
 ---
 
@@ -207,5 +187,3 @@ Contributions are welcome, especially in:
 - performance optimization
 
 See [CONTRIBUTING.md](./CONTRIBUTING.md) before submitting a pull request.
-
-Commercial licensing may be considered in the future.
