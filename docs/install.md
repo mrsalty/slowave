@@ -11,9 +11,9 @@ Every Slowave integration needs exactly **three things**:
 
 1. **MCP server config** — so your AI client can see the `slowave_*` tools
 2. **Lifecycle instructions** — so the client actually calls those tools on every session
-3. **Background worker** — so raw events consolidate into searchable long-term memories
+3. **Daemon + worker** — `slowave setup` auto-starts the HTTP MCP daemon and background consolidation worker as system services (no manual `slowave serve start` needed)
 
-`slowave setup` handles all three automatically for every supported client it finds. One manual step is required for **Claude Desktop** and **Cursor** (their instructions surfaces aren't accessible programmatically).
+`slowave setup` handles all three automatically for every supported client it finds. A manual step is required for **Claude Desktop** and **Cursor** (their instructions surfaces aren't accessible programmatically).
 
 ---
 
@@ -105,12 +105,10 @@ Verify the install:
 
 ```bash
 which slowave        # e.g. /opt/homebrew/bin/slowave
-slowave serve status  # confirm daemon is ready
-slowave doctor       # checks Python, faiss, ONNX embedding backend, MCP server
-slowave stats        # shows stored events / episodes / schemas
+slowave doctor       # checks Python, faiss, ONNX embedding backend, MCP daemon health
 ```
 
-> The Slowave HTTP daemon (`slowave serve start`) must be running before clients can connect. Use `slowave serve status` to confirm.
+> After `slowave setup`, the HTTP MCP daemon and background worker start automatically as system services. No manual `slowave serve start` is needed.
 
 Slowave stores data in `~/.slowave/slowave.db`. Set `SLOWAVE_DB=/absolute/path` only if you intentionally want a different database.
 
@@ -137,13 +135,13 @@ Run once after install. What it does:
 Options:
 
 ```
-slowave setup --client [claude-code|claude-desktop|cline|cursor|windsurf|all]  # default: all
+slowave setup --client [claude-code|claude-desktop|cline|cursor|opencode|windsurf|all]  # default: all
               --no-worker       # skip worker service install
               --no-hooks        # skip Claude Code hooks
               --dry-run         # preview without writing anything
 ```
 
-> **Claude Desktop only:** `slowave setup` handles MCP config and the worker, but lifecycle instructions must be added manually — the Custom Instructions field is stored server-side with no automation path.
+> **Claude Desktop & Cursor:** `slowave setup` handles MCP config and the worker, but lifecycle instructions must be added manually — their instruction surfaces are stored server-side with no automation path.
 
 ### Step 2a — Claude Desktop: add Custom Instructions
 
@@ -153,9 +151,9 @@ Open Claude Desktop → **Settings → General → Instructions for Claude** and
 
 ---
 
-## Manual setup (without `slowave setup`)
+## Reference: MCP config & lifecycle block
 
-Use this if you prefer to configure things by hand, or if `slowave setup` can't find your client.
+This section contains the raw MCP config block and lifecycle instructions for reference, verification, and manual configuration if `slowave setup` can't find your client.
 
 ### What every client needs
 
@@ -180,15 +178,17 @@ MCP configuration alone is not sufficient. A client that can see the tools but h
 }
 ```
 
-Make sure the daemon is running: `slowave serve start`.
+Make sure the daemon is running. If you used `slowave setup` it's already auto-started; otherwise run `slowave serve start`.
 
 | Client | Config file |
 |---|---|
 | Claude Code | `~/.claude.json` (user-scope MCP registry) |
 | Claude Desktop (macOS) | `~/Library/Application Support/Claude/claude_desktop_config.json` |
 | Claude Desktop (Windows) | `%APPDATA%\Claude\claude_desktop_config.json` |
+| Claude Desktop (Linux) | `~/.config/Claude/claude_desktop_config.json` |
 | Cline (VS Code / Cursor, macOS) | `~/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json` |
 | Cursor (all platforms) | `~/.cursor/mcp.json` |
+| OpenCode (all platforms) | `~/.config/opencode/opencode.json` |
 | Windsurf (all platforms) | `~/.codeium/windsurf/mcp_config.json` |
 
 ### Lifecycle instruction block
@@ -239,6 +239,7 @@ Anti-patterns: skip activate; `remember` without `scope`; bundle facts; context-
 | Claude Desktop | **Settings → General → Instructions for Claude** — see [Step 2a](#step-2a--claude-desktop-add-custom-instructions) | `claude-desktop` |
 | Cline | `~/.cline/rules/slowave.md` (global, injected automatically by `slowave setup`) or repo `.clinerules` | `cline-tui` |
 | Cursor | **Settings → Rules for AI** (or repo `.cursorrules`) — see [Step 2b](#step-2b--cursor-add-rules-for-ai) | `cursor` |
+| OpenCode | `~/.config/opencode/slowave-instructions.md` (injected automatically by `slowave setup`) | `opencode` |
 | Windsurf | `~/.codeium/windsurf/memories/global_rules.md` (injected automatically by `slowave setup`) | `windsurf` |
 
 ### Step 2b — Cursor: add Rules for AI
@@ -353,13 +354,13 @@ Read-only local web UI. Shows DB health, Slowave/MCP processes, schemas, a recal
 | Symptom | Likely cause | Fix |
 |---|---|---|
 | Client doesn't show Slowave tools | MCP path wrong or client not restarted | Run `slowave setup --dry-run` to check the configured path; restart the client after any config change |
-| Client sees tools but never calls them (Claude Code, Cline, Windsurf) | Lifecycle instructions missing | Run `slowave setup` — it re-injects `CLAUDE.md`, `.clinerules`, `global_rules.md`, and Claude Code hooks |
+| Client sees tools but never calls them (Claude Code, Cline, Windsurf, OpenCode) | Lifecycle instructions missing | Run `slowave setup` — it re-injects `CLAUDE.md`, `.clinerules`, `global_rules.md`, and Claude Code hooks |
 | Client sees tools but never calls them (Claude Desktop) | Custom Instructions not set | Add the lifecycle block to Settings → General → Instructions for Claude — see [Step 2a](#step-2a--claude-desktop-add-custom-instructions) |
 | Client sees tools but never calls them (Cursor) | Rules for AI not set | Paste the lifecycle block into Settings → Rules for AI — see [Step 2b](#step-2b--cursor-add-rules-for-ai) |
 | Sessions exist but memory is empty | Client skipping `slowave_activate` or `slowave_commit` | Re-run `slowave setup` to refresh lifecycle instructions; Claude Code hooks enforce `slowave_activate` on every turn |
 | Recall returns nothing or stale results | Worker not running, or `slowave_recall` used as default | Run `slowave worker --once`; use `slowave_activate` for default priming, not `slowave_recall` |
 | Schemas don't appear | Worker/consolidation not running | Run `slowave worker --once` or check the service is active (`launchctl list | grep slowave`) |
-| `slowave setup` runs but clients show no tools | Daemon not running | Run `slowave serve start`, then `slowave serve status` |
+| `slowave setup` runs but clients show no tools | Daemon not running or not restarted | Run `slowave serve status` to check daemon health; restart affected clients after any config change |
 
 
 ---
@@ -396,7 +397,6 @@ See **[slowave_setup.md](./slowave_setup.md)** for the complete list of files th
 ## Further reading
 
 - 📋 **[What gets modified](./slowave_setup.md)** — complete transparency on every file `slowave setup` touches
-- 🔧 **[Manual setup guide](./manual_setup.md)** — step-by-step instructions without `slowave setup`
-- 💻 **[Client quick-refs](../integrations/)** — one-screen cards for Claude Code, Claude Desktop, Cline, Cursor, Windsurf
+- 💻 **[Client quick-refs](../integrations/)** — one-screen cards for Claude Code, Claude Desktop, Cline, Cursor, OpenCode, Windsurf
 - 📊 **[CLI reference](./cli.md)** — all `slowave` commands
 - 🌐 **[Dashboard](./dashboard.md)** — local web UI

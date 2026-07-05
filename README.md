@@ -81,7 +81,9 @@ Slowave mirrors this separation: the language model is a client of memory, not t
 
 ## Installation
 
-Install Slowave:
+### Global setup
+
+Install Slowave and configure every detected client in one go:
 
 ```bash
 pipx install slowave
@@ -92,31 +94,40 @@ brew tap mrsalty/slowave https://github.com/mrsalty/slowave
 brew install slowave
 ```
 
-Configure every supported client:
+Then wire everything up:
 
 ```bash
-slowave setup --dry-run
-slowave setup
-slowave doctor
+slowave setup --dry-run   # preview what will change
+slowave setup             # apply: MCP configs, lifecycle instructions, hooks, services
+slowave doctor            # verify: daemon health, client detection
 ```
 
-`slowave setup` is idempotent and safe to run multiple times.
+`slowave setup` is idempotent and safe to run multiple times. The HTTP MCP daemon and background consolidation worker start automatically as system services.
 
-Claude Desktop and Cursor require one manual paste because their instruction surfaces cannot currently be modified programmatically. During setup, Slowave prints the exact text and destination path.
+Claude Desktop and Cursor require one manual paste after setup because their instruction surfaces cannot be modified programmatically. `slowave setup` prints the exact text and path.
 
-See the complete installation guide:
+### Per-client setup
 
-- [docs/install.md](docs/install.md)
+To configure a single client, or to find client-specific details:
 
-The default embedding model is downloaded from Hugging Face on first use (~45 MB). Subsequent runs work offline.
+| Client | Integration doc |
+|---|---|
+| Claude Code | [integrations/claude-code/README.md](integrations/claude-code/README.md) |
+| Claude Desktop ¹ | [integrations/claude-desktop/README.md](integrations/claude-desktop/README.md) |
+| Cline | [integrations/cline/README.md](integrations/cline/README.md) |
+| Cursor ¹ | [integrations/cursor/README.md](integrations/cursor/README.md) |
+| OpenCode | [integrations/opencode/README.md](integrations/opencode/README.md) |
+| Windsurf | [integrations/windsurf/README.md](integrations/windsurf/README.md) |
 
-Memory is stored locally as a SQLite database:
+¹ requires one manual paste after setup
 
-```
-~/.slowave/slowave.db
-```
+See the complete installation guide: [docs/install.md](docs/install.md)
 
-The database is fully inspectable and remains on your machine. It is not encrypted by default, so sensitive information should be protected using normal operating system permissions or full-disk encryption.
+### Storage
+
+The default embedding model downloads from Hugging Face on first use (~45 MB, cached locally). Subsequent runs work offline.
+
+Memory is stored in a local SQLite database at `~/.slowave/slowave.db` — fully inspectable, never leaves your machine. Not encrypted by default; protect sensitive data with OS permissions or full-disk encryption.
 
 ---
 

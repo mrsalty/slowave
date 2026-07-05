@@ -63,7 +63,11 @@ cp ~/.claude.json.bak.20260611_142300 ~/.claude.json
 | `~/.cursor/mcp.json` | Cursor native MCP config | Adds `mcpServers.slowave` entry |
 | `~/.codeium/windsurf/mcp_config.json` | Windsurf MCP config | Adds `mcpServers.slowave` entry |
 | `~/.codeium/windsurf/memories/global_rules.md` | Windsurf global rules | Prepends lifecycle block between markers (always-on) |
+| `~/.config/opencode/opencode.json` | OpenCode MCP + instructions config | Adds `mcp.slowave` entry and registers `slowave-instructions.md` |
+| `~/.config/opencode/slowave-instructions.md` | OpenCode lifecycle instructions | Creates Slowave-owned instruction file (registered via `instructions` array) |
 | `~/Library/LaunchAgents/com.slowave.worker.plist` | Background worker service | Creates launchd plist; loads with `launchctl` |
+| `~/Library/LaunchAgents/com.slowave.daemon.plist` | HTTP MCP daemon service | Creates launchd plist; auto-starts on load |
+| `~/Library/LaunchAgents/com.slowave.backup.plist` | Daily database backup | Creates launchd plist with `StartCalendarInterval` |
 
 ### Linux
 
@@ -76,6 +80,14 @@ cp ~/.claude.json.bak.20260611_142300 ~/.claude.json
 | `~/.cline/rules/slowave.md` | Cline instructions | Same as macOS |
 | `~/.config/Code/User/globalStorage/.../cline_mcp_settings.json` | Cline MCP config | Same as macOS |
 | `~/.config/systemd/user/slowave-worker.service` | Background worker service | Creates systemd user service; enables with `systemctl --user` |
+| `~/.config/systemd/user/slowave-daemon.service` | HTTP MCP daemon service | Creates systemd user service; auto-starts |
+| `~/.config/systemd/user/slowave-backup.service` | Daily database backup | Creates systemd oneshot service |
+| `~/.config/systemd/user/slowave-backup.timer` | Daily backup timer | Triggers backup daily |
+| `~/.config/opencode/opencode.json` | OpenCode MCP + instructions config | Same as macOS |
+| `~/.config/opencode/slowave-instructions.md` | OpenCode lifecycle instructions | Same as macOS |
+| `~/.cursor/mcp.json` | Cursor native MCP config | Same as macOS |
+| `~/.codeium/windsurf/mcp_config.json` | Windsurf MCP config | Same as macOS |
+| `~/.codeium/windsurf/memories/global_rules.md` | Windsurf global rules | Same as macOS |
 
 ### Windows
 
@@ -154,7 +166,7 @@ Two echo-based enforcement hooks are added to ensure lifecycle compliance:
 
 ### Lifecycle Instructions Block
 
-Added to `~/.claude/CLAUDE.md`, `~/.cline/rules/slowave.md`, and `~/.codeium/windsurf/memories/global_rules.md` between `<!-- slowave-lifecycle-start -->` and `<!-- slowave-lifecycle-end -->` markers. The block instructs agents on the 5-verb cognitive cycle:
+Added to `~/.claude/CLAUDE.md`, `~/.cline/rules/slowave.md`, `~/.codeium/windsurf/memories/global_rules.md`, and `~/.config/opencode/slowave-instructions.md` between `<!-- slowave-lifecycle-start -->` and `<!-- slowave-lifecycle-end -->` markers. The block instructs agents on the 5-verb cognitive cycle:
 - Priming working memory (`slowave_activate`)
 - Encoding durable facts (`slowave_remember`)
 - Mid-task retrieval (`slowave_recall`)
@@ -190,6 +202,36 @@ Runs `slowave worker --interval 300`. Enabled automatically with `systemctl --us
 Created via PowerShell. Triggers at user logon, restarts on failure.
 
 **Verify:** `Get-ScheduledTask -TaskName SlowaveWorker`
+
+---
+
+## HTTP MCP Daemon Service
+
+`slowave setup` installs and starts the HTTP daemon so all clients can connect immediately.  No manual `slowave serve start` is needed.
+
+### macOS (launchd)
+
+**File:** `~/Library/LaunchAgents/com.slowave.daemon.plist`
+
+Runs `slowave serve start`.  Auto-starts at load, kept alive by launchd.
+
+**Verify:** `launchctl list | grep slowave`
+
+### Linux (systemd)
+
+**File:** `~/.config/systemd/user/slowave-daemon.service`
+
+Runs `slowave serve start`.  Enabled automatically with `systemctl --user enable --now`.
+
+**Verify:** `systemctl --user status slowave-daemon`
+
+### Windows (Task Scheduler)
+
+**Task Name:** `SlowaveDaemon`
+
+Created via PowerShell.  Triggers at user logon, restarts on failure.
+
+**Verify:** `Get-ScheduledTask -TaskName SlowaveDaemon`
 
 ---
 
@@ -301,12 +343,6 @@ pipx uninstall slowave
 
 ---
 
-## Manual Setup Alternative
-
-If you prefer manual configuration, see **[manual_setup.md](./manual_setup.md)** for step-by-step instructions.
-
----
-
 ## Trust & Transparency
 
 - ✅ **Open Source** — [github.com/mrsalty/slowave](https://github.com/mrsalty/slowave)
@@ -322,6 +358,5 @@ If you prefer manual configuration, see **[manual_setup.md](./manual_setup.md)**
 ## Questions?
 
 - 📚 [Full install guide](./install.md)
-- 🛠️ [Manual setup guide](./manual_setup.md)
 - 🩺 Run `slowave doctor` to check status
 - 💬 [GitHub Discussions](https://github.com/mrsalty/slowave/discussions)
