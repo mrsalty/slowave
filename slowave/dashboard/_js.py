@@ -494,6 +494,7 @@ const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence",
   </div></td>`;
   tr.classList.add("schema-row-expanded");
   tr.after(expTr);
+  tr.scrollIntoView({behavior:"smooth",block:"start"});
 }
 
 async function loadEventInline(eventId, slotId){
