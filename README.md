@@ -138,16 +138,16 @@ Work in progress — suggest more integrations or report broken ones with setup 
 
 ✅ = manually verified · ⬜ = pending verification
 
-| Client       | macOS | Linux | Windows | Setup                                    |
-|--------------|--|--|--|------------------------------------------|
-| Claude Code  | ✅ | ✅ | ✅ | `slowave setup --client claude-code`     |
-| Cline        | ✅ | ✅ | ✅ | `slowave setup --client cline`           |
-| Cursor       | ✅ | ✅ | ⬜ | `slowave setup --client cursor` ¹        |
-| Windsurf     | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
+| Client         | macOS | Linux | Windows | Setup                                    |
+|----------------|--|--|--|------------------------------------------|
+| Claude Code    | ✅ | ✅ | ✅ | `slowave setup --client claude-code`     |
+| Cline          | ✅ | ✅ | ✅ | `slowave setup --client cline`           |
+| Cursor         | ✅ | ✅ | ⬜ | `slowave setup --client cursor` ¹        |
+| Windsurf       | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
 | Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
-| OpenCode     | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
-| Codex        | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
-| All          |  |  |  | `slowave setup`                          |
+| All the above  |  |  |  | `slowave setup`                          |
+| OpenCode       | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
+| Codex          | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
 
 ¹ requires one manual paste after setup
 
