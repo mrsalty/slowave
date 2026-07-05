@@ -20,14 +20,16 @@ Keep using your favorite AI clients — Slowave learns and evolves with your wor
 
 ![Demo](img/demo.gif)
 
-You use your AI tools normally.
+You work daily with your AI tools:
 
-- Start a new session → relevant context is recalled.
-- Work as usual → useful information is stored automatically.
-- Switch to another client → the same memory is available.
-- Resume later → previous work can be recalled without replaying entire conversations.
-
-Instead of relying on chat history or project-specific markdown files, multiple AI clients continuously build and reuse the same evolving memory.
+- **Day 1** — cold start: Slowave bootstraps memory from existing markdown knowledge, initializing the embedding-based memory state.
+- **Week 1** — emerging patterns: new interactions begin reinforcing relevant signals, forming stable associations.
+- **Month 1** — context consolidates: frequently reinforced information becomes consistently retrievable, low-signal data fades.
+ 
+Multiple AI clients continuously build and reuse the same evolving memory over time:
+- no markdown management
+- no static RAG
+- no LLM loops
 
 ---
 
