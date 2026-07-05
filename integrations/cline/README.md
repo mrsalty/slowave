@@ -14,13 +14,9 @@ slowave setup --client cline
 `slowave setup` handles everything automatically:
 - Patches Cline's MCP settings JSON to connect to the Slowave HTTP daemon
 - Injects the lifecycle instruction block into `~/.cline/rules/slowave.md`
-- Installs the background worker service
+- Installs and starts the background worker and HTTP daemon as system services
 
-Then start the daemon and restart Cline:
-
-```bash
-slowave serve start
-```
+Restart Cline.
 
 ---
 
@@ -57,23 +53,19 @@ Open Cline's MCP settings JSON and add or merge:
 }
 ```
 
-Make sure the daemon is running (`slowave serve start`). Restart / reload Cline after editing.
+Make sure the daemon is running (`slowave serve status`). Restart / reload Cline after editing.
 
 ---
 
 ## Verify
 
-Ask Cline:
+Open Cline and start a coding task. If Slowave is configured correctly, the `slowave_*` tools appear in the tool list and the lifecycle (activate → commit) runs automatically on every session — no manual invocation needed.
 
-```text
-Remember that my preferred food is spaghetti.
-```
-
-Then in a terminal:
+To confirm from the terminal:
 
 ```bash
-slowave stats
-slowave recall "what is my favourite food"
+slowave stats     # shows session/event counts
+slowave doctor    # shows client detection and daemon health
 ```
 
 ---
