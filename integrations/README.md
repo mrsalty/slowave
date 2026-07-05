@@ -12,7 +12,7 @@ slowave setup
 slowave doctor
 ```
 
-`slowave setup` auto-configures every client it detects, injects the same Slowave lifecycle instructions into each client's instruction surface, and installs the background worker. It is idempotent — safe to re-run.
+`slowave setup` auto-configures every client it detects, injects the same Slowave lifecycle instructions into each client's instruction surface, installs the background worker, and starts the HTTP MCP daemon. It is idempotent — safe to re-run.
 
 **Uninstall:**
 ```bash
@@ -20,7 +20,7 @@ slowave cleanup         # remove all configuration
 pipx uninstall slowave  # remove package
 ```
 
-> **Claude Desktop:** after `slowave setup`, paste the lifecycle block into **Settings → General → Instructions for Claude** — see [docs/install.md → Step 2a](../docs/install.md#step-2a--claude-desktop-add-custom-instructions).
+> **Claude Desktop & Cursor:** after `slowave setup`, paste the lifecycle block into the client UI — see [docs/install.md → Step 2a](../docs/install.md#step-2a--claude-desktop-add-custom-instructions) and [Step 2b](../docs/install.md#step-2b--cursor-add-rules-for-ai).
 
 ---
 
