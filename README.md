@@ -73,11 +73,10 @@ Slowave mirrors this separation: the language model is a client of memory, not t
 | Hebbian reinforcement | Recall reinforcement | Memories that prove useful strengthen; unused ones fade |
 | Reconsolidation | Post-retrieval feedback | Recalling a memory reopens it — feedback can strengthen, suppress, or supersede |
 
-### See:
-
 > [Design rationale](docs/design.md)
 > 
 > [Architecture](docs/architecture.md)
+
 ---
 
 ## Installation
@@ -123,13 +122,34 @@ The database is fully inspectable and remains on your machine. It is not encrypt
 
 ## Dashboard
 
-Watch memory evolve through the local dashboard.
-
 Inspect stored memories, browse recall results, visualize relationships, and observe consolidation over time.
 
 ![dashboard.png](img/dashboard.png)
 
+Watch memory evolve through the local dashboard.
+
 ![dashboard_graph.png](img/dashboard_graph.png)
+
+---
+
+## Supported clients
+
+Work in progress — suggest more integrations or report broken ones with setup details.
+
+✅ = manually verified · ⬜ = pending verification
+
+| Client | macOS | Linux | Windows | Setup |
+|---|---|---|---|---|
+| Claude Code | ✅ | ✅ | ✅ | `slowave setup --client claude-code` |
+| Cline | ✅ | ✅ | ✅ | `slowave setup --client cline` |
+| Cursor | ✅ | ✅ | ⬜ | `slowave setup --client cursor` ¹ |
+| Windsurf | ✅ | ✅ | ⬜ | `slowave setup --client windsurf` |
+| Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
+| OpenCode | ⬜ | ⬜ | ⬜ | manual MCP config |
+| Gemini CLI | ⬜ | ⬜ | ⬜ | manual MCP config |
+| Codex CLI | ⬜ | ⬜ | ⬜ | manual MCP config |
+
+¹ requires one manual paste after setup
 
 ---
 
