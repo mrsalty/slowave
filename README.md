@@ -147,7 +147,6 @@ Work in progress — suggest more integrations or report broken ones with setup 
 | Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
 | OpenCode       | ✅ | ⬜ | ⬜ | `slowave setup --client opencode`        |
 | All the above  |  |  |  | `slowave setup`                          |
-| Codex          | ⬜ | ⬜ | ⬜ | manual MCP config — coming soon          |
 
 ¹ requires one manual paste after setup
 
