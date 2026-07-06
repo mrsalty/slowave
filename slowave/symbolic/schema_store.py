@@ -65,15 +65,16 @@ class GeneralizationConfig:
     # promotion of ephemeral/adversarial content.
     stage1_min_distinct_sessions: int = 2
 
-    # Stage 2: >= 50% scope breadth AND >= 40% scope-kind breadth
-    stage2_scope_breadth_pct: float = 0.50
-    stage2_scope_kind_breadth_pct: float = 0.40
+    # Stage 2: >= 55% scope breadth (raised from 50% to compensate for removing
+    # the hard scope-kind gate — see compute_stage for the brain-faithful rationale).
+    stage2_scope_breadth_pct: float = 0.55
+    stage2_scope_kind_breadth_pct: float = 0.40  # kept for the kind_bonus softener only
     stage2_min_distinct_scopes: int = 4
     stage2_min_distinct_sessions: int = 3
 
-    # Stage 3: >= 75% scope breadth AND >= 75% scope-kind breadth
-    stage3_scope_breadth_pct: float = 0.75
-    stage3_scope_kind_breadth_pct: float = 0.75
+    # Stage 3: >= 78% scope breadth (raised from 75% for the same reason).
+    stage3_scope_breadth_pct: float = 0.78
+    stage3_scope_kind_breadth_pct: float = 0.75  # kept for the kind_bonus softener only
     stage3_min_distinct_scopes: int = 8
     stage3_min_distinct_sessions: int = 5
 
@@ -106,29 +107,52 @@ class GeneralizationConfig:
         distinct_scopes: int,
         distinct_scope_kinds: int,
         scope_breadth_pct: float,
-        scope_kind_breadth_pct: float,
         distinct_sessions: int = 0,
     ) -> int:
         """Return the promoted stage (0-3) given current breadth metrics.
 
-        ``distinct_sessions`` is the number of distinct session_ids from which
-        this schema has been recalled via activate()/context_brief().  It acts
-        as a temporal-spread guard: a schema must have survived multiple separate
-        cognitive episodes before being promoted to cross-scope visibility.
-        Defaults to 0 (conservative) when the caller cannot supply it.
+        Brain-faithful design (hippocampus→neocortex transfer):
+
+        The primary criterion is scope breadth — how many distinct contexts
+        found this memory useful, weighted by validated use. Scope breadth is a
+        proxy for semantic diversity: a memory useful in 78% of all active scopes
+        has been tested across situations that are almost certainly semantically
+        far apart, regardless of whether those situations share a categorical
+        label (scope kind).
+
+        Scope kind is no longer a hard gate. The original kind gate created an
+        unreachable condition: stage-1 memories are only admitted in same-kind
+        scopes, so cross-kind recall evidence can never accumulate, and the
+        promotion ladder deadlocked at stage 1 for any single-kind store. The
+        brain generalises based on semantic diversity of reactivation contexts,
+        not their categorical type — "retry backoff with jitter" is a semantic
+        memory whether it was recalled across projects, domains, or customers.
+
+        Kind diversity acts instead as a session-floor softener: if the memory
+        has been recalled (or evidence-linked via cross-scope remember) across
+        >= 2 scope kinds, the temporal spread requirement relaxes by one session.
+        This mirrors the hippocampus being more willing to transfer a schema
+        whose recall pattern spans qualitatively different cognitive domains.
+
+        distinct_sessions is the temporal spread guard — a memory must have
+        survived multiple separate cognitive episodes (distinct waking/sleep
+        cycles) before cross-scope visibility. Within-session rehearsal cannot
+        drive promotion.
         """
+        # Cross-kind bonus: one fewer required session when the memory spans
+        # at least 2 distinct scope kinds, reflecting genuine cross-domain use.
+        kind_bonus = 1 if distinct_scope_kinds >= 2 else 0
+
         if (
             distinct_scopes >= self.stage3_min_distinct_scopes
             and scope_breadth_pct >= self.stage3_scope_breadth_pct
-            and scope_kind_breadth_pct >= self.stage3_scope_kind_breadth_pct
-            and distinct_sessions >= self.stage3_min_distinct_sessions
+            and distinct_sessions + kind_bonus >= self.stage3_min_distinct_sessions
         ):
             return 3
         if (
             distinct_scopes >= self.stage2_min_distinct_scopes
             and scope_breadth_pct >= self.stage2_scope_breadth_pct
-            and scope_kind_breadth_pct >= self.stage2_scope_kind_breadth_pct
-            and distinct_sessions >= self.stage2_min_distinct_sessions
+            and distinct_sessions + kind_bonus >= self.stage2_min_distinct_sessions
         ):
             return 2
         if (
@@ -488,7 +512,7 @@ class SchemaStore:
         conn.execute(
             """
             UPDATE schemas
-            SET salience = salience + ?,
+            SET salience = min(salience + ?, 20.0),
                 confidence = ?,
                 supporting_episode_ids = ?,
                 contradicting_episode_ids = ?,
@@ -563,9 +587,12 @@ class SchemaStore:
         conn.commit()
 
     def reinforce(self, schema_id: int, *, amount: float = 0.2) -> None:
+        # Salience is capped at 20.0 — the working-memory gate normalises by
+        # /20, so growth past that is invisible to ranking and only distorts
+        # salience-ordered listings.
         conn = self.db.connect()
         conn.execute(
-            "UPDATE schemas SET salience = salience + ?, last_updated_ts = ? WHERE id = ?",
+            "UPDATE schemas SET salience = min(salience + ?, 20.0), last_updated_ts = ? WHERE id = ?",
             (float(amount), int(time.time()), int(schema_id)),
         )
         conn.commit()
@@ -649,6 +676,16 @@ class SchemaStore:
         conn.execute(f"UPDATE schemas SET {', '.join(sets)} WHERE id = ?", tuple(args))
         conn.commit()
 
+    def refresh_utility(self, schema_id: int) -> None:
+        """Recompute utility/generalization/noise facets for a schema.
+
+        Public entry point for the feedback service: called after a feedback
+        event is persisted so context_noise_score and needs_review demotion
+        bite at the next retrieval, not at the next consolidation pass that
+        happens to touch this schema.
+        """
+        self._update_utility_scores(schema_id, recall_hit=False)
+
     def _update_utility_scores(self, schema_id: int, *, recall_hit: bool = False) -> None:
         """Recompute and persist stability_score, recurrence_score, schema_utility.
 
@@ -703,18 +740,58 @@ class SchemaStore:
         facets["schema_utility"] = schema_utility
 
         # --- cross-scope generalization metrics (Stage 11) ---
-        # Two sources:
-        # 1. context_recall_items: schemas surfaced via activate/recall (ground truth)
-        # 2. schema_evidence from cross-scope remember (P4 in engine.py): same concept
-        #    remembered from a different scope feeds evidence that breaks the bootstrap
-        #    deadlock where stage-0 schemas can't accumulate cross-scope recall events.
+        # Three sources:
+        # 1. context_recall_items with admitted = 1: schemas actually surfaced
+        #    into a context brief. The admitted filter is load-bearing — without
+        #    it a schema merely evaluated-and-suppressed by the working-memory
+        #    gate in a foreign scope counted as cross-scope usage, so gate
+        #    rejections drove stage promotion (self-promoting noise loop).
+        # 2. context_feedback_events: per-scope validation. A scope where the
+        #    agent marked this schema used counts fully; exposure without
+        #    feedback counts 0.25; a scope with only negative marks counts 0.
+        #    Promotion therefore requires validated usefulness in a foreign
+        #    scope, not mere exposure.
+        # 3. schema_evidence from cross-scope remember (P4 in engine.py): same
+        #    concept remembered from a different scope is strong evidence and
+        #    counts fully; it breaks the bootstrap deadlock where stage-0
+        #    schemas can't accumulate cross-scope recall events.
         schema_id_key = f"sch_{int(schema_id)}"
-        xscope_row = conn.execute(
+        token = f'"{schema_id_key}"'
+
+        fb_rows = conn.execute(
             """
-            SELECT COUNT(DISTINCT cre.scope_id)   AS distinct_scopes,
-                   COUNT(DISTINCT cre.scope_kind) AS distinct_scope_kinds,
-                   COUNT(DISTINCT cre.session_id) AS distinct_sessions,
-                   COUNT(*)                       AS total_cross_recalls
+            SELECT scope_id, used_memory_ids_json, irrelevant_memory_ids_json,
+                   stale_memory_ids_json, wrong_memory_ids_json
+            FROM context_feedback_events
+            WHERE scope_id IS NOT NULL
+              AND (used_memory_ids_json LIKE ? OR irrelevant_memory_ids_json LIKE ?
+                   OR stale_memory_ids_json LIKE ? OR wrong_memory_ids_json LIKE ?)
+            """,
+            (f"%{token}%",) * 4,
+        ).fetchall()
+        used_scopes: set[str] = set()
+        negative_scopes: set[str] = set()
+        total_used_marks = 0
+        total_negative_marks = 0
+        for fb in fb_rows:
+            fb_scope = str(fb["scope_id"])
+            if token in (fb["used_memory_ids_json"] or ""):
+                used_scopes.add(fb_scope)
+                total_used_marks += 1
+            if any(
+                token in (fb[col] or "")
+                for col in (
+                    "irrelevant_memory_ids_json",
+                    "stale_memory_ids_json",
+                    "wrong_memory_ids_json",
+                )
+            ):
+                negative_scopes.add(fb_scope)
+                total_negative_marks += 1
+
+        recall_rows = conn.execute(
+            """
+            SELECT cre.scope_id, cre.scope_kind, cre.session_id
             FROM context_recall_items cri
             JOIN context_recall_events cre ON cri.context_id = cre.context_id
             WHERE cri.memory_id = ?
@@ -722,40 +799,47 @@ class SchemaStore:
               AND cre.scope_id IS NOT NULL
             """,
             (schema_id_key,),
-        ).fetchone()
+        ).fetchall()
+        total_cross_recalls = len(recall_rows)
 
-        recall_kinds = int(xscope_row["distinct_scope_kinds"] or 0) if xscope_row else 0
-        total_cross_recalls = int(xscope_row["total_cross_recalls"] or 0) if xscope_row else 0
-
-        # Merge recall-based and evidence-based cross-scope counts via UNION to
-        # avoid double-counting when the same scope+session appears in both paths
-        # (e.g. a session that both recalled the schema via activate AND triggered
-        # P4 remember reinforcement in the same session).
-        union_row = conn.execute(
+        evidence_rows = conn.execute(
             """
-            SELECT COUNT(DISTINCT scope_id)   AS distinct_scopes,
-                   COUNT(DISTINCT session_id) AS distinct_sessions
-            FROM (
-                SELECT cre.scope_id, cre.session_id
-                FROM context_recall_items cri
-                JOIN context_recall_events cre ON cri.context_id = cre.context_id
-                WHERE cri.memory_id = ?
-                  AND cre.scope_id IS NOT NULL
-                UNION
-                SELECT ses.scope_id, ses.id AS session_id
-                FROM schema_evidence se
-                JOIN raw_events re ON re.id = se.raw_event_id
-                JOIN sessions ses ON ses.id = re.session_id
-                WHERE se.schema_id = ?
-                  AND ses.scope_id IS NOT NULL
-            )
+            SELECT ses.scope_id, ses.scope_kind, ses.id AS session_id
+            FROM schema_evidence se
+            JOIN raw_events re ON re.id = se.raw_event_id
+            JOIN sessions ses ON ses.id = re.session_id
+            WHERE se.schema_id = ?
+              AND ses.scope_id IS NOT NULL
             """,
-            (schema_id_key, int(schema_id)),
-        ).fetchone()
+            (int(schema_id),),
+        ).fetchall()
 
-        distinct_scopes = int(union_row["distinct_scopes"] or 0) if union_row else 0
-        distinct_scope_kinds = recall_kinds  # scope_kind only tracked via recall path
-        distinct_sessions = int(union_row["distinct_sessions"] or 0) if union_row else 0
+        # Per-scope weight: validated 1.0, exposure-only 0.25, net-negative 0.
+        scope_weight: dict[str, float] = {}
+        for r in recall_rows:
+            r_scope = str(r["scope_id"])
+            if r_scope in used_scopes:
+                scope_weight[r_scope] = 1.0
+            elif r_scope in negative_scopes:
+                scope_weight.setdefault(r_scope, 0.0)
+            else:
+                scope_weight.setdefault(r_scope, 0.25)
+        for r in evidence_rows:
+            scope_weight[str(r["scope_id"])] = 1.0
+
+        distinct_scopes = int(sum(scope_weight.values()) + 1e-9)
+        counted_scopes = {s for s, w in scope_weight.items() if w > 0.0}
+        # scope_kind breadth: count from recall rows AND evidence-path rows so
+        # the kind_bonus in compute_stage can fire even when stage-1 gating
+        # blocks cross-kind admission via the recall path.
+        distinct_scope_kinds = len(
+            {str(r["scope_kind"]) for r in recall_rows if str(r["scope_id"]) in counted_scopes and r["scope_kind"]}
+            | {str(r["scope_kind"]) for r in evidence_rows if r["scope_kind"]}
+        )
+        distinct_sessions = len(
+            {str(r["session_id"]) for r in recall_rows if str(r["scope_id"]) in counted_scopes}
+            | {str(r["session_id"]) for r in evidence_rows}
+        )
 
         # Offline reinforcement bonus: each cross-scope reinforcement from
         # consolidation counts as 0.5 equivalent observed-recall scope.
@@ -780,7 +864,6 @@ class SchemaStore:
             distinct_scopes=distinct_scopes,
             distinct_scope_kinds=distinct_scope_kinds,
             scope_breadth_pct=scope_breadth_pct,
-            scope_kind_breadth_pct=scope_kind_breadth_pct,
             distinct_sessions=distinct_sessions,
         )
 
@@ -792,8 +875,26 @@ class SchemaStore:
         facets["scope_kind_breadth_pct"] = scope_kind_breadth_pct
         facets["generalization_stage"] = new_stage
 
+        # --- context noise score (feedback-driven self-cleaning) ---
+        # Ratio of negative to (weighted) positive feedback marks. Read by
+        # WorkingMemoryGate._activation as a ranking penalty. A memory shown
+        # repeatedly and marked irrelevant with never a used mark converges to
+        # ~1.0; a single used mark outweighs three irrelevant marks.
+        facets["context_shown_count"] = total_cross_recalls
+        facets["context_used_count"] = total_used_marks
+        facets["context_irrelevant_count"] = total_negative_marks
+        facets["context_noise_score"] = round(
+            total_negative_marks / (total_negative_marks + 3.0 * total_used_marks + 1.0), 4
+        )
+
+        # Demotion: consistently-negative memories leave default context
+        # entirely (needs_review is only visible in broad/debug modes).
+        demote = total_negative_marks >= 3 and total_used_marks == 0
+
         conn.execute(
-            "UPDATE schemas SET facets_json = ?, generalization_stage = ? WHERE id = ?",
+            "UPDATE schemas SET facets_json = ?, generalization_stage = ?"
+            + (", needs_review = 1" if demote else "")
+            + " WHERE id = ?",
             (dumps_json(facets), new_stage, int(schema_id)),
         )
         conn.commit()
