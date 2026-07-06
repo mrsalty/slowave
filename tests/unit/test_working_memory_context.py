@@ -425,11 +425,15 @@ def test_exploration_slots_produce_peripheral_items() -> None:
 
     schemas = []
     for i in range(4):
-        emb = _make_unit(dim, seed=10 + i)  # distinct embeddings → ~0.7-0.9 cos to cue
+        # Small perturbation off the cue: cos ≈ 0.96 to cue, cos ≈ 0.92 between
+        # schemas (< 0.92 MMR threshold) — all 4 clear the gate deterministically.
+        noise = _make_unit(dim, seed=100 + i)
+        emb = cue_emb + 0.3 * noise
+        emb = emb / (np.linalg.norm(emb) + 1e-12)
         s = _stub_schema(
             i + 1,
             text=f"Fact number {i+1} about the task at hand",
-            embedding=emb,
+            embedding=emb.astype(np.float32),
             salience=float(i + 1),  # increasing salience for peripheral selection
             schema_class="fact",
         )
@@ -438,15 +442,10 @@ def test_exploration_slots_produce_peripheral_items() -> None:
 
     state = gate.select(schemas, cue=cue, policy=policy, cue_embedding=cue_emb)
 
-    # At least one peripheral item must appear when admitted items exceed max_items.
-    # The exact count depends on how many schemas clear the gate (embedding seeds
-    # produce varying cosine across numpy versions), so we only assert the
-    # exploration-slot mechanism fires.
+    # 2 relevance-ranked + 1 exploration = 3 items (all 4 admitted, max_items=2)
+    assert len(state.items) == 3
     peripheral = [item for item in state.items if item.peripheral]
-    assert len(peripheral) >= 1, (
-        f"Expected ≥1 peripheral item when schemas > max_items; "
-        f"got {len(state.items)} total, {len(peripheral)} peripheral"
-    )
+    assert len(peripheral) == 1, f"Expected 1 peripheral item, got {len(peripheral)}"
     assert "peripheral" in peripheral[0].reason
 
 
