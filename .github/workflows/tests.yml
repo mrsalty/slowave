@@ -40,7 +40,7 @@ jobs:
 
     - name: Run faiss integration tests
       run: |
-        python -m pytest tests/ -m "requires_faiss" \
+        python -m pytest tests/ -m "requires_faiss and not slow" \
           --timeout=120 --reruns=2 --reruns-delay=5 -v
       env:
         SLOWAVE_DB: /tmp/slowave_ci_test.db

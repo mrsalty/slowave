@@ -54,7 +54,7 @@ def eng(tmp_path):
 @pytest.fixture()
 def mock_deps():
     """Return mocked dependencies for Consolidator."""
-    return {
+    deps = {
         "db": MagicMock(),
         "semantic": MagicMock(),
         "episode_text": MagicMock(),
@@ -63,6 +63,9 @@ def mock_deps():
         "latent_builder": MagicMock(),
         "geometric_judge": MagicMock(),
     }
+    # No geometric near-duplicate — let the write path reach the judge.
+    deps["schemas"].search_embedding.return_value = []
+    return deps
 
 
 def make_latent_schema(centroid=None, claim="test claim") -> LatentSchema:
