@@ -411,7 +411,6 @@ def test_exploration_slots_produce_peripheral_items() -> None:
     filled by salience and labelled (peripheral)."""
     dim = 8
     cue_emb = _make_unit(dim, seed=1)
-    same_dir = cue_emb.copy()  # cos = 1.0
 
     gate = WorkingMemoryGate()
     cue = MemoryCue(query="task", scope="project:alpha")
@@ -425,10 +424,10 @@ def test_exploration_slots_produce_peripheral_items() -> None:
 
     schemas = []
     for i in range(4):
-        # Small perturbation off the cue: cos ≈ 0.96 to cue, cos ≈ 0.92 between
+        # Perturbation 0.6 off the cue: cos ≈ 0.80–0.95 to cue, cos ≈ 0.55–0.90 between
         # schemas (< 0.92 MMR threshold) — all 4 clear the gate deterministically.
         noise = _make_unit(dim, seed=100 + i)
-        emb = cue_emb + 0.3 * noise
+        emb = cue_emb + 0.6 * noise
         emb = emb / (np.linalg.norm(emb) + 1e-12)
         s = _stub_schema(
             i + 1,

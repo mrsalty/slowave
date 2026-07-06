@@ -303,9 +303,8 @@ class WorkingMemoryGate:
         # "(peripheral)" in the rendered brief.
         slots = 0
         if len(items) > policy.max_items:
-            slots = min(policy.exploration_slots, policy.max_items - 1)
-        primary_policy = replace(policy, max_items=policy.max_items - slots) if slots else policy
-        selected = _apply_budget(items[: max(policy.max_items * 3, policy.max_items)], primary_policy)
+            slots = min(policy.exploration_slots, max(0, policy.max_items - 1))
+        selected = _apply_budget(items[: max(policy.max_items * 3, policy.max_items)], policy)
         if slots:
             chosen = {item.schema.id for item in selected}
             rest = [item for item in items if item.schema.id not in chosen]
