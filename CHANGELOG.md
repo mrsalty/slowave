@@ -1,5 +1,37 @@
 # Changelog
 
+## [0.12.0](https://github.com/mrsalty/slowave/compare/slowave-v0.11.1...slowave-v0.12.0) (2026-07-06)
+
+
+### Features
+
+* shared ops contract layer; align CLI 100% with MCP 5-verb cycle ([65d9dba](https://github.com/mrsalty/slowave/commit/65d9dba4314a309bf13d076d34f6cc7184da3505))
+* thread decay-idle-days through consolidation for testability ([ac8c6a0](https://github.com/mrsalty/slowave/commit/ac8c6a07ebc1d4eadd5176f1508d71f2d00b83ed))
+
+
+### Bug Fixes
+
+* brain-faithful promotion — scope-kind becomes session-floor softener ([537c8b2](https://github.com/mrsalty/slowave/commit/537c8b2eeae00204cc72f25e9d688fa198e6e16e))
+* **dashboard:** restore session link for remember()-r()-created schemas ([db53b86](https://github.com/mrsalty/slowave/commit/db53b8678f31140fd47890d00784b56d517e8a1b))
+* prevent duplicate schemas in consolidation ([f499390](https://github.com/mrsalty/slowave/commit/f499390b520f6ebd05cdf26ca93d228b29022579))
+* relevance-dominant context ranking + noise self-cleaning ([1760ff5](https://github.com/mrsalty/slowave/commit/1760ff556a927fdc9cdadac0ad750e330c9cae06))
+* scope bonus outside identity cap — global schemas survive low-cosine queries ([4e8bdc4](https://github.com/mrsalty/slowave/commit/4e8bdc431bb9a34c403919e43b33a52f1163cbf2))
+* **test:** relax exploration slot assertion — cosine varies across numpy versions ([5850ffe](https://github.com/mrsalty/slowave/commit/5850ffefaf126905985d18c1474664c113a7b2a7))
+* **test:** use cue perturbation for deterministic exploration-slot assert ([b1684d9](https://github.com/mrsalty/slowave/commit/b1684d9eaad6f3f0dbfee196a01e8a292f9cb7f0))
+* **test:** use dataclasses.replace for frozen Schema fields ([f4ff613](https://github.com/mrsalty/slowave/commit/f4ff6139dc57c7eaa8610ce82013e858688a1e0e))
+* **test:** use distinct embeddings to avoid MMR dedup in gate tests ([cec206f](https://github.com/mrsalty/slowave/commit/cec206fdc99942b81abde7985ffaea77dc216b44))
+* **test:** verify decay via consolidate stats, not net salience ([b86d298](https://github.com/mrsalty/slowave/commit/b86d2982e229cab99e68391094445188a7e0e59f))
+* **working-memory:** make exploration slots additive, no, not subtractive ([49bfd00](https://github.com/mrsalty/slowave/commit/49bfd00e23c7bd72ea83a8f0306ba480b5bcb858))
+
+
+### Documentation
+
+* add missing activate options to CLI reference ([723b83b](https://github.com/mrsalty/slowave/commit/723b83babff282e5c03685a74f915111de2e9843))
+* consolidate and refine design & architecture documentation ([375336e](https://github.com/mrsalty/slowave/commit/375336e176865a49ad2937ead211ea0c50a27955))
+* enforcement proposals for slowave remember cycle ([c8f4942](https://github.com/mrsalty/slowave/commit/c8f4942daefd5705a8562a6e3a7048a7080306a9))
+* merge install.md into setup.md, streamline setup docs ([fde6b87](https://github.com/mrsalty/slowave/commit/fde6b87dd6c7eb843d05e660374414d6ab815bb0))
+* replace Discussions link with Issues ([96c0d0a](https://github.com/mrsalty/slowave/commit/96c0d0a1ded2f7bd51f91037c0fab6b5bacec44a))
+
 ## [0.11.1](https://github.com/mrsalty/slowave/compare/slowave-v0.11.0...slowave-v0.11.1) (2026-07-05)
 
 
