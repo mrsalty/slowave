@@ -330,3 +330,160 @@ def test_schema_without_stored_embedding_degrades_gracefully() -> None:
     assert len(state.items) == 1
     assert "cue_overlap=" in state.items[0].reason
     assert "cosine=" not in state.items[0].reason
+
+
+# ---------------------------------------------------------------------------
+# Identity cap and scope bonus tests (regression: global schemas starved below
+# min_activation when cosine is low — the cap was swallowing the scope bonus).
+# ---------------------------------------------------------------------------
+
+
+def test_scope_bonus_is_uncapped_and_survives_low_cosine() -> None:
+    """Same-scope bonus (+0.20) is added AFTER the identity cap, so a schema
+    with near-zero cosine still clears min_activation."""
+    dim = 8
+    cue_emb = _make_unit(dim, seed=1)
+    orth = _make_unit(dim, seed=99)  # orthogonal → cosine ≈ 0
+
+    gate = WorkingMemoryGate()
+    cue = MemoryCue(query="generic fact", scope="project:alpha")
+    policy = GatePolicy(
+        min_activation=0.20,
+        allowed_classes=(
+            "preference", "fact", "decision", "lesson",
+            "warning", "procedure", "constraint",
+        ),
+    )
+
+    schema = _stub_schema(
+        1, text="some fact with zero lexical overlap to query",
+        embedding=orth, salience=1.0, schema_class="fact",
+    )
+    schema.scope_id = "project:alpha"
+
+    state = gate.select([schema], cue=cue, policy=policy, cue_embedding=cue_emb)
+
+    assert len(state.items) == 1, (
+        f"Same-scope schema must be admitted even with near-zero cosine; "
+        f"activation={state.items[0].activation if state.items else 'none'}"
+    )
+    assert state.items[0].activation >= 0.20
+    assert "scope_match=project:alpha" in state.items[0].reason
+
+
+def test_global_schema_admitted_in_strict_scope_with_low_cosine() -> None:
+    """Global schema (scope_id=None) gets +0.15 uncapped bonus and must clear
+    strict_scope min_activation even with near-zero cosine."""
+    dim = 8
+    cue_emb = _make_unit(dim, seed=1)
+    orth = _make_unit(dim, seed=99)
+
+    gate = WorkingMemoryGate()
+    cue = MemoryCue(
+        query="generic fact", scope="project:alpha", mode="strict_scope",
+    )
+    policy = GatePolicy(
+        min_activation=0.20,
+        allowed_classes=(
+            "preference", "fact", "decision", "lesson",
+            "warning", "procedure", "constraint",
+        ),
+    )
+
+    schema = _stub_schema(
+        1, text="global fact with no lexical overlap",
+        embedding=orth, salience=1.0, schema_class="fact",
+    )
+    schema.scope_id = None  # global
+
+    state = gate.select([schema], cue=cue, policy=policy, cue_embedding=cue_emb)
+
+    assert len(state.items) == 1, (
+        "Global schema must be admitted in strict_scope; "
+        f"activation={state.items[0].activation if state.items else 'none'}"
+    )
+    assert "global" in state.items[0].reason
+
+
+def test_exploration_slots_produce_peripheral_items() -> None:
+    """When admitted items exceed max_items, trailing exploration_slots are
+    filled by salience and labelled (peripheral)."""
+    dim = 8
+    cue_emb = _make_unit(dim, seed=1)
+    same_dir = cue_emb.copy()  # cos = 1.0
+
+    gate = WorkingMemoryGate()
+    cue = MemoryCue(query="task", scope="project:alpha")
+    policy = GatePolicy(
+        min_activation=0.10, max_items=2, exploration_slots=1,
+        allowed_classes=(
+            "preference", "fact", "decision", "lesson",
+            "warning", "procedure", "constraint",
+        ),
+    )
+
+    schemas = []
+    for i in range(4):
+        s = _stub_schema(
+            i + 1,
+            text=f"Fact number {i+1} about the task at hand",
+            embedding=same_dir,
+            salience=float(i + 1),  # increasing salience for peripheral selection
+            schema_class="fact",
+        )
+        s.scope_id = "project:alpha"
+        schemas.append(s)
+
+    state = gate.select(schemas, cue=cue, policy=policy, cue_embedding=cue_emb)
+
+    # 2 relevance-ranked + 1 exploration = 3 items
+    assert len(state.items) == 3
+    peripheral = [item for item in state.items if item.peripheral]
+    assert len(peripheral) == 1, f"Expected 1 peripheral item, got {len(peripheral)}"
+    assert "peripheral" in peripheral[0].reason
+
+
+def test_noise_penalty_reduces_activation() -> None:
+    """context_noise_score in facets applies a -0.30×noise penalty, so a
+    noisy schema ranks below an otherwise identical clean schema."""
+    dim = 8
+    cue_emb = _make_unit(dim, seed=1)
+    same_dir = cue_emb.copy()
+
+    gate = WorkingMemoryGate()
+    cue = MemoryCue(query="task", scope="project:alpha")
+    policy = GatePolicy(
+        min_activation=0.10,
+        allowed_classes=(
+            "preference", "fact", "decision", "lesson",
+            "warning", "procedure", "constraint",
+        ),
+    )
+
+    clean = _stub_schema(
+        1, text="Clean fact about the task",
+        embedding=same_dir, salience=1.0, schema_class="fact",
+    )
+    clean.scope_id = "project:alpha"
+
+    noisy = _stub_schema(
+        2, text="Noisy fact about the task",
+        embedding=same_dir, salience=1.0, schema_class="fact",
+    )
+    noisy.scope_id = "project:alpha"
+    noisy.facets["context_noise_score"] = 0.8
+
+    state = gate.select([clean, noisy], cue=cue, policy=policy, cue_embedding=cue_emb)
+
+    clean_act = next(
+        (item.activation for item in state.items if item.schema.id == 1), None,
+    )
+    noisy_act = next(
+        (item.activation for item in state.items if item.schema.id == 2), None,
+    )
+
+    assert clean_act is not None and noisy_act is not None
+    assert noisy_act < clean_act, (
+        f"Noisy schema (noise=0.8) must rank below clean; "
+        f"clean={clean_act:.3f}, noisy={noisy_act:.3f}"
+    )
