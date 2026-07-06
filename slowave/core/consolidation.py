@@ -128,6 +128,16 @@ class Consolidator:
                 skipped += 1
                 continue
 
+            # Episodes backed exclusively by explicit remember events never
+            # re-consolidate into schemas: remember() already created the
+            # first-class schema synchronously, so lifting these episodes only
+            # produces composite near-duplicates (adjacent remembers merged
+            # into one macro-episode concatenate two unrelated claims, which
+            # defeats both text dedupe and the geometric near-dup guard).
+            if self._episodes_all_explicit_remember(sample_ids):
+                skipped += 1
+                continue
+
             # Fetch the prototype's centroid (already maintained by replay).
             try:
                 proto = self.semantic.get(pid)
@@ -203,15 +213,43 @@ class Consolidator:
 
         claim_embedding = schema.centroid
         claim_text = schema.claim
-        related = self._best_related_schema(
-            claim=claim_text, embedding=claim_embedding,
-        )
 
         evidence_rows: list[tuple[int | None, int | None, str | None, float]] = []
         for eid in schema.member_episode_ids:
             evidence_rows.append((int(eid), None, None, 1.0))
 
         scope_id = self._scope_for_episodes(schema.member_episode_ids)
+
+        # Near-duplicate guard: if an existing active schema is geometrically
+        # almost identical (>= 0.92 cosine, same threshold as working-memory
+        # MMR dedup), strengthen it instead of creating another copy. Without
+        # this, every consolidation pass re-encoded each explicit remember
+        # into a duplicate summary schema.
+        if claim_embedding is not None:
+            near = self.schemas.search_embedding(claim_embedding, limit=1)
+            if near and near[0][1] >= 0.92:
+                try:
+                    existing = self.schemas.get(near[0][0])
+                except KeyError:
+                    existing = None
+                if existing is not None and existing.status == "active":
+                    self.schemas.reinforce_schema(
+                        existing.id,
+                        prototype_ids=[prototype_id],
+                        supporting_episode_ids=schema.member_episode_ids,
+                        evidence=evidence_rows,
+                        confidence=schema.confidence,
+                    )
+                    if scope_id and existing.scope_id and scope_id != existing.scope_id:
+                        try:
+                            self.schemas.increment_cross_scope_reinforcement(existing.id)
+                        except Exception:
+                            pass
+                    return "reinforced", existing.id
+
+        related = self._best_related_schema(
+            claim=claim_text, embedding=claim_embedding,
+        )
         
         # Classify consolidated schema by provenance and structure;
         # tag schema_class so the eligibility gate can filter broad summaries.
@@ -384,6 +422,22 @@ class Consolidator:
             (int(prototype_id),),
         ).fetchall()
         return [int(r["episode_id"]) for r in rows]
+
+    def _episodes_all_explicit_remember(self, episode_ids: list[int]) -> bool:
+        """True when every raw event behind these episodes is a remember event."""
+        event_ids: list[int] = []
+        for ep in self.episode_text.get_many(episode_ids):
+            event_ids.extend(int(e) for e in (ep.event_ids or []))
+        if not event_ids:
+            return False
+        ph = ",".join(["?"] * len(event_ids))
+        conn = self.db.connect()
+        row = conn.execute(
+            f"SELECT COUNT(*) AS n FROM raw_events WHERE id IN ({ph}) "
+            "AND type NOT LIKE 'remember:%'",
+            tuple(event_ids),
+        ).fetchone()
+        return int(row["n"] or 0) == 0
 
     def _scope_for_episodes(self, episode_ids: list[int]) -> str | None:
         if not episode_ids:

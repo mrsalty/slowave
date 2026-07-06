@@ -824,6 +824,10 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
                 ev["episode_session"] = str(meta.get("session_id", ""))
                 if not ev.get("quote"):
                     ev["quote"] = str(meta.get("text", meta.get("content", "")))[:300]
+            # Fallback: when episode_id is NULL (e.g. remember() with a live
+            # session), use the raw_event's session_id from the LEFT JOIN.
+            if not ev.get("episode_session"):
+                ev["episode_session"] = str(ev.get("event_session") or "")
         # Collect scopes this schema was actually recalled in
         schema["recalled_scopes"] = []
         try:
