@@ -39,7 +39,7 @@ class ConsolidationService:
         self.schemas = schemas
         self._ingest = ingest
 
-    def consolidate_once(self, *, triggered_by: str = "worker") -> dict[str, Any]:
+    def consolidate_once(self, *, triggered_by: str = "worker", decay_idle_days: float = 30.0) -> dict[str, Any]:
         """Run one replay + latent consolidation pass, then decay unused schemas.
 
         Returns a stats dict with keys ``replay``, ``consolidation``, and ``decay``.
@@ -66,7 +66,7 @@ class ConsolidationService:
                 protos = self._ingest.prototypes_for_episodes([])
                 cs = self.consolidator.consolidate(prototype_ids=protos)
                 consolidation = dataclasses.asdict(cs)
-            decay = self.schemas.decay_unused(idle_days=30.0, dry_run=False)
+            decay = self.schemas.decay_unused(idle_days=decay_idle_days, dry_run=False)
             
             result = {
                 "replay": replay_stats,

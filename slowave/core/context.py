@@ -12,7 +12,7 @@ from __future__ import annotations
 import re
 
 import numpy as np
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
 
 from slowave.symbolic.schema_store import Schema
@@ -119,6 +119,19 @@ _DEFAULT_ALLOWED_CLASSES = (
 _DEFAULT_EXCLUDED_LAYERS = ("raw_event", "episodic_summary", "assistant_summary")
 _DEFAULT_EXCLUDED_SOURCES = ("assistant_summary", "tool_result_summary")
 
+# Ceiling for the query-independent identity prior (class, layer, provenance,
+# scope, salience, utility bonuses combined). Uncapped, these bonuses summed to
+# ~0.58 for a same-scope explicit schema versus a 0.40 maximum cosine
+# contribution, making context briefs nearly query-invariant: what a memory IS
+# must only tie-break, never outrank, how well it matches the current query.
+_IDENTITY_BONUS_CAP = 0.15
+
+# Multiplier for the context_noise_score penalty (computed at consolidation
+# from shown/used/irrelevant feedback counts). A memory repeatedly surfaced
+# but never marked used loses up to 0.30 activation — the feedback loop that
+# actually cleans ranking (salience deltas alone move activation by ~0.0004).
+_NOISE_PENALTY_WEIGHT = 0.30
+
 
 @dataclass(frozen=True)
 class MemoryCue:
@@ -149,6 +162,12 @@ class GatePolicy:
     max_chars: int = 4000
     max_item_chars: int = 500
     min_activation: float = 0.20
+    # When more admitted items exist than max_items, this many trailing slots
+    # are filled by salience instead of relevance — the serendipity channel
+    # that keeps apparently-unrelated memories circulating (and generating the
+    # exposure data cross-scope generalization needs) without ever displacing
+    # a relevant memory from the top of the brief.
+    exploration_slots: int = 2
     allowed_classes: tuple[str, ...] = _DEFAULT_ALLOWED_CLASSES
     excluded_layers: tuple[str, ...] = _DEFAULT_EXCLUDED_LAYERS
     excluded_source_kinds: tuple[str, ...] = _DEFAULT_EXCLUDED_SOURCES
@@ -170,6 +189,7 @@ class WorkingMemoryItem:
     activation: float
     reason: str
     text: str
+    peripheral: bool = False
 
 
 @dataclass(frozen=True)
@@ -276,7 +296,21 @@ class WorkingMemoryGate:
             reverse=True,
         )
         items = _mmr_deduplicate(items, cos_threshold=0.92)
+
+        # Exploration slots: when more admitted items exist than fit, the top
+        # slots are earned by relevance-ranked activation and the trailing
+        # slots by salience — a bounded serendipity channel, labelled
+        # "(peripheral)" in the rendered brief.
+        slots = 0
+        if len(items) > policy.max_items:
+            slots = min(policy.exploration_slots, max(0, policy.max_items - 1))
         selected = _apply_budget(items[: max(policy.max_items * 3, policy.max_items)], policy)
+        if slots:
+            chosen = {item.schema.id for item in selected}
+            rest = [item for item in items if item.schema.id not in chosen]
+            rest.sort(key=lambda i: (i.schema.salience, i.schema.last_updated_ts), reverse=True)
+            for item in rest[:slots]:
+                selected.append(replace(item, peripheral=True, reason=item.reason + ",peripheral"))
         return WorkingMemoryState(
             items=selected,
             rendered=_render(selected),
@@ -405,21 +439,26 @@ class WorkingMemoryGate:
             activation += lexical_weight * overlap
             reasons.append(f"cue_overlap={overlap:.2f}")
 
+        # Identity prior: query-independent bonuses accumulate separately and
+        # are capped at _IDENTITY_BONUS_CAP so relevance (cosine + overlap)
+        # always dominates ranking.
+        prior = 0.0
+
         salience = min(1.0, max(0.0, float(schema.salience) / 20.0))
-        activation += 0.15 * salience
+        prior += 0.15 * salience
         reasons.append(f"salience={salience:.2f}")
 
         schema_class = _lower(facets.get("schema_class"))
         if schema_class in {"preference", "interaction_preference", "constraint"}:
-            activation += 0.12
+            prior += 0.12
             reasons.append(schema_class)
-        elif schema_class in {"decision", "lesson", "habit", "fact"}:
-            activation += 0.07
+        elif schema_class in {"decision", "lesson", "habit", "fact", "procedure", "warning"}:
+            prior += 0.07
             reasons.append(schema_class)
 
         stability = _lower(facets.get("stability"))
         if stability in {"current", "recurring"}:
-            activation += 0.08
+            prior += 0.08
             reasons.append(f"stability={stability}")
 
         # schema_utility: composite of stability_score + recurrence_score.
@@ -428,29 +467,39 @@ class WorkingMemoryGate:
         schema_utility = float(facets.get("schema_utility") or 0.0)
         if schema_utility > 0.0:
             utility_bonus = round(min(0.12, schema_utility * 0.15), 4)
-            activation += utility_bonus
+            prior += utility_bonus
             reasons.append(f"utility={schema_utility:.2f}")
 
         layer = _lower(facets.get("memory_layer"))
         if layer == "profile":
-            activation += 0.12
+            prior += 0.12
             reasons.append("profile")
         elif layer in {"domain", "workspace"}:
-            activation += 0.06
+            prior += 0.06
             reasons.append(layer)
 
         source_kind = _source_kind(facets)
         if source_kind == "explicit_remember":
-            activation += 0.12
+            prior += 0.12
             reasons.append("explicit")
         elif source_kind in {"assistant_summary", "tool_result_summary"}:
             activation -= 0.30
             reasons.append(f"inhibit:{source_kind}")
 
+        activation += min(_IDENTITY_BONUS_CAP, prior)
+
+        # Scope bonus: added AFTER the cap so same-scope and global schemas are
+        # never starved below min_activation by the identity ceiling.  Without
+        # this, a generic query with low cosine can push every schema below the
+        # 0.20 floor even though scope-matched and global schemas belong there.
         if cue.scope and schema.scope_id == cue.scope:
             activation += 0.20
             reasons.append(f"scope_match={cue.scope}")
-        elif cue.scope and schema.scope_id and schema.scope_id != cue.scope:
+        elif not schema.scope_id:
+            activation += 0.15
+            reasons.append("global")
+
+        if cue.scope and schema.scope_id and schema.scope_id != cue.scope:
             # Stage 11: graduated penalty for cross-scope generalization.
             # Stage 2 (contextual) gets a reduced mismatch penalty.
             # Stage 3 (global) gets no mismatch penalty at all.
@@ -471,6 +520,13 @@ class WorkingMemoryGate:
         if "Assistant:" in (schema.content_text or ""):
             activation -= 0.15
             reasons.append("assistant_text_inhibition")
+
+        # Feedback-driven noise penalty: context_noise_score is maintained at
+        # consolidation time from shown/used/irrelevant counts.
+        noise = float(facets.get("context_noise_score") or 0.0)
+        if noise > 0.0:
+            activation -= _NOISE_PENALTY_WEIGHT * noise
+            reasons.append(f"noise={noise:.2f}")
 
         return activation, ",".join(reasons) if reasons else "baseline"
 
@@ -622,4 +678,7 @@ def _apply_budget(items: list[WorkingMemoryItem], policy: GatePolicy) -> list[Wo
 def _render(items: list[WorkingMemoryItem]) -> str:
     if not items:
         return ""
-    return "\n".join(f"- [sch_{item.schema.id}] {item.text}" for item in items)
+    return "\n".join(
+        f"- [sch_{item.schema.id}] {'(peripheral) ' if item.peripheral else ''}{item.text}"
+        for item in items
+    )

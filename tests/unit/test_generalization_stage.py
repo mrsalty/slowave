@@ -136,42 +136,52 @@ class TestGeneralizationConfig:
         self.cfg = GeneralizationConfig()
 
     def test_stage0_no_cross_scope(self):
-        assert self.cfg.compute_stage(0, 0, 0.0, 0.0) == 0
-        assert self.cfg.compute_stage(1, 1, 0.10, 0.10) == 0  # below thresholds
+        assert self.cfg.compute_stage(0, 0, 0.0) == 0
+        assert self.cfg.compute_stage(1, 1, 0.10) == 0  # below thresholds
 
     def test_stage1_requires_min_2_scopes(self):
         # 50% breadth but only 1 distinct scope -> stays stage 0
-        assert self.cfg.compute_stage(1, 1, 0.50, 0.50, distinct_sessions=5) == 0
+        assert self.cfg.compute_stage(1, 1, 0.50, distinct_sessions=5) == 0
 
     def test_stage1_requires_min_sessions(self):
         # scopes/breadth ok but only 1 distinct session -> stays stage 0
-        assert self.cfg.compute_stage(2, 1, 0.25, 0.10, distinct_sessions=1) == 0
+        assert self.cfg.compute_stage(2, 1, 0.25, distinct_sessions=1) == 0
 
     def test_stage1_promoted(self):
         # 25% breadth, 2 distinct scopes, 1 scope_kind, 2 distinct sessions
-        assert self.cfg.compute_stage(2, 1, 0.25, 0.10, distinct_sessions=2) == 1
+        assert self.cfg.compute_stage(2, 1, 0.25, distinct_sessions=2) == 1
 
-    def test_stage2_requires_kind_breadth(self):
-        # breadth ok, kind breadth too low -> stage 1
-        assert self.cfg.compute_stage(4, 1, 0.55, 0.30, distinct_sessions=3) == 1
+    def test_stage2_single_kind_no_longer_blocked(self):
+        # scope breadth ok, only 1 scope kind — kind breadth is no longer a
+        # hard gate, so single-kind stores can reach stage 2.
+        assert self.cfg.compute_stage(4, 1, 0.55, distinct_sessions=3) == 2
 
-    def test_stage2_requires_min_sessions(self):
-        # scopes/breadth ok but only 2 distinct sessions -> stage 1, not 2
-        assert self.cfg.compute_stage(4, 2, 0.55, 0.45, distinct_sessions=2) == 1
+    def test_stage2_kind_bonus_softens_session_floor(self):
+        # 2+ distinct scope kinds grants kind_bonus=1, so 2 sessions
+        # are sufficient for stage 2 when multi-kind evidence exists.
+        assert self.cfg.compute_stage(4, 2, 0.55, distinct_sessions=2) == 2
+
+    def test_stage2_requires_min_sessions_no_kind_bonus(self):
+        # single-kind (kind_bonus=0), only 2 sessions -> still stage 1 (needs 3).
+        assert self.cfg.compute_stage(4, 1, 0.55, distinct_sessions=2) == 1
 
     def test_stage2_promoted(self):
-        assert self.cfg.compute_stage(4, 2, 0.55, 0.45, distinct_sessions=3) == 2
+        assert self.cfg.compute_stage(4, 2, 0.55, distinct_sessions=3) == 2
 
     def test_stage3_promoted(self):
-        assert self.cfg.compute_stage(8, 4, 0.80, 0.80, distinct_sessions=5) == 3
+        assert self.cfg.compute_stage(8, 4, 0.80, distinct_sessions=5) == 3
 
     def test_stage3_requires_min_distinct_scopes(self):
         # pct thresholds met but only 4 distinct scopes -> stage 2
-        assert self.cfg.compute_stage(4, 4, 0.80, 0.80, distinct_sessions=5) == 2
+        assert self.cfg.compute_stage(4, 4, 0.80, distinct_sessions=5) == 2
 
     def test_stage3_requires_min_sessions(self):
-        # scopes/breadth ok but only 4 sessions -> stage 2
-        assert self.cfg.compute_stage(8, 4, 0.80, 0.80, distinct_sessions=4) == 2
+        # single-kind (kind_bonus=0), only 4 sessions -> stage 2 (needs 5)
+        assert self.cfg.compute_stage(8, 1, 0.80, distinct_sessions=4) == 2
+
+    def test_stage3_kind_bonus_fires(self):
+        # multi-kind (kind_bonus=1): 4+1=5 sessions -> stage 3
+        assert self.cfg.compute_stage(8, 4, 0.80, distinct_sessions=4) == 3
 
 
 # ---------------------------------------------------------------------------

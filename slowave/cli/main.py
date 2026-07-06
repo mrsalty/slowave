@@ -41,6 +41,7 @@ from slowave.core.config import SlowaveConfig
 from slowave.core.paths import default_db_path
 from slowave.core.engine import SlowaveEngine
 from slowave.symbolic.encoder import EncoderConfig
+import slowave.ops as ops
 
 DEFAULT_DB = "__DEFAULT_DB__"
 
@@ -134,6 +135,27 @@ def session_end(ctx: click.Context, session_id: str, consolidate: bool) -> None:
     eng.close()
 
 
+@cli.command("commit")
+@click.argument("session_id")
+@click.option(
+    "--outcome",
+    default="unknown",
+    show_default=True,
+    type=click.Choice(["success", "partial", "failure", "unknown"]),
+    help="Task result.",
+)
+@click.pass_context
+def commit_cmd(ctx: click.Context, session_id: str, outcome: str) -> None:
+    """Close a task session and encode events into episodic memories.
+
+    MCP equivalent of slowave_commit.  Pass the session_id from 'slowave activate'.
+    """
+    eng = _build_engine(ctx.obj["db"], disable_encoder=True)
+    result = ops.commit(eng, session_id=session_id, outcome=outcome)
+    _print(result, ctx.obj["json"])
+    eng.close()
+
+
 @cli.command("event")
 @click.option("--session", "session_id", required=True)
 @click.option("--type", "type_", required=True)
@@ -149,37 +171,48 @@ def event_append(ctx: click.Context, session_id: str, type_: str, content: str) 
 
 @cli.command("remember")
 @click.argument("content")
-@click.option("--type", "type_", default="decision")
+@click.option("--type", "memory_type", default="decision", help="Memory type: fact|decision|lesson|warning|...")
 @click.option("--scope", default=None, help="Scope id, e.g. 'project:my-repo'.")
+@click.option("--session", "session_id", default=None, help="Session id to attach this memory to.")
 @click.pass_context
-def remember(ctx: click.Context, content: str, type_: str, scope: str | None) -> None:
-    """Explicitly remember a typed claim."""
-    eng = _build_engine(ctx.obj["db"])
-    rid = eng.remember(content=content, type=type_, scope=scope)
-    _print({"event_id": rid, "type": type_}, ctx.obj["json"])
-    eng.close()
+def remember_cmd(ctx: click.Context, content: str, memory_type: str, scope: str | None, session_id: str | None) -> None:
+    """Explicitly remember a typed claim.
 
+    MCP equivalent of slowave_remember.
+    """
+    eng = _build_engine(ctx.obj["db"])
+    result = ops.remember(eng, content=content, memory_type=memory_type, scope=scope, session_id=session_id)
+    _print(result, ctx.obj["json"])
+    eng.close()
 
 
 @cli.command("recall")
 @click.argument("query")
+@click.option("--scope", default=None, help="Scope filter, e.g. 'project:my-repo'. Recommended.")
+@click.option(
+    "--mode",
+    default="default",
+    show_default=True,
+    type=click.Choice(["default", "strict_scope", "broad", "debug"]),
+)
 @click.option("--top-k", default=5, show_default=True)
 @click.option("--evidence", is_flag=True, help="Include raw event citations.")
 @click.pass_context
-def recall(ctx: click.Context, query: str, top_k: int, evidence: bool) -> None:
-    """Recall memories relevant to a query."""
+def recall_cmd(ctx: click.Context, query: str, scope: str | None, mode: str, top_k: int, evidence: bool) -> None:
+    """Recall memories relevant to a query.
+
+    MCP equivalent of slowave_recall.
+    """
     eng = _build_engine(ctx.obj["db"])
-    result = eng.recall(query, top_k=top_k, evidence=evidence)
-    payload = {
-        "schemas": [asdict(s) for s in result.schemas],
-        "episodes": result.episode_texts,
-        "raw_events": result.raw_events,
-        "expanded_neighbors": {str(k): v for k, v in result.expanded_neighbors.items()},
-    }
+    payload = ops.recall(eng, query=query, scope=scope, mode=mode, top_k=top_k, evidence=evidence)
     if ctx.obj["json"]:
         _print(payload, True)
     else:
-        _format_recall_human(payload)
+        click.echo(f"  retrieval_id: {payload['retrieval_id']}")
+        # _format_recall_human expects schema dicts with int `id` and all Schema fields.
+        # The ops layer returns compact dicts; fall back to a simple listing here.
+        for m in payload["memories"]:
+            click.echo(f"  [{m['id']}] {m['content_text'][:100]}  act={m['activation']:.3f}")
     eng.close()
 
 
@@ -264,8 +297,67 @@ def _format_recall_human(payload: dict[str, Any]) -> None:
     click.echo()
 
 
+@cli.command("activate")
+@click.option("--query", required=True, help="Current task description.")
+@click.option("--scope", default=None, help="Scope id, e.g. 'project:my-repo'.")
+@click.option("--goal", default=None, help="3-6 word verb-noun phrase, e.g. 'fix session reaper race'.")
+@click.option("--task-type", default=None, help="Category, e.g. 'coding' or 'debugging'.")
+@click.option("--situation", default=None, help="JSON object with situational metadata.")
+@click.option("--requirement", "requirements", multiple=True, help="Requirement cue; repeatable.")
+@click.option("--topic", "topics", multiple=True, help="Topic cue; repeatable.")
+@click.option("--entity", "entities", multiple=True, help="Entity cue; repeatable.")
+@click.option(
+    "--mode",
+    default="strict_scope",
+    show_default=True,
+    type=click.Choice(["default", "strict_scope", "broad", "debug"]),
+)
+@click.option("--limit", default=8, show_default=True)
+@click.pass_context
+def activate_cmd(
+    ctx: click.Context,
+    query: str,
+    scope: str | None,
+    goal: str | None,
+    task_type: str | None,
+    situation: str | None,
+    requirements: tuple[str, ...],
+    topics: tuple[str, ...],
+    entities: tuple[str, ...],
+    mode: str,
+    limit: int,
+) -> None:
+    """Prime working memory and open a task session.
+
+    MCP equivalent of slowave_activate.  Returns retrieval_id + session_id;
+    pass them to 'slowave reinforce' and 'slowave commit'.
+    """
+    eng = _build_engine(ctx.obj["db"])
+    situation_obj = json.loads(situation) if situation else {}
+    result = ops.activate(
+        eng,
+        query=query,
+        scope=scope,
+        goal=goal,
+        task_type=task_type,
+        situation=situation_obj,
+        requirements=list(requirements),
+        topics=list(topics),
+        entities=list(entities),
+        mode=mode,
+        limit=limit,
+    )
+    if ctx.obj["json"]:
+        _print(result, True)
+    else:
+        click.echo(f"  retrieval_id: {result['retrieval_id']}  session_id: {result['session_id']}")
+        click.echo(result["rendered"] or "  (no memories yet)")
+    eng.close()
+
+
 @cli.command("context")
 @click.option("--scope", default=None, help="Generic scope id, e.g. project:slowave or domain:cooking.")
+@click.option("--session", "session_id", default=None, help="Bind to existing session (for recording). Auto-starts one if --scope is set.")
 @click.option("--query", default=None, help="Current task/chat cue for relevance gating.")
 @click.option("--goal", default=None, help="Goal-oriented cue for context/procedure recall.")
 @click.option("--task-type", default=None, help="Broad activity type, e.g. writing/planning/debugging.")
@@ -280,15 +372,16 @@ def _format_recall_human(payload: dict[str, Any]) -> None:
 @click.option("--entity", "entities", multiple=True, help="Salient entity cue; can be repeated.")
 @click.option(
     "--mode",
-    default="default",
+    default="strict_scope",
     show_default=True,
-    type=click.Choice(["default", "broad", "debug"]),
+    type=click.Choice(["default", "strict_scope", "broad", "debug"]),
 )
 @click.option("--limit", default=10, show_default=True)
 @click.pass_context
 def context_cmd(
     ctx: click.Context,
     scope: str | None,
+    session_id: str | None,
     query: str | None,
     goal: str | None,
     task_type: str | None,
@@ -300,9 +393,24 @@ def context_cmd(
     mode: str,
     limit: int,
 ) -> None:
-    """Return a gated working-memory brief for an agent/chatbot prompt."""
+    """Return a gated working-memory brief for an agent/chatbot prompt.
+
+    Mirrors slowave_activate: opens an implicit session when --scope is set,
+    records the context retrieval for reinforce correlation, and returns a
+    retrieval_id to pass to 'slowave reinforce'.
+    """
+    import uuid
+
     eng = _build_engine(ctx.obj["db"])
     situation_obj = json.loads(situation) if situation else {}
+
+    # Open a session if scope is set but no session was supplied (mirrors MCP activate).
+    started_session = False
+    active_session_id = session_id
+    if active_session_id is None and scope is not None:
+        active_session_id = eng.session_start(agent="cli", scope=scope, goal=goal)
+        started_session = True
+
     brief = eng.context_brief(
         query=query,
         scope=scope,
@@ -316,9 +424,42 @@ def context_cmd(
         mode=mode,
         limit=limit,
     )
+
+    context_id = f"ctx_{uuid.uuid4().hex[:12]}"
+    scope_id = scope.strip() if scope else None
+    scope_kind = scope.split(":", 1)[0] if scope and ":" in scope else None
+    _internal = {
+        "memory_ids": [f"sch_{item.schema.id}" for item in brief.items],
+        "schemas": [
+            {"id": f"sch_{item.schema.id}", "activation": item.activation}
+            for item in brief.items
+        ],
+    }
+    eng.record_context_recall(
+        context_id=context_id,
+        session_id=active_session_id,
+        scope_id=scope_id,
+        scope_kind=scope_kind,
+        query=query,
+        goal=goal,
+        task_type=task_type,
+        situation=situation_obj,
+        requirements=list(requirements),
+        mode=mode,
+        limit=limit,
+        cue_terms=brief.cue_terms,
+        suppressed=brief.suppressed,
+        response=_internal,
+    )
+
+    cold_start = eng.schemas.count_by_scope(scope_id) == 0 if scope_id else False
+
     if ctx.obj["json"]:
         _print(
             {
+                "retrieval_id": context_id,
+                "session_id": active_session_id,
+                "cold_start": cold_start,
                 "scope": scope,
                 "query": query,
                 "goal": goal,
@@ -334,11 +475,11 @@ def context_cmd(
                 "suppressed": brief.suppressed,
                 "schemas": [
                     {
-                        "id": item.schema.id,
+                        "id": f"sch_{item.schema.id}",
                         "content_text": item.text,
-                        "activation": item.activation,
+                        "activation": round(min(1.0, max(0.0, item.activation)), 4),
                         "reason": item.reason,
-                        "schema": asdict(item.schema),
+                        "source_kind": str((item.schema.facets or {}).get("source_kind", "")),
                     }
                     for item in brief.items
                 ],
@@ -350,6 +491,7 @@ def context_cmd(
             True,
         )
     else:
+        click.echo(f"  retrieval_id: {context_id}" + (f"  session: {active_session_id}" if active_session_id else ""))
         click.echo("=== Working Memory Context ===")
         if not brief.items:
             click.echo("  (no memories yet)")
@@ -401,6 +543,64 @@ def show(ctx: click.Context, ref: str) -> None:
             _print({"error": "not found"}, ctx.obj["json"])
     else:
         _print({"error": f"unknown ref prefix: {ref}"}, ctx.obj["json"])
+    eng.close()
+
+
+@cli.command("reinforce")
+@click.argument("retrieval_id")
+@click.option(
+    "--feedback",
+    default="useful",
+    show_default=True,
+    type=click.Choice(
+        ["useful", "partially_useful", "irrelevant", "stale", "wrong", "missing", "too_much_context"]
+    ),
+    help="Quality label for the retrieved memories.",
+)
+@click.option(
+    "--outcome",
+    default="unknown",
+    show_default=True,
+    type=click.Choice(["success", "partial", "failure", "unknown"]),
+    help="Result of the downstream task.",
+)
+@click.option("--used", "used_memory_ids", multiple=True, metavar="SCH_ID",
+              help="Schema IDs that were relied on (e.g. sch_5). Repeatable.")
+@click.option("--irrelevant", "irrelevant_memory_ids", multiple=True, metavar="SCH_ID",
+              help="Schema IDs that were not relevant. Repeatable.")
+@click.option("--stale", "stale_memory_ids", multiple=True, metavar="SCH_ID",
+              help="Schema IDs that are outdated. Repeatable.")
+@click.option("--wrong", "wrong_memory_ids", multiple=True, metavar="SCH_ID",
+              help="Schema IDs that are factually wrong. Repeatable.")
+@click.pass_context
+def reinforce_cmd(
+    ctx: click.Context,
+    retrieval_id: str,
+    feedback: str,
+    outcome: str,
+    used_memory_ids: tuple[str, ...],
+    irrelevant_memory_ids: tuple[str, ...],
+    stale_memory_ids: tuple[str, ...],
+    wrong_memory_ids: tuple[str, ...],
+) -> None:
+    """Strengthen or suppress memories based on how useful they were.
+
+    MCP equivalent of slowave_reinforce.
+    Pass the retrieval_id from 'slowave activate' or 'slowave recall'.
+    Schema IDs use the sch_N format returned by those commands.
+    """
+    eng = _build_engine(ctx.obj["db"], disable_encoder=True)
+    result = ops.reinforce(
+        eng,
+        retrieval_id=retrieval_id,
+        feedback=feedback,
+        outcome=outcome,
+        used_memory_ids=list(used_memory_ids) or None,
+        irrelevant_memory_ids=list(irrelevant_memory_ids) or None,
+        stale_memory_ids=list(stale_memory_ids) or None,
+        wrong_memory_ids=list(wrong_memory_ids) or None,
+    )
+    _print(result, ctx.obj["json"])
     eng.close()
 
 
@@ -964,11 +1164,18 @@ def dedup_schemas_cmd(ctx: click.Context, apply_changes: bool) -> None:
 
 
 @cli.command("consolidate")
+@click.option(
+    "--decay-idle-days",
+    default=30.0,
+    show_default=True,
+    help="Override the idle-days threshold for the decay step. "
+    "Useful in tests: --decay-idle-days 0 decays all eligible schemas immediately.",
+)
 @click.pass_context
-def consolidate_cmd(ctx: click.Context) -> None:
+def consolidate_cmd(ctx: click.Context, decay_idle_days: float) -> None:
     """Manually trigger a replay + latent consolidation pass."""
     eng = _build_engine(ctx.obj["db"])
-    result = eng.consolidate_once()
+    result = eng.consolidate_once(decay_idle_days=decay_idle_days)
     _print(result, ctx.obj["json"])
     eng.close()
 

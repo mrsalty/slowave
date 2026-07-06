@@ -443,6 +443,15 @@ class FeedbackService:
         )
         conn.commit()
 
+        # Refresh noise/utility facets now that the event row is persisted —
+        # the per-schema adjustments above ran before this insert and would
+        # otherwise lag one feedback event behind.
+        for schema_id in set(used_ids + irrelevant_ids + stale_ids + wrong_ids):
+            try:
+                self.schemas.refresh_utility(schema_id)
+            except KeyError:
+                pass
+
         return {
             "retrieval_id": retrieval_id,
             "context_id": retrieval_id if retrieval_type == "context" else None,
