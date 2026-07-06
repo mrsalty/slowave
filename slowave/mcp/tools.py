@@ -13,12 +13,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from dataclasses import asdict
 from typing import Any, Callable
 
 from mcp.server.fastmcp import FastMCP
 
 from slowave.mcp import session_resolver
+import slowave.ops as ops
 
 log = logging.getLogger(__name__)
 
@@ -128,53 +128,30 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
             rendered: human-readable memory brief.
             schemas: [{id, text, activation, reason, source_kind}, ...].
         """
-        import uuid
-
         try:
             eng = build_engine(disable_encoder=not bool(query or topics or entities))
-            sid = eng.session_start(agent="mcp", scope=scope, goal=goal)
-            session_resolver.bind(scope, sid)
-            brief = eng.context_brief(
+            # Resolve or open a session via the MCP implicit-session resolver.
+            sid = session_resolver.resolve(scope)
+            result = ops.activate(
+                eng,
                 query=query,
                 scope=scope,
                 goal=goal,
                 task_type=task_type,
-                situation=situation or {},
-                requirements=requirements or [],
-                topics=topics or [],
-                entities=entities or [],
-                limit=limit,
+                situation=situation,
+                requirements=requirements,
+                topics=topics,
+                entities=entities,
                 mode=mode,
+                limit=limit,
+                session_id=sid,
+                agent="mcp",
             )
-            scope_id = scope.strip() if scope else None
-            memory_count = eng.schemas.count_by_scope(scope_id)
-            cold_start = memory_count == 0
-            context_id = f"ctx_{uuid.uuid4().hex[:12]}"
-            _internal = {
-                "memory_ids": [f"sch_{item.schema.id}" for item in brief.items],
-                "schemas": [
-                    {"id": f"sch_{item.schema.id}", "activation": item.activation}
-                    for item in brief.items
-                ],
-            }
-            public_schemas = [
-                {
-                    "id": f"sch_{item.schema.id}",
-                    "text": str(item.schema.content_text or "")[:500],
-                    "activation": round(min(1.0, max(0.0, item.activation)), 2),
-                    "reason": item.reason,
-                    "source_kind": str((item.schema.facets or {}).get("source_kind", "")),
-                    **(
-                        {"confidence": item.schema.confidence}
-                        if item.schema.confidence < 0.7
-                        else {}
-                    ),
-                }
-                for item in brief.items
-            ]
-            rendered = brief.rendered
-            if cold_start:
-                scope_label = scope_id if scope_id else "global (no scope set — consider passing scope='project:<name>')"
+            session_resolver.bind(scope, result["session_id"])
+            # MCP-specific: add cold-start hint text and fire a synthetic event.
+            if result["cold_start"]:
+                scope_id = scope.strip() if scope else None
+                scope_label = scope_id or "global (no scope set — consider passing scope='project:<name>')"
                 hint = (
                     f"[cold start] No memories found for scope '{scope_label}'.\n"
                     "Recommended on cold start:\n"
@@ -189,17 +166,9 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                     "from the current request.\n"
                     "  4. Then respond to the user."
                 )
-                rendered = f"{rendered}\n\n{hint}".lstrip("\n")
-            response: dict[str, Any] = {
-                "retrieval_id": context_id,
-                "session_id": sid,
-                "rendered": rendered,
-                "cold_start": cold_start,
-                "schemas": public_schemas,
-            }
-            if cold_start:
-                response["suggested_actions"] = ["remember_project_facts"]
-                response["cold_start_hints"] = (
+                result["rendered"] = f"{result['rendered']}\n\n{hint}".lstrip("\n")
+                result["suggested_actions"] = ["remember_project_facts"]
+                result["cold_start_hints"] = (
                     "Memory is empty for this scope. "
                     "Consider reading CLAUDE.md, README.md, or AGENTS.md (whichever exists first). "
                     "For each fact ask: would this be useful in any future interaction within this scope? "
@@ -209,48 +178,10 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                     "If neither file exists, apply the same questions to what is visible from the current request. "
                     "Then respond to the user."
                 )
-            if mode == "debug":
-                response["activation_trace"] = [asdict(t) for t in brief.activation_trace]
-                response["cue_terms"] = brief.cue_terms
-            scope_kind_val = (
-                scope.split(":", 1)[0]
-                if scope and ":" in scope
-                else ("generic" if scope else None)
-            )
-            _filtered_items = [
-                {
-                    "memory_id": f"sch_{t.schema_id}",
-                    "memory_type": "schema",
-                    "activation": t.activation,
-                    "reason": t.reason,
-                }
-                for t in brief.activation_trace
-                if not t.admitted and t.reason != "scope_mismatch"
-            ]
             asyncio.create_task(
-                _bg_record_context_recall(
-                    eng,
-                    context_id=context_id,
-                    session_id=sid,
-                    scope_id=scope_id,
-                    scope_kind=scope_kind_val,
-                    query=query,
-                    goal=goal,
-                    task_type=task_type,
-                    situation=situation or {},
-                    requirements=requirements or [],
-                    mode=mode,
-                    limit=limit,
-                    topics=topics or [],
-                    entities=entities or [],
-                    cue_terms=brief.cue_terms,
-                    suppressed=brief.suppressed,
-                    response=_internal,
-                    filtered_items=_filtered_items,
-                )
+                _bg_log_event(eng, result["session_id"], "context_query", query)
             )
-            asyncio.create_task(_bg_log_event(eng, sid, "context_query", query))
-            return response
+            return result
         except Exception as e:
             log.error("slowave_activate failed: %s", e, exc_info=True)
             return {
@@ -282,48 +213,15 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                   \"broad\" (active + needs_review), \"debug\" (all statuses).
         Returns:
             retrieval_id: pass to slowave_reinforce after using memories.
-            memories: list of {id, text, activation, reason, source_kind}.
+            memories: list of {id, content_text, activation, scope_id, ...}.
         """
-        import uuid
         try:
             eng = build_engine()
-            r = eng.recall(query, top_k=top_k, evidence=evidence, scope=scope, mode=mode)
-            recall_id = f"rec_{uuid.uuid4().hex[:12]}"
-            from slowave.mcp.compact import CompactSchema
-            _internal_ids = [f"sch_{s.id}" for s in r.schemas]
-            _internal_schemas = [
-                {
-                    "id": f"sch_{s.id}",
-                    "score": r.schema_activations.get(s.id),
-                    "salience": s.salience,
-                    "confidence": s.confidence,
-                    "content": str(s.content_text or "")[:200],
-                }
-                for s in r.schemas
-            ]
-            asyncio.create_task(
-                _bg_record_retrieval(
-                    eng,
-                    retrieval_id=recall_id,
-                    retrieval_type="recall",
-                    query=query,
-                    mode="recall",
-                    limit=top_k,
-                    response={"memory_ids": _internal_ids, "schemas": _internal_schemas},
-                )
-            )
-            return {
-                "retrieval_id": recall_id,
-                "memories": [
-                    CompactSchema.from_schema(
-                        s, activation=r.schema_activations.get(s.id)
-                    ).to_dict()
-                    for s in r.schemas
-                ],
-            }
+            return ops.recall(eng, query=query, top_k=top_k, evidence=evidence, scope=scope, mode=mode)
         except Exception as e:
             log.error("slowave_recall failed: %s", e, exc_info=True)
             return {"retrieval_id": None, "memories": [], "error": str(e)}
+
     @mcp.tool(name="slowave_remember")
     async def slowave_remember(
         content: str,
@@ -341,23 +239,17 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                   open_question|warning|lesson|artifact.
             scope: optional scope, e.g. \"project:my-repo\".
             session_id: optional; inferred from activate's implicit session if omitted.
-        IMPORTANT: Use ONLY for durable knowledge that should persist across sessions:
-        decisions, lessons, preferences, constraints, architectural facts, procedures.
-        Do NOT store ephemeral task state (current PR, in-progress bug, temp workarounds)
-        — that belongs in session events (encoded automatically by activate/commit).
+        IMPORTANT: Use ONLY for durable knowledge that should persist across sessions.
+        Do NOT store ephemeral task state — that belongs in session events.
         """
-        if not content or not str(content).strip():
-            return {"stored": False, "skipped": True, "reason": "content is empty", "scope": scope}
         try:
             eng = build_engine()
             resolved_sid = session_id or session_resolver.resolve(scope)
-            rid = eng.remember(
-                content=content, type=type, scope=scope, session_id=resolved_sid
-            )
-            return {"stored": True, "event_id": f"evt_{rid}", "type": type, "scope": scope}
+            return ops.remember(eng, content=content, memory_type=type, scope=scope, session_id=resolved_sid)
         except Exception as e:
             log.error("slowave_remember failed: %s", e, exc_info=True)
             return {"stored": False, "error": str(e), "type": type, "scope": scope}
+
     @mcp.tool(name="slowave_reinforce")
     async def slowave_reinforce(
         retrieval_id: str,
@@ -383,7 +275,8 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         """
         try:
             eng = build_engine(disable_encoder=True)
-            return eng.retrieval_feedback(
+            return ops.reinforce(
+                eng,
                 retrieval_id=retrieval_id,
                 feedback=feedback,
                 outcome=outcome,
@@ -395,6 +288,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         except Exception as e:
             log.error("slowave_reinforce failed: %s", e, exc_info=True)
             return {"error": str(e), "retrieval_id": retrieval_id}
+
     @mcp.tool(name="slowave_commit")
     async def slowave_commit(
         outcome: str | None = None,
@@ -426,21 +320,19 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 _bg_log_event(eng, resolved_sid, "task_complete", f"outcome={outcome_str}")
             )
             await asyncio.sleep(0.05)
-            result = eng.session_end(resolved_sid, consolidate=False, outcome=outcome_str)
+            result = ops.commit(eng, session_id=resolved_sid, outcome=outcome_str)
             session_resolver.clear(scope)
-            return {
-                "session_id": resolved_sid,
-                "episodes_formed": result.get("episodes_formed", 0),
-            }
+            return result
         except Exception as e:
             log.error("slowave_commit failed: %s", e, exc_info=True)
             return {"session_id": session_id, "episodes_formed": 0, "error": str(e)}
+
     @mcp.tool(name="slowave_stats")
     async def slowave_stats() -> dict[str, Any]:
         """Return system counts: episodes, prototypes, schemas, edges."""
         try:
             eng = build_engine(disable_encoder=True)
-            return eng.stats()
+            return ops.stats(eng)
         except Exception as e:
             log.error("slowave_stats failed: %s", e, exc_info=True)
             return {"error": str(e), "episodes": 0, "schemas": 0, "procedures": 0}

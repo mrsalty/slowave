@@ -1,70 +1,168 @@
 # Slowave CLI
 
-The CLI is useful for manual inspection, debugging, local dashboard access, benchmark runs, and one-off memory writes. For normal AI-client usage, configure MCP and prompt/rules injection instead; CLI-only usage will not make an agent remember automatically.
-
-## CLI-only quickstart
+The CLI mirrors the MCP tools 1-to-1, making the full cognitive cycle scriptable and testable without a running daemon. All commands accept `--json` for machine-readable output.
 
 ```bash
-SID=$(slowave --json session start --agent manual-cli \
-      | python3 -c 'import sys,json;print(json.load(sys.stdin)["session_id"])')
+export SLOWAVE_DB=/path/to/slowave.db   # optional; defaults to ~/.slowave/slowave.db
+```
 
+---
+
+## 5-verb cognitive cycle
+
+These commands map exactly to the MCP tools used by AI agents.
+
+### `slowave activate`
+
+Prime working memory and open a task session.
+
+```bash
+slowave --json activate \
+  --query "fix the session reaper race condition" \
+  --scope "project:my-repo" \
+  --goal "fix reaper race" \
+  --mode strict_scope
+```
+
+Returns `retrieval_id` and `session_id`. Pass them to `reinforce` and `commit`.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--query` | *(required)* | Task description |
+| `--scope` | — | `project:<name>` or `domain:<topic>` |
+| `--goal` | — | 3-6 word verb-noun phrase |
+| `--task-type` | — | e.g. `coding`, `debugging` |
+| `--mode` | `strict_scope` | `default` · `strict_scope` · `broad` · `debug` |
+| `--limit` | `8` | Max schemas returned |
+
+---
+
+### `slowave remember`
+
+Encode a durable typed claim into long-term memory.
+
+```bash
+slowave --json remember "Prefer SQLite for MVPs." \
+  --type fact \
+  --scope "project:my-repo" \
+  --session sess_abc123
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--type` | `decision` | `fact` · `preference` · `decision` · `constraint` · `procedure` · `lesson` · `warning` · `open_question` · `artifact` · `task` |
+| `--scope` | — | Scope to attach the memory to |
+| `--session` | — | Bind to an open session (optional) |
+
+---
+
+### `slowave recall`
+
+Semantic retrieval — mid-task lookup beyond what `activate` surfaced.
+
+```bash
+slowave --json recall "database preference" \
+  --scope "project:my-repo" \
+  --top-k 5
+```
+
+Returns `retrieval_id` and `memories`. Pass `retrieval_id` to `reinforce`.
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--scope` | — | Recommended; omit to search all scopes |
+| `--mode` | `default` | `default` · `strict_scope` · `broad` · `debug` |
+| `--top-k` | `5` | Max memories returned |
+| `--evidence` | off | Include raw event citations |
+
+---
+
+### `slowave reinforce`
+
+Apply feedback to memories from a prior `activate` or `recall`.
+
+```bash
+slowave --json reinforce ctx_abc123 \
+  --feedback useful \
+  --outcome success \
+  --used sch_5 sch_12 \
+  --irrelevant sch_7
+```
+
+| Argument / Option | Description |
+|------------------|-------------|
+| `RETRIEVAL_ID` | `ctx_…` from `activate`, `rec_…` from `recall` |
+| `--feedback` | `useful` · `partially_useful` · `irrelevant` · `stale` · `wrong` · `missing` · `too_much_context` |
+| `--outcome` | `success` · `partial` · `failure` · `unknown` |
+| `--used SCH_ID` | Schema IDs relied on (repeatable) |
+| `--irrelevant SCH_ID` | Schema IDs not relevant (repeatable) |
+| `--stale SCH_ID` | Outdated IDs (repeatable) |
+| `--wrong SCH_ID` | Factually wrong IDs (repeatable) |
+
+---
+
+### `slowave commit`
+
+Close a session and encode its events into episodic memories.
+
+```bash
+slowave --json commit sess_abc123 --outcome success
+```
+
+| Option | Default | Description |
+|--------|---------|-------------|
+| `--outcome` | `unknown` | `success` · `partial` · `failure` · `unknown` |
+
+---
+
+## Session & event management
+
+Lower-level commands for manual session control.
+
+```bash
+# Start a session
+SID=$(slowave --json session start --scope "project:my-repo" \
+      | python3 -c 'import sys,json; print(json.load(sys.stdin)["session_id"])')
+
+# Append raw events
 slowave event --session "$SID" --type user_message --content "I prefer SQLite for MVPs."
-slowave event --session "$SID" --type assistant_message --content "Noted the SQLite preference."
+slowave event --session "$SID" --type assistant_message --content "Noted."
+
+# End session (use commit for the MCP-aligned path; session end for raw control)
 slowave session end "$SID"
-slowave worker --once
-slowave context --query "database preference" --application manual-cli
-slowave recall "database preference" --top-k 5 --evidence
-slowave dashboard
 ```
 
-## Command list
+`slowave commit` is preferred over `slowave session end` when working in the cognitive cycle — it maps to `slowave_commit` and uses the same contract. `session end` is lower-level and accepts `--consolidate` for synchronous replay.
 
-| Command | Purpose |
-|---|---|
-| `slowave session start --agent <name> --scope <scope>` | Start a memory session (scope e.g. `project:my-repo`, `domain:cooking`) |
-| `slowave event --session <sid> --type <type> --content <text>` | Append a raw event to a session |
-| `slowave session end <sid>` | Close a session and form episodes, fast/no LLM by default |
-| `slowave remember <text> --type <type> --scope <scope>` | Store an explicit high-salience memory |
-| `slowave context --query <task> --topic <topic>` | Print a gated working-memory brief for prompt injection. MCP `slowave_activate` also returns `retrieval_id` / `session_id` and opens an implicit session. |
-| `slowave recall <query> --top-k 5 --evidence` | Retrieve relevant schemas, episodes, and optional raw evidence. MCP `slowave_recall` also returns `retrieval_id` for use with `slowave_reinforce`. |
-| `slowave schema --needs-review --limit 50` | List schemas, optionally the review queue |
-| `slowave show sch_123` | Inspect a schema, episode, or raw event by ref |
-| `slowave stats` | Print episode/prototype/schema/edge counts |
-| `slowave status` | Print DB health, schema health, and local Slowave process snapshot |
-| `slowave dedup-schemas --apply` | Merge exact duplicate active schemas; dry-run by default |
-| `slowave backup [--dir <path>] [--keep N] [--json]` | Create a gzip-compressed SQLite backup; rotates old copies (keep last 7) |
-| `slowave consolidate` | Run replay + latent schema consolidation once |
-| `slowave worker --interval 300` | Run periodic background consolidation |
-| `slowave dashboard --port 8765` | Run the local read-only web dashboard |
-| `slowave doctor` | Check Python version, dependencies, embedding backend, SQLite write access, and MCP server availability. Exits 1 on failure. |
-| `slowave setup [--client all\|claude-code\|claude-desktop\|cline] [--dry-run]` | One-command post-install wiring: patches MCP configs, injects CLAUDE.md/clinerules lifecycle block, installs enforcement hooks (Claude Code), registers the background worker and daily backup services (launchd/systemd/Task Scheduler). Idempotent. |
+---
 
-## Event types
+## Operational commands
 
-Common event types:
+| Command | Description |
+|---------|-------------|
+| `slowave consolidate [--decay-idle-days N]` | Replay + latent consolidation pass. `--decay-idle-days 0` decays all eligible schemas immediately (useful in tests). |
+| `slowave worker [--interval 300] [--once]` | Background consolidation worker. `--once` for cron/CI. |
+| `slowave context [OPTIONS]` | Context brief without opening a session (operational inspection). Same options as `activate`. |
+| `slowave schema [--needs-review] [--limit 50]` | List schemas. |
+| `slowave show sch_N \| epi_N \| evt_N` | Inspect a schema, episode, or raw event. |
+| `slowave stats` | Episode / prototype / schema / edge counts. |
+| `slowave status` | DB health, schema health, local process snapshot. |
+| `slowave dedup-schemas [--apply]` | Merge exact duplicate active schemas; dry-run by default. |
+| `slowave backup [--dir PATH] [--keep N]` | Gzip-compressed SQLite backup; rotates old copies. |
+| `slowave dashboard [--port 8765]` | Local read-only web dashboard. |
+| `slowave doctor` | Checks Python version, deps, encoder, SQLite, MCP availability. Exits 1 on failure. |
+| `slowave setup [--client all\|claude-code\|…] [--dry-run]` | One-command post-install wiring: MCP configs, CLAUDE.md lifecycle block, hooks, worker and backup services. Idempotent. |
+| `slowave serve start \| stop \| status` | Manage the HTTP MCP daemon (port 8766 by default). |
 
-```text
-user_message
-assistant_message
-tool_call
-tool_result
-decision
-discovery
-error
-task_complete
-task_failed
-```
+---
 
-## Memory types for `remember`
+## Environment variables
 
-```text
-fact
-preference
-decision
-constraint
-task
-open_question
-warning
-lesson
-artifact
-```
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `SLOWAVE_DB` | `~/.slowave/slowave.db` | SQLite database path |
+| `SLOWAVE_MCP_HTTP_PORT` | `8766` | HTTP daemon port |
+| `SLOWAVE_MCP_HOST` | `127.0.0.1` | HTTP daemon bind host |
+| `SLOWAVE_DAEMON_PID` | `~/.slowave/daemon.pid` | PID file path |
+| `SLOWAVE_SESSION_IDLE_TIMEOUT` | `3600` | Session idle reaper timeout (seconds) |
+| `KMP_DUPLICATE_LIB_OK` | — | Set to `TRUE` on macOS if FAISS + ONNX segfault |
