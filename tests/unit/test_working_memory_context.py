@@ -182,6 +182,7 @@ def test_explicit_remember_marks_schema_as_injectable_with_memory_layer() -> Non
 
 import numpy as np
 
+from dataclasses import replace
 from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate
 
 
@@ -359,7 +360,7 @@ def test_scope_bonus_is_uncapped_and_survives_low_cosine() -> None:
         1, text="some fact with zero lexical overlap to query",
         embedding=orth, salience=1.0, schema_class="fact",
     )
-    schema.scope_id = "project:alpha"
+    schema = replace(schema, scope_id="project:alpha")
 
     state = gate.select([schema], cue=cue, policy=policy, cue_embedding=cue_emb)
 
@@ -394,7 +395,7 @@ def test_global_schema_admitted_in_strict_scope_with_low_cosine() -> None:
         1, text="global fact with no lexical overlap",
         embedding=orth, salience=1.0, schema_class="fact",
     )
-    schema.scope_id = None  # global
+    schema = replace(schema, scope_id=None)  # global
 
     state = gate.select([schema], cue=cue, policy=policy, cue_embedding=cue_emb)
 
@@ -431,7 +432,7 @@ def test_exploration_slots_produce_peripheral_items() -> None:
             salience=float(i + 1),  # increasing salience for peripheral selection
             schema_class="fact",
         )
-        s.scope_id = "project:alpha"
+        s = replace(s, scope_id="project:alpha")
         schemas.append(s)
 
     state = gate.select(schemas, cue=cue, policy=policy, cue_embedding=cue_emb)
@@ -464,14 +465,14 @@ def test_noise_penalty_reduces_activation() -> None:
         1, text="Clean fact about the task",
         embedding=same_dir, salience=1.0, schema_class="fact",
     )
-    clean.scope_id = "project:alpha"
+    clean = replace(clean, scope_id="project:alpha")
 
     noisy = _stub_schema(
         2, text="Noisy fact about the task",
         embedding=same_dir, salience=1.0, schema_class="fact",
     )
-    noisy.scope_id = "project:alpha"
-    noisy.facets["context_noise_score"] = 0.8
+    noisy = replace(noisy, scope_id="project:alpha")
+    noisy = replace(noisy, facets={**noisy.facets, "context_noise_score": 0.8})
 
     state = gate.select([clean, noisy], cue=cue, policy=policy, cue_embedding=cue_emb)
 
