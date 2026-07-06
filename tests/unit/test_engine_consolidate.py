@@ -182,3 +182,28 @@ def test_decay_schemas_explicit_remember_schemas_are_exempt(eng):
 
     salience_after = eng.schemas.get(schema_id).salience
     assert salience_after == salience_before
+
+
+# ---------------------------------------------------------------------------
+# Explicit-remember skip
+# ---------------------------------------------------------------------------
+
+
+def test_consolidate_skips_pure_remember_episodes(eng):
+    """Episodes whose every raw event is a remember:* type must not be
+    re-consolidated into schemas — remember() already created the first-class
+    schema synchronously.  Without this skip, adjacent remembers merge into
+    a macro-episode whose concatenated text produces a composite duplicate
+    (the original bug this branch fixes)."""
+    eng.remember(content="SessionReaper scans every 60 seconds", type="fact")
+    eng.remember(content="HTTP daemon binds port 8766", type="fact")
+
+    before = eng.schemas.count()
+
+    eng.consolidate_once()
+
+    # No new schemas: consolidation skipped both pure-remember episodes
+    assert eng.schemas.count() == before, (
+        f"Pure-remember episodes must not create new schemas; "
+        f"{before} before → {eng.schemas.count()} after"
+    )
