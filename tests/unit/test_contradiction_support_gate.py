@@ -73,6 +73,8 @@ def mock_consolidator():
     # Make schemas.create return a new ID and not trigger dedup
     cons.schemas.create.return_value = 42
     cons.schemas.last_create_reinforced_existing_id = None
+    # No geometric near-duplicate — let the write path reach the judge.
+    cons.schemas.search_embedding.return_value = []
     # Force the judge to return "contradicts" so we test the gate.
     from slowave.latent.schema import GeometricVerdict
     cons.geometric_judge.judge = MagicMock(return_value=GeometricVerdict(
