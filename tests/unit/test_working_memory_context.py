@@ -425,10 +425,11 @@ def test_exploration_slots_produce_peripheral_items() -> None:
 
     schemas = []
     for i in range(4):
+        emb = _make_unit(dim, seed=10 + i)  # distinct embeddings → ~0.7-0.9 cos to cue
         s = _stub_schema(
             i + 1,
             text=f"Fact number {i+1} about the task at hand",
-            embedding=same_dir,
+            embedding=emb,
             salience=float(i + 1),  # increasing salience for peripheral selection
             schema_class="fact",
         )
@@ -449,7 +450,6 @@ def test_noise_penalty_reduces_activation() -> None:
     noisy schema ranks below an otherwise identical clean schema."""
     dim = 8
     cue_emb = _make_unit(dim, seed=1)
-    same_dir = cue_emb.copy()
 
     gate = WorkingMemoryGate()
     cue = MemoryCue(query="task", scope="project:alpha")
@@ -463,13 +463,13 @@ def test_noise_penalty_reduces_activation() -> None:
 
     clean = _stub_schema(
         1, text="Clean fact about the task",
-        embedding=same_dir, salience=1.0, schema_class="fact",
+        embedding=_make_unit(dim, seed=10), salience=1.0, schema_class="fact",
     )
     clean = replace(clean, scope_id="project:alpha")
 
     noisy = _stub_schema(
         2, text="Noisy fact about the task",
-        embedding=same_dir, salience=1.0, schema_class="fact",
+        embedding=_make_unit(dim, seed=11), salience=1.0, schema_class="fact",
     )
     noisy = replace(noisy, scope_id="project:alpha")
     noisy = replace(noisy, facets={**noisy.facets, "context_noise_score": 0.8})
