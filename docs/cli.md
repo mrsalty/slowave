@@ -32,6 +32,10 @@ Returns `retrieval_id` and `session_id`. Pass them to `reinforce` and `commit`.
 | `--scope` | — | `project:<name>` or `domain:<topic>` |
 | `--goal` | — | 3-6 word verb-noun phrase |
 | `--task-type` | — | e.g. `coding`, `debugging` |
+| `--situation` | — | JSON object with situational metadata |
+| `--requirement` | — | Requirement cue (repeatable) |
+| `--topic` | — | Topic cue (repeatable) |
+| `--entity` | — | Entity cue (repeatable) |
 | `--mode` | `strict_scope` | `default` · `strict_scope` · `broad` · `debug` |
 | `--limit` | `8` | Max schemas returned |
 
