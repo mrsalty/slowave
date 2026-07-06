@@ -19,6 +19,7 @@ def pytest_configure(config: pytest.Config) -> None:
     config.addinivalue_line("markers", "requires_model: test requires downloaded model files")
     config.addinivalue_line("markers", "slow: slow integration test")
     config.addinivalue_line("markers", "benchmark: benchmark test (long-running)")
+    config.addinivalue_line("markers", "acceptance: full blackbox acceptance test via CLI")
 
 
 @pytest.fixture(autouse=True)
