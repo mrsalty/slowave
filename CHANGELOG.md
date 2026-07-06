@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.12.1](https://github.com/mrsalty/slowave/compare/slowave-v0.12.0...slowave-v0.12.1) (2026-07-06)
+
+
+### Bug Fixes
+
+* expand _STOPWORDS to filter 14 commoncommon noise tokens ([f1abbce](https://github.com/mrsalty/slowave/commit/f1abbce1b36b74627a0bff16d9af8133e3d9e45e))
+* expand _STOPWORDS to filter 14 commoncommon noise tokens ([4b29649](https://github.com/mrsalty/slowave/commit/4b29649399992c34854a57d0c4b862822390660c))
+
 ## [0.12.0](https://github.com/mrsalty/slowave/compare/slowave-v0.11.1...slowave-v0.12.0) (2026-07-06)
 
 
