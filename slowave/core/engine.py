@@ -689,8 +689,8 @@ class SlowaveEngine:
         )
 
     # ---- consolidation ----------------------------------------------------
-    def consolidate_once(self, *, triggered_by: str = "worker") -> dict[str, Any]:
-        return self._consolidation.consolidate_once(triggered_by=triggered_by)
+    def consolidate_once(self, *, triggered_by: str = "worker", decay_idle_days: float = 30.0) -> dict[str, Any]:
+        return self._consolidation.consolidate_once(triggered_by=triggered_by, decay_idle_days=decay_idle_days)
 
     def refresh_indices(self) -> None:
         self._retrieval.refresh_indices()
