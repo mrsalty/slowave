@@ -487,19 +487,18 @@ class WorkingMemoryGate:
             activation -= 0.30
             reasons.append(f"inhibit:{source_kind}")
 
+        activation += min(_IDENTITY_BONUS_CAP, prior)
+
+        # Scope bonus: added AFTER the cap so same-scope and global schemas are
+        # never starved below min_activation by the identity ceiling.  Without
+        # this, a generic query with low cosine can push every schema below the
+        # 0.20 floor even though scope-matched and global schemas belong there.
         if cue.scope and schema.scope_id == cue.scope:
-            # Exact scope match: highest confidence the memory is contextually relevant.
-            prior += 0.20
+            activation += 0.20
             reasons.append(f"scope_match={cue.scope}")
         elif not schema.scope_id:
-            # Global schema (scope_id=None): unrestricted by design, equivalent to
-            # same-scope for admission purposes. Slightly lower bonus than an exact
-            # scope match because global memories didn't earn their reach through
-            # cross-scope validation — they were never scoped in the first place.
-            prior += 0.15
+            activation += 0.15
             reasons.append("global")
-
-        activation += min(_IDENTITY_BONUS_CAP, prior)
 
         if cue.scope and schema.scope_id and schema.scope_id != cue.scope:
             # Stage 11: graduated penalty for cross-scope generalization.
