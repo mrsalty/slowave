@@ -176,13 +176,15 @@ def test_explicit_remember_marks_schema_as_injectable_with_memory_layer() -> Non
         eng.close()
         _cleanup(path)
 
+
 # ---------------------------------------------------------------------------
 # Geometric (cosine) gate scoring tests
 # ---------------------------------------------------------------------------
 
+from dataclasses import replace
+
 import numpy as np
 
-from dataclasses import replace
 from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate
 
 
@@ -201,12 +203,17 @@ def _stub_schema(
 ):
     """Build a minimal Schema-like object for gate tests."""
     from slowave.symbolic.schema_store import Schema
+
     return Schema(
         id=sid,
         prototype_id=None,
         content_text=text,
-        facets={"schema_class": schema_class, "memory_layer": "profile",
-                "stability": "current", "injectable": True},
+        facets={
+            "schema_class": schema_class,
+            "memory_layer": "profile",
+            "stability": "current",
+            "injectable": True,
+        },
         tags=[],
         scope_id=None,
         status="active",
@@ -351,14 +358,22 @@ def test_scope_bonus_is_uncapped_and_survives_low_cosine() -> None:
     policy = GatePolicy(
         min_activation=0.20,
         allowed_classes=(
-            "preference", "fact", "decision", "lesson",
-            "warning", "procedure", "constraint",
+            "preference",
+            "fact",
+            "decision",
+            "lesson",
+            "warning",
+            "procedure",
+            "constraint",
         ),
     )
 
     schema = _stub_schema(
-        1, text="some fact with zero lexical overlap to query",
-        embedding=orth, salience=1.0, schema_class="fact",
+        1,
+        text="some fact with zero lexical overlap to query",
+        embedding=orth,
+        salience=1.0,
+        schema_class="fact",
     )
     schema = replace(schema, scope_id="project:alpha")
 
@@ -381,19 +396,29 @@ def test_global_schema_admitted_in_strict_scope_with_low_cosine() -> None:
 
     gate = WorkingMemoryGate()
     cue = MemoryCue(
-        query="generic fact", scope="project:alpha", mode="strict_scope",
+        query="generic fact",
+        scope="project:alpha",
+        mode="strict_scope",
     )
     policy = GatePolicy(
         min_activation=0.20,
         allowed_classes=(
-            "preference", "fact", "decision", "lesson",
-            "warning", "procedure", "constraint",
+            "preference",
+            "fact",
+            "decision",
+            "lesson",
+            "warning",
+            "procedure",
+            "constraint",
         ),
     )
 
     schema = _stub_schema(
-        1, text="global fact with no lexical overlap",
-        embedding=orth, salience=1.0, schema_class="fact",
+        1,
+        text="global fact with no lexical overlap",
+        embedding=orth,
+        salience=1.0,
+        schema_class="fact",
     )
     schema = replace(schema, scope_id=None)  # global
 
@@ -415,10 +440,17 @@ def test_exploration_slots_produce_peripheral_items() -> None:
     gate = WorkingMemoryGate()
     cue = MemoryCue(query="task", scope="project:alpha")
     policy = GatePolicy(
-        min_activation=0.10, max_items=2, exploration_slots=1,
+        min_activation=0.10,
+        max_items=2,
+        exploration_slots=1,
         allowed_classes=(
-            "preference", "fact", "decision", "lesson",
-            "warning", "procedure", "constraint",
+            "preference",
+            "fact",
+            "decision",
+            "lesson",
+            "warning",
+            "procedure",
+            "constraint",
         ),
     )
 
@@ -459,20 +491,31 @@ def test_noise_penalty_reduces_activation() -> None:
     policy = GatePolicy(
         min_activation=0.10,
         allowed_classes=(
-            "preference", "fact", "decision", "lesson",
-            "warning", "procedure", "constraint",
+            "preference",
+            "fact",
+            "decision",
+            "lesson",
+            "warning",
+            "procedure",
+            "constraint",
         ),
     )
 
     clean = _stub_schema(
-        1, text="Clean fact about the task",
-        embedding=_make_unit(dim, seed=10), salience=1.0, schema_class="fact",
+        1,
+        text="Clean fact about the task",
+        embedding=_make_unit(dim, seed=10),
+        salience=1.0,
+        schema_class="fact",
     )
     clean = replace(clean, scope_id="project:alpha")
 
     noisy = _stub_schema(
-        2, text="Noisy fact about the task",
-        embedding=_make_unit(dim, seed=11), salience=1.0, schema_class="fact",
+        2,
+        text="Noisy fact about the task",
+        embedding=_make_unit(dim, seed=11),
+        salience=1.0,
+        schema_class="fact",
     )
     noisy = replace(noisy, scope_id="project:alpha")
     noisy = replace(noisy, facets={**noisy.facets, "context_noise_score": 0.8})
@@ -480,10 +523,12 @@ def test_noise_penalty_reduces_activation() -> None:
     state = gate.select([clean, noisy], cue=cue, policy=policy, cue_embedding=cue_emb)
 
     clean_act = next(
-        (item.activation for item in state.items if item.schema.id == 1), None,
+        (item.activation for item in state.items if item.schema.id == 1),
+        None,
     )
     noisy_act = next(
-        (item.activation for item in state.items if item.schema.id == 2), None,
+        (item.activation for item in state.items if item.schema.id == 2),
+        None,
     )
 
     assert clean_act is not None and noisy_act is not None

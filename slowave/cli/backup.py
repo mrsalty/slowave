@@ -4,6 +4,7 @@ Uses SQLite's built-in .backup() API for consistent online snapshots — no WAL
 checkpoint coordination needed, no blocking of concurrent readers. Backups are
 gzip-compressed (SQLite DBs typically compress 5–10x).
 """
+
 from __future__ import annotations
 
 import gzip
@@ -211,9 +212,12 @@ def backup_cmd(
 
     if as_json:
         import json
+
         click.echo(json.dumps(result, ensure_ascii=False, indent=2, default=str))
     else:
-        click.echo(click.style(f"  {safe_emoji('💾', '[ok]')} backup complete", fg="green", bold=True))
+        click.echo(
+            click.style(f"  {safe_emoji('💾', '[ok]')} backup complete", fg="green", bold=True)
+        )
         click.echo(f"     source : {result['source']} ({_fmt_bytes(result['source_size_bytes'])})")
         click.echo(
             f"     target : {result['backup_path']} ({_fmt_bytes(result['backup_size_bytes'])}"
@@ -257,20 +261,20 @@ def restore_cmd(
     src = Path(backup_path).expanduser().resolve()
 
     if not src.suffixes == [".db", ".gz"]:
-        raise click.BadParameter(
-            f"Expected a .db.gz backup file, got: {src.name}"
-        )
+        raise click.BadParameter(f"Expected a .db.gz backup file, got: {src.name}")
 
     if not yes:
         click.echo(click.style("  ⚠  Restore database backup", fg="yellow", bold=True))
         click.echo(f"     from : {src}")
         click.echo(f"     to   : {dest}")
-        click.echo(click.style(
-            f"\n  This will REPLACE your current database. Any data not in the\n"
-            f"  backup will be lost. A backup of the current database will be\n"
-            f"  saved to {dest}.bak before the swap.\n",
-            fg="yellow",
-        ))
+        click.echo(
+            click.style(
+                f"\n  This will REPLACE your current database. Any data not in the\n"
+                f"  backup will be lost. A backup of the current database will be\n"
+                f"  saved to {dest}.bak before the swap.\n",
+                fg="yellow",
+            )
+        )
         click.confirm("  Continue?", abort=True, default=False)
 
     started = time.monotonic()
@@ -278,10 +282,14 @@ def restore_cmd(
     # Stop the daemon so the DB isn't held open.
     daemon_stopped = False
     try:
-        from slowave.mcp.daemon import is_running as _daemon_running, stop_daemon as _stop_daemon
+        from slowave.mcp.daemon import is_running as _daemon_running
+        from slowave.mcp.daemon import stop_daemon as _stop_daemon
+
         if _daemon_running():
             _stop_daemon()
-            import time as _time; _time.sleep(0.5)
+            import time as _time
+
+            _time.sleep(0.5)
             daemon_stopped = True
     except Exception:
         pass
@@ -292,9 +300,7 @@ def restore_cmd(
         try:
             shutil.copy2(dest, bak_path)
         except OSError as exc:
-            raise click.ClickException(
-                f"Could not backup current database: {exc}"
-            )
+            raise click.ClickException(f"Could not backup current database: {exc}")
 
     # Decompress and copy the backup into place.
     try:
@@ -317,9 +323,7 @@ def restore_cmd(
     except sqlite3.Error as exc:
         if bak_path.exists():
             shutil.move(str(bak_path), str(dest))
-        raise click.ClickException(
-            f"Restored file is not a valid SQLite database: {exc}"
-        )
+        raise click.ClickException(f"Restored file is not a valid SQLite database: {exc}")
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
     src_size = src.stat().st_size
@@ -346,6 +350,7 @@ def restore_cmd(
 
     if as_json:
         import json as _json
+
         click.echo(_json.dumps(result, ensure_ascii=False, indent=2, default=str))
     else:
         click.echo(click.style("  ✓ restore complete", fg="green", bold=True))

@@ -61,9 +61,7 @@ class EpisodicStore:
     def reset_faiss_from_db(self) -> None:
         """Rebuild FAISS index by scanning SQLite."""
         conn = self.db.connect()
-        cur = conn.execute(
-            "SELECT id, embedding, dim FROM episodic_memories ORDER BY id"
-        )
+        cur = conn.execute("SELECT id, embedding, dim FROM episodic_memories ORDER BY id")
         ids: list[int] = []
         vecs: list[np.ndarray] = []
         for row in cur:
@@ -102,9 +100,17 @@ class EpisodicStore:
             INSERT INTO episodic_memories (event_id, ts, embedding, dim, salience, last_salience_ts, metadata_json)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             """,
-            (event_id, ts, pack_f32(emb), self.cfg.dim, float(salience), int(ts), dumps_json(metadata)),
+            (
+                event_id,
+                ts,
+                pack_f32(emb),
+                self.cfg.dim,
+                float(salience),
+                int(ts),
+                dumps_json(metadata),
+            ),
         )
-        episode_id = int(cur.lastrowid)
+        episode_id = int(cur.lastrowid or 0)
         conn.commit()
 
         x = emb.reshape(1, -1).copy()
@@ -114,9 +120,7 @@ class EpisodicStore:
 
     def get(self, episode_id: int) -> EpisodicMemory:
         conn = self.db.connect()
-        row = conn.execute(
-            "SELECT * FROM episodic_memories WHERE id = ?", (episode_id,)
-        ).fetchone()
+        row = conn.execute("SELECT * FROM episodic_memories WHERE id = ?", (episode_id,)).fetchone()
         if row is None:
             raise KeyError(f"No episode id={episode_id}")
         return EpisodicMemory(

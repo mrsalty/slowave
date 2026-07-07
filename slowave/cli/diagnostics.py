@@ -1,5 +1,7 @@
 """Diagnostic and health check utilities."""
+
 from __future__ import annotations
+
 import os
 import sqlite3
 import subprocess
@@ -8,8 +10,10 @@ import tempfile
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
+
+from slowave.cli.output import CheckResult, Status
 from slowave.core.paths import default_db_path
-from slowave.cli.output import Status, CheckResult
+
 
 @dataclass
 class RuntimeInfo:
@@ -19,6 +23,7 @@ class RuntimeInfo:
     config_path: str
     slowave_dir: str
     version: str
+
 
 def get_runtime_info(version: str) -> RuntimeInfo:
     slowave_dir = str(Path(default_db_path()).parent)
@@ -31,6 +36,7 @@ def get_runtime_info(version: str) -> RuntimeInfo:
         version=version,
     )
 
+
 def check_python() -> CheckResult:
     vi = sys.version_info
     py_ok = (vi.major == 3) and (vi.minor >= 10)
@@ -40,9 +46,11 @@ def check_python() -> CheckResult:
         detail="" if py_ok else "Slowave requires Python 3.10+",
     )
 
+
 def check_faiss() -> CheckResult:
     try:
         import faiss
+
         return CheckResult(label=f"FAISS {faiss.__version__}", status=Status.OK)
     except Exception as e:
         return CheckResult(
@@ -52,9 +60,11 @@ def check_faiss() -> CheckResult:
             remediation="pip install faiss-cpu",
         )
 
+
 def check_onnxruntime() -> CheckResult:
     try:
         import onnxruntime as _ort
+
         return CheckResult(label=f"ONNX Runtime {_ort.__version__}", status=Status.OK)
     except Exception as e:
         return CheckResult(
@@ -64,12 +74,14 @@ def check_onnxruntime() -> CheckResult:
             remediation="pip install onnxruntime",
         )
 
+
 def check_embedding_backend() -> CheckResult:
     try:
         old_warn = os.environ.get("TRANSFORMERS_NO_ADVISORY_WARNINGS")
         os.environ["TRANSFORMERS_NO_ADVISORY_WARNINGS"] = "1"
         try:
             from slowave.symbolic.encoder import TextEncoder
+
             enc = TextEncoder()
             v = enc.encode("test")
             dim = v.shape[0]
@@ -86,6 +98,7 @@ def check_embedding_backend() -> CheckResult:
             detail=str(e)[:100],
             remediation="check FAISS and ONNX Runtime installation",
         )
+
 
 def check_sqlite_write() -> CheckResult:
     try:
@@ -107,9 +120,11 @@ def check_sqlite_write() -> CheckResult:
             detail=str(e)[:100],
         )
 
+
 def check_mcp_server() -> CheckResult:
     """Check that the slowave CLI entry point exists (proxy for correct install)."""
     import shutil
+
     try:
         bin_path = shutil.which("slowave")
         if bin_path:
@@ -125,9 +140,9 @@ def check_mcp_server() -> CheckResult:
 
 def check_http_daemon(host: str = "127.0.0.1", port: int = 8766) -> CheckResult:
     """Check whether the Slowave HTTP MCP daemon is reachable."""
-    import urllib.request
-    import urllib.error
     import json as _json
+    import urllib.error
+    import urllib.request
 
     url = f"http://{host}:{port}/health"
     try:

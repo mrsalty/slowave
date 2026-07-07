@@ -5,6 +5,7 @@ overwrote previous weights each replay pass.
 After B-3: EMA accumulation (decay=0.5), followed by per-source L1
 homeostatic normalization to prevent graph densification.
 """
+
 from __future__ import annotations
 
 import pytest
@@ -43,6 +44,7 @@ def graph(db):
 # Homeostatic normalization
 # ---------------------------------------------------------------------------
 
+
 def test_homeostatic_normalization_sums_to_target(graph):
     """After normalization, each source's edges sum to ≤ homeostatic_target."""
     graph.apply_transition_counts({(1, 2): 0.8, (1, 3): 0.6, (1, 4): 0.2})
@@ -75,6 +77,7 @@ def test_homeostatic_no_edges_is_noop(graph):
 # ---------------------------------------------------------------------------
 # EMA accumulation
 # ---------------------------------------------------------------------------
+
 
 def test_transition_accumulation_across_passes(graph):
     """Two replay passes: transition evidence builds via EMA."""
@@ -111,9 +114,11 @@ def test_coactivation_accumulation_across_passes(graph):
 # Similarity edges are NOT accumulated
 # ---------------------------------------------------------------------------
 
+
 def test_similarity_edges_still_overwrite(graph):
     """Similarity edges are recomputed fresh each pass."""
     import numpy as np
+
     centroids = np.array([[1, 0, 0], [0, 1, 0], [0, 0, 1]], dtype=np.float32)
     graph.set_similarity_edges(prototype_ids=[1, 2, 3], centroids=centroids)
     ws1_old, _, _ = graph._get_components(1, 2)
@@ -126,6 +131,7 @@ def test_similarity_edges_still_overwrite(graph):
 # ---------------------------------------------------------------------------
 # accumulate_decay=0 (full replacement)
 # ---------------------------------------------------------------------------
+
 
 def test_accumulate_decay_zero_overwrites(graph):
     """With accumulate_decay=0, behavior matches pre-fix (full overwrite)."""
@@ -144,6 +150,7 @@ def test_accumulate_decay_zero_overwrites(graph):
 # ---------------------------------------------------------------------------
 # Multiple edges accumulate independently
 # ---------------------------------------------------------------------------
+
 
 def test_multiple_edges_accumulate_independently(graph):
     """Each edge pair accumulates independently across passes."""

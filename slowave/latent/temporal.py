@@ -48,6 +48,7 @@ contains no temporal language the "now / today" probe dominates and
 the anchor collapses to the current time — preserving the existing
 default behaviour exactly.
 """
+
 from __future__ import annotations
 
 import math
@@ -55,7 +56,6 @@ import time
 from dataclasses import dataclass
 
 import numpy as np
-
 
 # ---------------------------------------------------------------------------
 # Temporal compass probes
@@ -73,18 +73,18 @@ import numpy as np
 # ---------------------------------------------------------------------------
 _DAY = 86_400
 _TEMPORAL_PROBES: tuple[tuple[str, int], ...] = (
-    ("right now, today, at the moment",         0),
-    ("yesterday, the day before",               -1 * _DAY),
-    ("a few days ago, several days ago",        -4 * _DAY),
-    ("last week, a week ago",                   -7 * _DAY),
-    ("two weeks ago, a fortnight ago",          -14 * _DAY),
-    ("last month, a month ago, recently",       -30 * _DAY),
-    ("two months ago, a couple of months ago",  -60 * _DAY),
-    ("three months ago, several months ago",    -90 * _DAY),
-    ("six months ago, half a year ago",         -180 * _DAY),
-    ("last year, a year ago",                   -365 * _DAY),
-    ("two years ago",                           -730 * _DAY),
-    ("a long time ago, years ago, long ago",    -3 * 365 * _DAY),
+    ("right now, today, at the moment", 0),
+    ("yesterday, the day before", -1 * _DAY),
+    ("a few days ago, several days ago", -4 * _DAY),
+    ("last week, a week ago", -7 * _DAY),
+    ("two weeks ago, a fortnight ago", -14 * _DAY),
+    ("last month, a month ago, recently", -30 * _DAY),
+    ("two months ago, a couple of months ago", -60 * _DAY),
+    ("three months ago, several months ago", -90 * _DAY),
+    ("six months ago, half a year ago", -180 * _DAY),
+    ("last year, a year ago", -365 * _DAY),
+    ("two years ago", -730 * _DAY),
+    ("a long time ago, years ago, long ago", -3 * 365 * _DAY),
 )
 
 
@@ -101,11 +101,11 @@ _TEMPORAL_PROBES: tuple[tuple[str, int], ...] = (
 # is 2 * len(SCALES_SECONDS) dimensional. With 7 scales that's a
 # 14-dimensional temporal vector — cheap to compute and store.
 SCALES_SECONDS: tuple[int, ...] = (
-    60,                  # minute
-    60 * 60,             # hour
-    24 * 60 * 60,        # day
-    7 * 24 * 60 * 60,    # week
-    30 * 24 * 60 * 60,   # month (approx)
+    60,  # minute
+    60 * 60,  # hour
+    24 * 60 * 60,  # day
+    7 * 24 * 60 * 60,  # week
+    30 * 24 * 60 * 60,  # month (approx)
     365 * 24 * 60 * 60,  # year
     10 * 365 * 24 * 60 * 60,  # decade
 )
@@ -183,6 +183,7 @@ class TemporalContext:
 # ---------------------------------------------------------------------------
 # Temporal probe / compass  (Stage 10)
 # ---------------------------------------------------------------------------
+
 
 class TemporalProbe:
     """Embedding-space temporal anchor estimator.

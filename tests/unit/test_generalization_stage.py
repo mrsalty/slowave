@@ -9,29 +9,30 @@ Tests the full stack:
 
 All tests use an in-memory SQLite DB — no file I/O, no encoder needed.
 """
+
 from __future__ import annotations
 
-import time
-import tempfile
 import os
+import tempfile
+import time
 
 import pytest
 
 from slowave.core.config import SlowaveConfig
+from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate
 from slowave.core.engine import SlowaveEngine
-from slowave.core.context import MemoryCue, GatePolicy, WorkingMemoryGate
+from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
 from slowave.symbolic.schema_store import (
     GeneralizationConfig,
-    ScopeRegistry,
-    SchemaStore,
     Schema,
+    SchemaStore,
+    ScopeRegistry,
 )
-from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
-
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _make_db() -> SQLiteDB:
     """Fresh in-memory-backed temp DB with full schema."""
@@ -39,9 +40,14 @@ def _make_db() -> SQLiteDB:
     f.close()
     db = SQLiteDB(SQLiteConfig(path=f.name))
     import importlib.resources
+
     schema_path = os.path.join(
-        os.path.dirname(__file__), "..", "..",
-        "slowave", "storage", "schema.sql",
+        os.path.dirname(__file__),
+        "..",
+        "..",
+        "slowave",
+        "storage",
+        "schema.sql",
     )
     db.init_schema(os.path.abspath(schema_path))
     return db
@@ -75,6 +81,7 @@ def _make_schema(
 # ---------------------------------------------------------------------------
 # 1. ScopeRegistry
 # ---------------------------------------------------------------------------
+
 
 class TestScopeRegistry:
     def test_record_and_count(self):
@@ -130,6 +137,7 @@ class TestScopeRegistry:
 # ---------------------------------------------------------------------------
 # 2. GeneralizationConfig.compute_stage
 # ---------------------------------------------------------------------------
+
 
 class TestGeneralizationConfig:
     def setup_method(self):
@@ -188,6 +196,7 @@ class TestGeneralizationConfig:
 # 3. SchemaStore: generalization_stage written to DB on reinforce
 # ---------------------------------------------------------------------------
 
+
 class TestSchemaStoreGeneralizationStage:
     def test_stage_zero_by_default(self):
         db = _make_db()
@@ -218,6 +227,7 @@ class TestSchemaStoreGeneralizationStage:
 # 4. WorkingMemoryGate: _eligible respects generalization_stage
 # ---------------------------------------------------------------------------
 
+
 def _schema_obj(
     *,
     scope_id: str | None,
@@ -227,6 +237,7 @@ def _schema_obj(
 ) -> Schema:
     """Minimal Schema object for gate tests without DB."""
     import numpy as np
+
     return Schema(
         id=1,
         prototype_id=None,
@@ -294,10 +305,12 @@ class TestWorkingMemoryGateGeneralization:
         schema_s0 = Schema(**{**schema_s0.__dict__, "id": 1})
         schema_s2 = Schema(**{**schema_s2.__dict__, "id": 2})
 
-        _act0, _r0 = self.gate._activation(schema_s0, cue=cue_with_embedding,
-                                            cue_terms=set(), cue_embedding=None)
-        _act2, _r2 = self.gate._activation(schema_s2, cue=cue_with_embedding,
-                                            cue_terms=set(), cue_embedding=None)
+        _act0, _r0 = self.gate._activation(
+            schema_s0, cue=cue_with_embedding, cue_terms=set(), cue_embedding=None
+        )
+        _act2, _r2 = self.gate._activation(
+            schema_s2, cue=cue_with_embedding, cue_terms=set(), cue_embedding=None
+        )
         # stage 2 should score higher (less penalty) than stage 0
         assert _act2 > _act0, f"Stage 2 ({_act2:.3f}) should be > Stage 0 ({_act0:.3f})"
         assert "stage2" in _r2
@@ -306,8 +319,9 @@ class TestWorkingMemoryGateGeneralization:
         """Stage 3 schema gets no scope_mismatch at all."""
         cue = MemoryCue(scope="project:bar", mode="strict_scope")
         schema_s3 = _schema_obj(scope_id="project:foo", gen_stage=3)
-        _act, reason = self.gate._activation(schema_s3, cue=cue,
-                                              cue_terms=set(), cue_embedding=None)
+        _act, reason = self.gate._activation(
+            schema_s3, cue=cue, cue_terms=set(), cue_embedding=None
+        )
         assert "scope_mismatch" not in reason
 
 
@@ -315,26 +329,41 @@ class TestWorkingMemoryGateGeneralization:
 # 5. recall() / context_brief parity — the gap identified in the test report
 # ---------------------------------------------------------------------------
 
+
 def _make_db_with_schemas() -> tuple["SQLiteDB", "SchemaStore"]:
     """Create a DB with three schemas mirroring the test-report scenario."""
     db = _make_db()
     store = SchemaStore(db, dim=384)
-    _make_schema(db, scope_id="project:alpha",
-                 content="Use pytest fixtures to isolate test state", gen_stage=2)
-    _make_schema(db, scope_id="project:alpha",
-                 content="Project Alpha production database password is ALPHA-SECRET-123",
-                 gen_stage=0)
-    _make_schema(db, scope_id="project:alpha",
-                 content="Project Alpha API base URL is https://alpha.internal.local",
-                 gen_stage=0)
+    _make_schema(
+        db,
+        scope_id="project:alpha",
+        content="Use pytest fixtures to isolate test state",
+        gen_stage=2,
+    )
+    _make_schema(
+        db,
+        scope_id="project:alpha",
+        content="Project Alpha production database password is ALPHA-SECRET-123",
+        gen_stage=0,
+    )
+    _make_schema(
+        db,
+        scope_id="project:alpha",
+        content="Project Alpha API base URL is https://alpha.internal.local",
+        gen_stage=0,
+    )
     return db, store
 
 
 def _apply_strict_scope_filter(
-    db: "SQLiteDB", store: "SchemaStore", *, scope_id: str,
+    db: "SQLiteDB",
+    store: "SchemaStore",
+    *,
+    scope_id: str,
 ) -> list["Schema"]:
     """Run the scope-filter portion of recall() without encoder/FAISS."""
     from slowave.core.scope import scope_kind as _scope_kind
+
     conn = db.connect()
     all_schemas = store.list(limit=1000, status="active")
     promoted_rows = conn.execute(
@@ -369,7 +398,6 @@ def _apply_strict_scope_filter(
     return filtered
 
 
-
 class TestRecallContextParity:
     """Case 6: recall() and context_brief must honour generalization_stage consistently."""
 
@@ -384,15 +412,17 @@ class TestRecallContextParity:
         db, store = _make_db_with_schemas()
         results = _apply_strict_scope_filter(db, store, scope_id="project:theta")
         texts = [s.content_text for s in results]
-        assert any("pytest fixtures" in t for t in texts), \
-            "Stage 2 generic memory must appear in foreign project scope"
+        assert any(
+            "pytest fixtures" in t for t in texts
+        ), "Stage 2 generic memory must appear in foreign project scope"
 
     def test_stage2_admitted_cross_kind(self):
         db, store = _make_db_with_schemas()
         results = _apply_strict_scope_filter(db, store, scope_id="customer:acme")
         texts = [s.content_text for s in results]
-        assert any("pytest fixtures" in t for t in texts), \
-            "Stage 2 memory must appear even in different scope_kind"
+        assert any(
+            "pytest fixtures" in t for t in texts
+        ), "Stage 2 memory must appear even in different scope_kind"
 
     def test_origin_scope_sees_all(self):
         db, store = _make_db_with_schemas()
@@ -401,22 +431,28 @@ class TestRecallContextParity:
 
     def test_stage1_same_kind_admitted(self):
         db, store = _make_db_with_schemas()
-        _make_schema(db, scope_id="project:alpha",
-                     content="Always run mypy before committing", gen_stage=1)
+        _make_schema(
+            db, scope_id="project:alpha", content="Always run mypy before committing", gen_stage=1
+        )
         results = _apply_strict_scope_filter(db, store, scope_id="project:beta")
         assert any("mypy" in s.content_text for s in results)
 
     def test_stage1_different_kind_blocked(self):
         db, store = _make_db_with_schemas()
-        _make_schema(db, scope_id="project:alpha",
-                     content="Always run mypy before committing", gen_stage=1)
+        _make_schema(
+            db, scope_id="project:alpha", content="Always run mypy before committing", gen_stage=1
+        )
         results = _apply_strict_scope_filter(db, store, scope_id="customer:acme")
         assert not any("mypy" in s.content_text for s in results)
 
     def test_stage3_admitted_everywhere(self):
         db, store = _make_db_with_schemas()
-        _make_schema(db, scope_id="project:alpha",
-                     content="Separate concerns early in system design", gen_stage=3)
+        _make_schema(
+            db,
+            scope_id="project:alpha",
+            content="Separate concerns early in system design",
+            gen_stage=3,
+        )
         results = _apply_strict_scope_filter(db, store, scope_id="personal:home")
         assert any("Separate concerns" in s.content_text for s in results)
 
@@ -425,10 +461,12 @@ class TestRecallContextParity:
 # 6. Stage 2 score discount in recall() — multiplier applied, not hard block
 # ---------------------------------------------------------------------------
 
+
 class TestRecallStage2ScoreDiscount:
 
     def test_stage2_multiplier_applied(self):
         from slowave.symbolic.schema_store import GeneralizationConfig
+
         cfg = GeneralizationConfig()
         raw_score = 0.80
         discounted = raw_score * cfg.stage2_cross_scope_score_multiplier
@@ -438,20 +476,22 @@ class TestRecallStage2ScoreDiscount:
     def test_stage3_has_no_multiplier_field(self):
         """Stage 3 passes at full score — no separate multiplier field exists."""
         from slowave.symbolic.schema_store import GeneralizationConfig
+
         cfg = GeneralizationConfig()
         assert not hasattr(cfg, "stage3_cross_scope_score_multiplier")
-
 
 
 # ---------------------------------------------------------------------------
 # 7. Recall cosine scoring for promoted candidates (Fix 1)
 # ---------------------------------------------------------------------------
 
+
 class TestRecallCosineScoring:
     """cosine+0.25 replaces flat 0.10 baseline for promoted schemas with embeddings."""
 
     def test_cosine_score_higher_than_flat_baseline(self):
         import numpy as np
+
         from slowave.utils.vec import pack_f32, unpack_f32
 
         db = _make_db()
@@ -474,7 +514,9 @@ class TestRecallCosineScoring:
 
         q = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
         qn = float(np.linalg.norm(q)) + 1e-12
-        row = conn.execute("SELECT embedding, dim FROM schemas WHERE id = ?", (schema_id,)).fetchone()
+        row = conn.execute(
+            "SELECT embedding, dim FROM schemas WHERE id = ?", (schema_id,)
+        ).fetchone()
         v = unpack_f32(row["embedding"], int(row["dim"]))
         cosine = float(q.dot(v) / (qn * (float(np.linalg.norm(v)) + 1e-12)))
         computed_score = max(0.0, cosine) + 0.25
@@ -491,23 +533,33 @@ class TestRecallCosineScoring:
         assert 0.10 < 0.30
 
 
-
 # ---------------------------------------------------------------------------
 # 8. Context noise floor: raised threshold + cosine gate (Fix 2)
 # ---------------------------------------------------------------------------
 
+
 def _cross_scope_schema(*, gen_stage: int = 2, embedding=None) -> "Schema":
     return Schema(
-        id=99, prototype_id=None,
+        id=99,
+        prototype_id=None,
         content_text="Use pytest fixtures to isolate test state",
-        facets={"source_kind": "explicit_remember", "memory_layer": "domain",
-                "schema_class": "lesson"},
-        tags=[], scope_id="project:alpha", status="active",
-        confidence=1.0, salience=5.0,
-        supporting_episode_ids=[], contradicting_episode_ids=[],
-        needs_review=False, first_formed_ts=int(time.time()),
+        facets={
+            "source_kind": "explicit_remember",
+            "memory_layer": "domain",
+            "schema_class": "lesson",
+        },
+        tags=[],
+        scope_id="project:alpha",
+        status="active",
+        confidence=1.0,
+        salience=5.0,
+        supporting_episode_ids=[],
+        contradicting_episode_ids=[],
+        needs_review=False,
+        first_formed_ts=int(time.time()),
         last_updated_ts=int(time.time()),
-        embedding=embedding, generalization_stage=gen_stage,
+        embedding=embedding,
+        generalization_stage=gen_stage,
     )
 
 
@@ -523,54 +575,62 @@ class TestContextCrossScopeNoiseFloor:
         Both behaviors are correct — we just assert the schema is blocked.
         """
         import numpy as np
+
         gate = WorkingMemoryGate()
         schema_emb = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
         cue_emb = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32)
         schema = _cross_scope_schema(gen_stage=2, embedding=schema_emb)
         cue = MemoryCue(scope="project:theta", mode="strict_scope")
-        state = gate.select([schema], cue=cue, policy=GatePolicy(min_activation=0.0),
-                             cue_embedding=cue_emb)
+        state = gate.select(
+            [schema], cue=cue, policy=GatePolicy(min_activation=0.0), cue_embedding=cue_emb
+        )
         assert len(state.items) == 0
         # Either the activation floor or the cosine gate fired — both are correct
         blocked_by_floor = state.suppressed.get("cross_scope_below_floor", 0) > 0
         blocked_by_cosine = state.suppressed.get("cross_scope_low_cosine", 0) > 0
-        assert blocked_by_floor or blocked_by_cosine, \
-            f"Expected schema to be noise-gated, got suppressed={state.suppressed}"
+        assert (
+            blocked_by_floor or blocked_by_cosine
+        ), f"Expected schema to be noise-gated, got suppressed={state.suppressed}"
 
     def test_aligned_query_passes_cosine_gate(self):
         """Stage 2 schema with cosine ≈ 1.0 and good activation passes both gates."""
         import numpy as np
+
         gate = WorkingMemoryGate()
         vec = np.array([0.7, 0.7, 0.0, 0.0], dtype=np.float32)
         vec /= np.linalg.norm(vec)
         schema = _cross_scope_schema(gen_stage=2, embedding=vec)
         cue = MemoryCue(scope="project:theta", mode="strict_scope")
-        state = gate.select([schema], cue=cue, policy=GatePolicy(min_activation=0.0),
-                             cue_embedding=vec)
+        state = gate.select(
+            [schema], cue=cue, policy=GatePolicy(min_activation=0.0), cue_embedding=vec
+        )
         assert len(state.items) == 1
 
     def test_floor_raised_to_0_40(self):
         from slowave.symbolic.schema_store import GeneralizationConfig
+
         assert GeneralizationConfig().cross_scope_min_score == pytest.approx(0.40)
 
     def test_stage3_exempt_from_both_gates(self):
         """Stage 3 schemas bypass activation floor and cosine gate."""
         import numpy as np
+
         gate = WorkingMemoryGate()
         schema_emb = np.array([1.0, 0.0, 0.0, 0.0], dtype=np.float32)
         cue_emb = np.array([0.0, 1.0, 0.0, 0.0], dtype=np.float32)
         schema = _cross_scope_schema(gen_stage=3, embedding=schema_emb)
         cue = MemoryCue(scope="personal:home", mode="strict_scope")
-        state = gate.select([schema], cue=cue, policy=GatePolicy(min_activation=0.0),
-                             cue_embedding=cue_emb)
+        state = gate.select(
+            [schema], cue=cue, policy=GatePolicy(min_activation=0.0), cue_embedding=cue_emb
+        )
         assert "cross_scope_low_cosine" not in state.suppressed
         assert "cross_scope_below_floor" not in state.suppressed
-
 
 
 # ---------------------------------------------------------------------------
 # 9. FTS score must not suppress a better promoted embedding score (Fix 3)
 # ---------------------------------------------------------------------------
+
 
 class TestFTSVsPromotedEmbeddingScore:
     """
@@ -598,26 +658,28 @@ class TestFTSVsPromotedEmbeddingScore:
 
         cfg = GeneralizationConfig()
         fts_score = 0.35
-        multiplier = cfg.stage2_cross_scope_score_multiplier   # 0.70
-        floor = cfg.cross_scope_min_score                      # 0.30
+        multiplier = cfg.stage2_cross_scope_score_multiplier  # 0.70
+        floor = cfg.cross_scope_min_score  # 0.30
 
         # Old behaviour: FTS score only, no cosine override
         old_score = fts_score * multiplier
-        assert old_score < floor, \
-            f"Test precondition: FTS-only path should fail floor ({old_score:.3f} < {floor})"
+        assert (
+            old_score < floor
+        ), f"Test precondition: FTS-only path should fail floor ({old_score:.3f} < {floor})"
 
         # New behaviour: cosine computed and max() used
         high_cosine = 0.85
-        promoted_score = max(0.0, high_cosine) + 0.25         # 1.10
+        promoted_score = max(0.0, high_cosine) + 0.25  # 1.10
         final_score = max(fts_score, promoted_score) * multiplier  # 1.10 * 0.70 = 0.77
-        assert final_score >= floor, \
-            f"After fix: cosine-boosted path should pass floor ({final_score:.3f} >= {floor})"
+        assert (
+            final_score >= floor
+        ), f"After fix: cosine-boosted path should pass floor ({final_score:.3f} >= {floor})"
 
     def test_fts_wins_when_cosine_is_weak(self):
         """When cosine is low, FTS score is allowed to win — max() is symmetric."""
         fts_score = 0.35
         low_cosine = 0.02
-        promoted_score = max(0.0, low_cosine) + 0.25         # 0.27
+        promoted_score = max(0.0, low_cosine) + 0.25  # 0.27
 
         # max() correctly keeps the FTS score when cosine is weaker
         winning_score = max(fts_score, promoted_score)
@@ -629,15 +691,19 @@ class TestFTSVsPromotedEmbeddingScore:
         not a guarded `if _sid not in schema_scores` assignment.
         Inspects the source text directly — simpler and more robust than AST.
         """
-        import inspect, textwrap
+        import inspect
+        import textwrap
+
         from slowave.core.services import retrieval as _ret_mod
+
         src = textwrap.dedent(inspect.getsource(_ret_mod.RetrievalService.recall))
 
         # The guarded old form should not appear
-        assert "if _sid not in schema_scores" not in src, \
-            "Old guard 'if _sid not in schema_scores' still present — fix not applied"
+        assert (
+            "if _sid not in schema_scores" not in src
+        ), "Old guard 'if _sid not in schema_scores' still present — fix not applied"
 
         # The unconditional max() form must be present
-        assert "schema_scores[_sid] = max(schema_scores.get(_sid" in src, \
-            "Expected 'schema_scores[_sid] = max(schema_scores.get(_sid, ...), _score)' not found"
-
+        assert (
+            "schema_scores[_sid] = max(schema_scores.get(_sid" in src
+        ), "Expected 'schema_scores[_sid] = max(schema_scores.get(_sid, ...), _score)' not found"

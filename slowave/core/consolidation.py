@@ -1,4 +1,5 @@
 """Replay-time consolidation into first-class symbolic schemas."""
+
 from __future__ import annotations
 
 import logging
@@ -20,11 +21,11 @@ log = logging.getLogger(__name__)
 
 def _classify_consolidated_schema(text: str, source_kind: str | None) -> str | None:
     """Classify consolidated schema by provenance and structure.
-    
+
     Args:
         text: Schema content text
         source_kind: Source kind from facets (e.g., "explicit_remember", "consolidation")
-        
+
     Returns:
         "episodic_summary" if consolidated multi-sentence summary, None for explicit or short,
         "fact" for other consolidated schemas.
@@ -32,15 +33,15 @@ def _classify_consolidated_schema(text: str, source_kind: str | None) -> str | N
     # Explicit memories are never reclassified
     if source_kind == "explicit_remember":
         return None
-    
+
     # Count sentences: more heuristic to catch multi-claim summaries
     sentence_count = len(re.findall(r"[.!?]", text))
     text_length = len(text)
-    
+
     # Multi-sentence summaries (>= 3 sentences OR > 300 chars) are tagged as episodic_summary
     if sentence_count >= 3 or text_length > 300:
         return "episodic_summary"
-    
+
     # Short consolidated schemas are tagged as fact
     return "fact"
 
@@ -82,9 +83,7 @@ class Consolidator:
         self.geometric_judge = geometric_judge
         self._latent_mode = latent_builder is not None
         if self._latent_mode and geometric_judge is None:
-            raise ValueError(
-                "Consolidator: latent_builder given but no geometric_judge"
-            )
+            raise ValueError("Consolidator: latent_builder given but no geometric_judge")
 
     def consolidate(self, *, prototype_ids: list[int]) -> ConsolidationStats:
         """Consolidate prototypes into latent schemas. Zero LLM calls."""
@@ -110,9 +109,7 @@ class Consolidator:
         _global_corpus: list[str] = []
         try:
             _global_corpus = [
-                s.content_text
-                for s in self.schemas.list(limit=500)
-                if s.content_text
+                s.content_text for s in self.schemas.list(limit=500) if s.content_text
             ]
         except Exception:
             pass
@@ -179,7 +176,8 @@ class Consolidator:
                 continue
 
             outcome, new_id = self._write_latent_schema(
-                prototype_id=pid, schema=schema,
+                prototype_id=pid,
+                schema=schema,
             )
             if outcome == "created":
                 created += 1
@@ -205,7 +203,10 @@ class Consolidator:
         )
 
     def _write_latent_schema(
-        self, *, prototype_id: int, schema,
+        self,
+        *,
+        prototype_id: int,
+        schema,
     ) -> tuple[str, int | None]:
         """Persist a LatentSchema. Geometric verdict against the closest
         existing schema. Mirrors `_create_and_relate_schema`."""
@@ -248,9 +249,10 @@ class Consolidator:
                     return "reinforced", existing.id
 
         related = self._best_related_schema(
-            claim=claim_text, embedding=claim_embedding,
+            claim=claim_text,
+            embedding=claim_embedding,
         )
-        
+
         # Classify consolidated schema by provenance and structure;
         # tag schema_class so the eligibility gate can filter broad summaries.
         facets = dict(schema.facets) if schema.facets else {}
@@ -258,7 +260,7 @@ class Consolidator:
         schema_class = _classify_consolidated_schema(claim_text, source_kind)
         if schema_class is not None:
             facets["schema_class"] = schema_class
-        
+
         new_schema_id = self.schemas.create(
             prototype_ids=[prototype_id],
             content_text=claim_text,
@@ -288,7 +290,8 @@ class Consolidator:
             log.warning(
                 "consolidation: schema %d has no stored embedding; "
                 "skipping geometric verdict, creating new schema %d",
-                related.id, new_schema_id,
+                related.id,
+                new_schema_id,
             )
             return "created", new_schema_id
 
@@ -299,8 +302,12 @@ class Consolidator:
             member_episode_ids=[],
             central_episode_id=0,
             central_episode_text=related.content_text or "",
-            mean_ts=int(related.facets.get("mean_ts", 0)) if isinstance(related.facets, dict) else 0,
-            ts_span_s=int(related.facets.get("ts_span_s", 0)) if isinstance(related.facets, dict) else 0,
+            mean_ts=(
+                int(related.facets.get("mean_ts", 0)) if isinstance(related.facets, dict) else 0
+            ),
+            ts_span_s=(
+                int(related.facets.get("ts_span_s", 0)) if isinstance(related.facets, dict) else 0
+            ),
             confidence=float(related.confidence),
             support_count=1,
         )
@@ -308,8 +315,10 @@ class Consolidator:
 
         if verdict.verdict == "reinforces":
             self.schemas.add_relation(
-                src_schema_id=new_schema_id, dst_schema_id=related.id,
-                relation="reinforces", confidence=schema.confidence,
+                src_schema_id=new_schema_id,
+                dst_schema_id=related.id,
+                relation="reinforces",
+                confidence=schema.confidence,
             )
             # Cross-scope offline reinforcement: when consolidation finds that a
             # newly-formed schema reinforces an existing schema from a different
@@ -324,8 +333,10 @@ class Consolidator:
             return "reinforced", new_schema_id
         if verdict.verdict == "refines":
             self.schemas.add_relation(
-                src_schema_id=new_schema_id, dst_schema_id=related.id,
-                relation="refines", confidence=schema.confidence,
+                src_schema_id=new_schema_id,
+                dst_schema_id=related.id,
+                relation="refines",
+                confidence=schema.confidence,
             )
             return "reinforced", new_schema_id
         if verdict.verdict == "contradicts":
@@ -349,14 +360,18 @@ class Consolidator:
             # "active" and the damping factor is never applied.
             self.schemas.update_status(related.id, status=old_status, salience=0.05)
             self.schemas.add_relation(
-                src_schema_id=new_schema_id, dst_schema_id=related.id,
-                relation=relation, confidence=max(schema.confidence, 0.5),
+                src_schema_id=new_schema_id,
+                dst_schema_id=related.id,
+                relation=relation,
+                confidence=max(schema.confidence, 0.5),
             )
             return "contradicted", new_schema_id
         # unrelated
         return "created", new_schema_id
 
-    def _record_debug(self, *, prototype_id: int, episode_ids: list[int], created_schema_ids: list[int]) -> None:
+    def _record_debug(
+        self, *, prototype_id: int, episode_ids: list[int], created_schema_ids: list[int]
+    ) -> None:
         conn = self.db.connect()
         conn.execute(
             "INSERT INTO consolidation_debug "
@@ -384,6 +399,7 @@ class Consolidator:
         """Read a schema's stored embedding directly from the DB. Used by
         the latent path's geometric judge."""
         from slowave.utils.vec import unpack_f32
+
         conn = self.db.connect()
         row = conn.execute(
             "SELECT embedding, dim FROM schemas WHERE id = ?", (int(schema_id),)
@@ -410,8 +426,17 @@ class Consolidator:
     def _looks_like_update(self, claim: str) -> bool:
         text = claim.lower()
         markers = (
-            "now", "updated", "changed", "instead", "actually", "no longer",
-            "rather than", "switched", "moved", "current", "latest",
+            "now",
+            "updated",
+            "changed",
+            "instead",
+            "actually",
+            "no longer",
+            "rather than",
+            "switched",
+            "moved",
+            "current",
+            "latest",
         )
         return any(m in text for m in markers)
 

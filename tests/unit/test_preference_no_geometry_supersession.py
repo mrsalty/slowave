@@ -5,6 +5,7 @@ domain (-0.17). Preferences (dark mode, blunt feedback style, etc.) that
 flip are divergences, not value substitutions — they should be treated as
 reinforcement, not automatic supersession of the old preference.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -42,6 +43,7 @@ def eng(tmp_path):
 # ---------------------------------------------------------------------------
 # profile schema_class guard
 # ---------------------------------------------------------------------------
+
 
 def test_preference_remember_is_not_superseded_by_new_preference(eng):
     """Remembering a diverging preference must not supersede the old one."""

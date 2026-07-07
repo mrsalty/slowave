@@ -6,6 +6,7 @@ Validates Step 5 (feedback auto-derive) and Step 6 acceptance criteria:
 - Assert context_feedback_events row carries goal='g1' and task_type='tt1'
 - Also test unknown retrieval_id: writes feedback with NULLs, does not crash
 """
+
 from __future__ import annotations
 
 import os
@@ -62,8 +63,12 @@ class TestReinforceAutoderive:
                 (ctx_id,),
             ).fetchone()
             assert row is not None
-            assert row["goal"] == "implement test feature", f"expected auto-derived goal, got {row['goal']}"
-            assert row["task_type"] == "coding", f"expected auto-derived task_type, got {row['task_type']}"
+            assert (
+                row["goal"] == "implement test feature"
+            ), f"expected auto-derived goal, got {row['goal']}"
+            assert (
+                row["task_type"] == "coding"
+            ), f"expected auto-derived task_type, got {row['task_type']}"
             assert row["scope_id"] == "project:test"
         finally:
             eng.close()

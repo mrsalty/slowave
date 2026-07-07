@@ -53,10 +53,9 @@ from mcp.server.fastmcp import FastMCP
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.core.paths import default_db_path
-from slowave.symbolic.encoder import EncoderConfig
-
 from slowave.mcp import session_reaper
 from slowave.mcp.tools import register_tools
+from slowave.symbolic.encoder import EncoderConfig
 
 log = logging.getLogger(__name__)
 
@@ -132,6 +131,7 @@ def main() -> None:
     # Redirect ALL logging to a file — stdout/stderr must stay clean for JSON-RPC
     # ---------------------------------------------------------------------------
     import pathlib
+
     _log_dir = pathlib.Path.home() / ".slowave" / "logs"
     _log_dir.mkdir(parents=True, exist_ok=True)
     _log_file = _log_dir / "mcp-stdio.log"
@@ -175,9 +175,7 @@ def main() -> None:
                     _cleanup()
                     os._exit(0)
 
-        t = threading.Thread(
-            target=_watchdog, daemon=True, name="slowave-mcp-watchdog"
-        )
+        t = threading.Thread(target=_watchdog, daemon=True, name="slowave-mcp-watchdog")
         t.start()
         log.info(
             "slowave-mcp: idle watchdog active (timeout=%ds, env SLOWAVE_MCP_IDLE_TIMEOUT)",

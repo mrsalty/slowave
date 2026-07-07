@@ -29,7 +29,7 @@ def unpack_f32(blob: bytes, dim: int) -> np.ndarray:
     return vec
 
 
-def dumps_json(data: dict[str, Any]) -> str:
+def dumps_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 
 
