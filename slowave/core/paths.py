@@ -1,4 +1,5 @@
 """Filesystem path helpers for Slowave."""
+
 from __future__ import annotations
 
 import os

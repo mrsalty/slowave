@@ -273,7 +273,6 @@ class SlowaveEngine:
             cfg=self.cfg.feedback,
         )
 
-
         # rebuild FAISS indices from DB
         self.episodic.reset_faiss_from_db()
         self.semantic.reset_faiss_from_db()
@@ -301,6 +300,7 @@ class SlowaveEngine:
 
     def _fetch_schema_embedding(self, schema_id: int) -> "np.ndarray | None":
         from slowave.utils.vec import unpack_f32
+
         conn = self.db.connect()
         row = conn.execute(
             "SELECT embedding, dim FROM schemas WHERE id = ?", (int(schema_id),)
@@ -586,13 +586,13 @@ class SlowaveEngine:
                     # replacement; treat as reinforcement.
                     _mem_layer = str(candidate.facets.get("memory_layer", "")).lower()
                     _mem_class = str(candidate.facets.get("schema_class", "")).lower()
-                    _is_profile = (
-                        _mem_layer == "profile"
-                        or _mem_class in {
-                            "preference", "interaction_preference",
-                            "constraint", "habit", "relationship",
-                        }
-                    )
+                    _is_profile = _mem_layer == "profile" or _mem_class in {
+                        "preference",
+                        "interaction_preference",
+                        "constraint",
+                        "habit",
+                        "relationship",
+                    }
 
                     if candidate_emb is None or _is_profile:
                         # Missing embedding or profile memory — no geometric verdict.
@@ -611,7 +611,9 @@ class SlowaveEngine:
                             # High-confidence topical match: full three-way decision
                             if dir_score >= DIRECTION_THRESHOLD:
                                 try:
-                                    self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
+                                    self.schemas.update_status(
+                                        candidate_id, status="superseded", salience=0.05
+                                    )
                                     self.schemas.add_relation(
                                         src_schema_id=new_schema_id,
                                         dst_schema_id=candidate_id,
@@ -623,15 +625,19 @@ class SlowaveEngine:
                                 except Exception as e:
                                     log.warning(
                                         "remember: supersession failed for schema %d: %s",
-                                        candidate_id, e,
+                                        candidate_id,
+                                        e,
                                     )
                             elif dir_score >= DIR_REVIEW_BAND:
                                 try:
-                                    self.schemas.adjust_feedback_state(candidate_id, needs_review=True)
+                                    self.schemas.adjust_feedback_state(
+                                        candidate_id, needs_review=True
+                                    )
                                 except (KeyError, Exception) as e:
                                     log.warning(
                                         "remember: adjust_feedback_state failed for schema %d: %s",
-                                        candidate_id, e,
+                                        candidate_id,
+                                        e,
                                     )
                             else:
                                 try:
@@ -639,7 +645,8 @@ class SlowaveEngine:
                                 except (KeyError, Exception) as e:
                                     log.warning(
                                         "remember: reinforce_schema failed for schema %d: %s",
-                                        candidate_id, e,
+                                        candidate_id,
+                                        e,
                                     )
                         else:
                             # Extended range (0.70–0.85): direction_score-only supersession.
@@ -648,7 +655,9 @@ class SlowaveEngine:
                             # Catches explicit fact updates like wiki S-1/S-2 (cos ~0.80)
                             # that were previously unhandled. No reinforce/review at this range.
                             if dir_score >= DIRECTION_THRESHOLD:
-                                self.schemas.update_status(candidate_id, status="superseded", salience=0.05)
+                                self.schemas.update_status(
+                                    candidate_id, status="superseded", salience=0.05
+                                )
                                 self.schemas.add_relation(
                                     src_schema_id=new_schema_id,
                                     dst_schema_id=candidate_id,
@@ -668,12 +677,14 @@ class SlowaveEngine:
                             except (KeyError, Exception) as e:
                                 log.warning(
                                     "remember: cross-scope reinforce failed for schema %d: %s",
-                                    candidate_id, e,
+                                    candidate_id,
+                                    e,
                                 )
             except Exception as e:
                 log.warning(
                     "remember: candidate loop iteration failed for schema %d: %s",
-                    candidate_id, e,
+                    candidate_id,
+                    e,
                 )
 
         try:
@@ -689,8 +700,12 @@ class SlowaveEngine:
         )
 
     # ---- consolidation ----------------------------------------------------
-    def consolidate_once(self, *, triggered_by: str = "worker", decay_idle_days: float = 30.0) -> dict[str, Any]:
-        return self._consolidation.consolidate_once(triggered_by=triggered_by, decay_idle_days=decay_idle_days)
+    def consolidate_once(
+        self, *, triggered_by: str = "worker", decay_idle_days: float = 30.0
+    ) -> dict[str, Any]:
+        return self._consolidation.consolidate_once(
+            triggered_by=triggered_by, decay_idle_days=decay_idle_days
+        )
 
     def refresh_indices(self) -> None:
         self._retrieval.refresh_indices()

@@ -13,6 +13,7 @@ Two spinners:
 Both write to stderr so they don't pollute stdout/JSON output.
 Both are no-ops when stderr is not a TTY (CI, pipes, --json mode).
 """
+
 from __future__ import annotations
 
 import sys

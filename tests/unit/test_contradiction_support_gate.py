@@ -4,6 +4,7 @@ The GeometricJudgeConfig has min_support_to_supersede and
 min_time_delta_to_supersede_s that were previously unused.
 The consolidator now uses them to gate contradiction verdicts.
 """
+
 from __future__ import annotations
 
 import tempfile
@@ -25,7 +26,9 @@ SCHEMA_PATH = str(REPO_ROOT / "slowave" / "storage" / "schema.sql")
 
 
 def make_latent_schema(
-    centroid=None, support_count=3, mean_ts=1000,
+    centroid=None,
+    support_count=3,
+    mean_ts=1000,
 ) -> LatentSchema:
     if centroid is None:
         centroid = np.ones(32, dtype=np.float32) / np.sqrt(32)
@@ -50,6 +53,7 @@ def mock_consolidator():
     """Consolidator with mocked judge that always returns 'contradicts'."""
     db_path = str(Path(tempfile.mkdtemp()) / "test.db")
     from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
+
     db = SQLiteDB(SQLiteConfig(path=db_path))
     db.init_schema(SCHEMA_PATH)
     conn = db.connect()
@@ -77,11 +81,16 @@ def mock_consolidator():
     cons.schemas.search_embedding.return_value = []
     # Force the judge to return "contradicts" so we test the gate.
     from slowave.latent.schema import GeometricVerdict
-    cons.geometric_judge.judge = MagicMock(return_value=GeometricVerdict(
-        verdict="contradicts", reasoning="test",
-        similarity=0.80, facet_distance=0.40,
-        time_delta_s=1000,
-    ))
+
+    cons.geometric_judge.judge = MagicMock(
+        return_value=GeometricVerdict(
+            verdict="contradicts",
+            reasoning="test",
+            similarity=0.80,
+            facet_distance=0.40,
+            time_delta_s=1000,
+        )
+    )
     yield cons
     db.close()
 
@@ -120,6 +129,7 @@ def test_contradicts_passes_with_enough_support(mock_consolidator):
 def test_contradicts_gated_by_short_time_delta(mock_consolidator):
     """contradicts with dt=30s < min_time_delta=60s → 'reinforced'."""
     from slowave.latent.schema import GeometricVerdict
+
     old_schema = MagicMock(id=7, content_text="old", confidence=1.0, facets={}, scope_id="p:t")
     old_emb = np.ones(32, dtype=np.float32) / np.sqrt(32)
 
@@ -127,12 +137,17 @@ def test_contradicts_gated_by_short_time_delta(mock_consolidator):
         with patch.object(mock_consolidator, "_fetch_schema_embedding", return_value=old_emb):
             with patch.object(mock_consolidator, "_scope_for_episodes", return_value="p:t"):
                 # Override judge for this test: short time delta (30s < 60s gate)
-                with patch.object(mock_consolidator.geometric_judge, "judge",
-                                  return_value=GeometricVerdict(
-                                      verdict="contradicts", reasoning="test",
-                                      similarity=0.80, facet_distance=0.40,
-                                      time_delta_s=30,  # below min_time_delta
-                                  )):
+                with patch.object(
+                    mock_consolidator.geometric_judge,
+                    "judge",
+                    return_value=GeometricVerdict(
+                        verdict="contradicts",
+                        reasoning="test",
+                        similarity=0.80,
+                        facet_distance=0.40,
+                        time_delta_s=30,  # below min_time_delta
+                    ),
+                ):
                     outcome, _ = mock_consolidator._write_latent_schema(
                         prototype_id=1,
                         schema=make_latent_schema(support_count=5),

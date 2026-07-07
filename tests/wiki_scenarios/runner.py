@@ -2,6 +2,7 @@
 
 Same structure as tests/temporal_eval/run_temporal_eval.py.
 """
+
 from __future__ import annotations
 
 import json
@@ -21,8 +22,17 @@ os.environ.setdefault("TQDM_DISABLE", "1")
 os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 
 import logging
-for _n in ("sentence_transformers","transformers","httpx","httpcore",
-           "huggingface_hub","filelock","tqdm","onnxruntime"):
+
+for _n in (
+    "sentence_transformers",
+    "transformers",
+    "httpx",
+    "httpcore",
+    "huggingface_hub",
+    "filelock",
+    "tqdm",
+    "onnxruntime",
+):
     logging.getLogger(_n).setLevel(logging.ERROR)
 
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
@@ -32,8 +42,9 @@ from tests.wiki_scenarios.scenarios import SCENARIOS, run_scenario
 ABLATIONS = ["full", "no_salience", "no_graph", "no_consolidation"]
 
 
-def run_ablation(ablation: str, *, shared_enc: TextEncoder,
-                 limit: int = 0, tau_days: float = 7.0) -> list[ScenarioResult]:
+def run_ablation(
+    ablation: str, *, shared_enc: TextEncoder, limit: int = 0, tau_days: float = 7.0
+) -> list[ScenarioResult]:
     scenarios = SCENARIOS if not limit else SCENARIOS[:limit]
     results: list[ScenarioResult] = []
     for s in scenarios:
@@ -50,9 +61,9 @@ def run_ablation(ablation: str, *, shared_enc: TextEncoder,
 
 def print_report(all_results: dict[str, list[ScenarioResult]]) -> None:
     families = ["retrieval", "isolation", "generalization", "decay", "supersession", "completion"]
-    print("\n" + "="*90)
+    print("\n" + "=" * 90)
     print("  SLOWAVE — WikiScenarios Benchmark")
-    print("="*90)
+    print("=" * 90)
 
     all_ids = list(dict.fromkeys(r.scenario_id for rs in all_results.values() for r in rs))
     abl_list = list(all_results.keys())
@@ -95,7 +106,7 @@ def print_report(all_results: dict[str, list[ScenarioResult]]) -> None:
             if hits
         )
         print(f"  {abl:<20}  {h}/{n} ({100*h//max(n,1)}%)  {fam_str}")
-    print("="*90 + "\n")
+    print("=" * 90 + "\n")
 
 
 def save_results(all_results: dict[str, list[ScenarioResult]], out_dir: Path) -> None:

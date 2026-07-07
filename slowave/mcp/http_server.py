@@ -144,9 +144,7 @@ def _make_app():
                 "host": DEFAULT_HOST,
                 "port": DEFAULT_PORT,
                 "db": str(DEFAULT_DB),
-                "active_sessions": len(
-                    [s for s in sessions.values() if s.get("fresh")]
-                ),
+                "active_sessions": len([s for s in sessions.values() if s.get("fresh")]),
                 "engines_loaded": list(_ENGINES.keys()),
             }
         )
@@ -233,8 +231,7 @@ def main(
 
     # -- start server --------------------------------------------------------
     log.info(
-        "Slowave HTTP MCP daemon starting on http://%s:%d/mcp  "
-        "(pid=%d, db=%s)",
+        "Slowave HTTP MCP daemon starting on http://%s:%d/mcp  " "(pid=%d, db=%s)",
         host,
         port,
         os.getpid(),

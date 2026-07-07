@@ -15,5 +15,5 @@ COLD_START_FILES: list[str] = [
     "CONTRIBUTING.md",
     "DEVELOPMENT.md",
     "ROADMAP.md",
-    "CHANGELOG.md"
+    "CHANGELOG.md",
 ]

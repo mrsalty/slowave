@@ -82,7 +82,15 @@ class GraphManager:
               weight = excluded.weight,
               last_updated_ts = excluded.last_updated_ts
             """,
-            (int(src), int(dst), float(w_similarity), float(w_transition), float(w_coactivation), float(weight), int(ts)),
+            (
+                int(src),
+                int(dst),
+                float(w_similarity),
+                float(w_transition),
+                float(w_coactivation),
+                float(weight),
+                int(ts),
+            ),
         )
         conn.commit()
 
@@ -194,11 +202,9 @@ class GraphManager:
         """
         conn = self.db.connect()
         # Fetch all edges grouped by source
-        rows = conn.execute(
-            """SELECT src_prototype_id, dst_prototype_id, weight
+        rows = conn.execute("""SELECT src_prototype_id, dst_prototype_id, weight
                FROM prototype_edges
-               ORDER BY src_prototype_id, weight DESC"""
-        ).fetchall()
+               ORDER BY src_prototype_id, weight DESC""").fetchall()
 
         if not rows:
             return

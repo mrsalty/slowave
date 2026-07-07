@@ -12,6 +12,7 @@ Covers:
   - LatentSchemaBuilder vsa_mode guard validation
   - LatentSchemaBuilder.build() populates facets["vsa_vec"]
 """
+
 from __future__ import annotations
 
 import base64
@@ -28,6 +29,7 @@ import pytest
 # ---------------------------------------------------------------------------
 try:
     import spacy as _spacy
+
     _EN_CORE_WEB_SM_AVAILABLE: bool = _spacy.util.is_package("en_core_web_sm")
 except Exception:
     _EN_CORE_WEB_SM_AVAILABLE = False
@@ -38,10 +40,10 @@ _requires_en_core_web_sm = pytest.mark.skipif(
 )
 
 from slowave.latent.vsa import (
+    _DEFAULT_DIM,
     ROLE_OBJECT,
     ROLE_PREDICATE,
     ROLE_SUBJECT,
-    _DEFAULT_DIM,
     _make_role_vectors,
     b64_to_vec,
     bind,
@@ -54,10 +56,10 @@ from slowave.latent.vsa import (
     vec_to_b64,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _unit(v: np.ndarray) -> np.ndarray:
     return (v / (np.linalg.norm(v) + 1e-12)).astype(np.float32)
@@ -75,6 +77,7 @@ def _rand_vec(dim: int, seed: int) -> np.ndarray:
 
 class _ET:
     """Minimal EpisodeText stub."""
+
     def __init__(self, text: str, source_content: str | None = None):
         self.content_text = text
         self.source_content = source_content  # mirrors EpisodeText.source_content
@@ -83,6 +86,7 @@ class _ET:
 # ---------------------------------------------------------------------------
 # Role vector properties
 # ---------------------------------------------------------------------------
+
 
 class TestRoleVectors:
     def test_unit_norm(self):
@@ -123,6 +127,7 @@ class TestRoleVectors:
 # bind / unbind
 # ---------------------------------------------------------------------------
 
+
 class TestBind:
     def test_output_shape(self):
         assert bind(_rand_vec(_DEFAULT_DIM, 1), _rand_vec(_DEFAULT_DIM, 2)).shape == (_DEFAULT_DIM,)
@@ -153,9 +158,16 @@ class TestBind:
 # bundle
 # ---------------------------------------------------------------------------
 
+
 class TestBundle:
     def test_unit_norm(self):
-        assert abs(np.linalg.norm(bundle(_rand_vec(_DEFAULT_DIM, 50), _rand_vec(_DEFAULT_DIM, 51))) - 1.0) < 1e-5
+        assert (
+            abs(
+                np.linalg.norm(bundle(_rand_vec(_DEFAULT_DIM, 50), _rand_vec(_DEFAULT_DIM, 51)))
+                - 1.0
+            )
+            < 1e-5
+        )
 
     def test_close_to_components(self):
         a, b = _rand_vec(_DEFAULT_DIM, 60), _rand_vec(_DEFAULT_DIM, 61)
@@ -174,6 +186,7 @@ class TestBundle:
 # ---------------------------------------------------------------------------
 # encode_triple + query_role
 # ---------------------------------------------------------------------------
+
 
 class TestEncodeTriple:
     def setup_method(self):
@@ -210,6 +223,7 @@ class TestEncodeTriple:
 # Serialisation
 # ---------------------------------------------------------------------------
 
+
 class TestSerialisation:
     def test_b64_roundtrip(self):
         v = _rand_vec(_DEFAULT_DIM, 200)
@@ -227,19 +241,26 @@ class TestSerialisation:
 # build_schema_vsa
 # ---------------------------------------------------------------------------
 
+
 class TestBuildSchemaVsa:
     def test_two_facet_axes(self):
         dim = _DEFAULT_DIM
-        vsa = build_schema_vsa(_rand_vec(dim, 300), np.stack([_rand_vec(dim, 301), _rand_vec(dim, 302)]))
+        vsa = build_schema_vsa(
+            _rand_vec(dim, 300), np.stack([_rand_vec(dim, 301), _rand_vec(dim, 302)])
+        )
         assert vsa.shape == (dim,) and abs(np.linalg.norm(vsa) - 1.0) < 1e-4
 
     def test_one_facet_axis(self):
         dim = _DEFAULT_DIM
-        assert build_schema_vsa(_rand_vec(dim, 310), np.stack([_rand_vec(dim, 311)])).shape == (dim,)
+        assert build_schema_vsa(_rand_vec(dim, 310), np.stack([_rand_vec(dim, 311)])).shape == (
+            dim,
+        )
 
     def test_no_facet_axes(self):
         dim = _DEFAULT_DIM
-        assert build_schema_vsa(_rand_vec(dim, 320), np.zeros((0, dim), dtype=np.float32)).shape == (dim,)
+        assert build_schema_vsa(
+            _rand_vec(dim, 320), np.zeros((0, dim), dtype=np.float32)
+        ).shape == (dim,)
 
     def test_subject_query_close_to_centroid(self):
         dim = _DEFAULT_DIM
@@ -259,9 +280,11 @@ class TestBuildSchemaVsa:
 # Integration: LatentSchemaBuilder populates facets["vsa_vec"]
 # ---------------------------------------------------------------------------
 
+
 class TestBuilderVsaIntegration:
     def test_multi_member_has_vsa_vec(self):
         from slowave.latent.schema import LatentSchemaBuilder
+
         rng = np.random.default_rng(400)
         dim = _DEFAULT_DIM
         n = 5
@@ -280,6 +303,7 @@ class TestBuilderVsaIntegration:
 
     def test_single_member_has_vsa_vec(self):
         from slowave.latent.schema import LatentSchemaBuilder
+
         dim = _DEFAULT_DIM
         emb = _unit(np.random.default_rng(401).standard_normal(dim).astype(np.float32))
         schema = LatentSchemaBuilder().build(
@@ -297,6 +321,7 @@ class TestBuilderVsaIntegration:
 # Lexical role extraction
 # ---------------------------------------------------------------------------
 
+
 class TestExtractRolesLexical:
     """Tests for _extract_roles_lexical — regex + lexical_sig extraction.
 
@@ -305,6 +330,7 @@ class TestExtractRolesLexical:
 
     def setup_method(self):
         from slowave.latent.vsa import _extract_roles_lexical
+
         self._extract = _extract_roles_lexical
 
     def test_returns_three_strings(self):
@@ -332,7 +358,9 @@ class TestExtractRolesLexical:
         assert isinstance(s, str) and isinstance(p, str) and isinstance(o, str)
 
     def test_no_verb_uses_lexical_fallback(self):
-        _, p, _ = self._extract("Python backend architecture", {"python": 0.9, "backend": 0.7, "arch": 0.5})
+        _, p, _ = self._extract(
+            "Python backend architecture", {"python": 0.9, "backend": 0.7, "arch": 0.5}
+        )
         assert isinstance(p, str) and len(p) > 0
 
     def test_deterministic(self):
@@ -341,32 +369,34 @@ class TestExtractRolesLexical:
         assert self._extract(text, sig) == self._extract(text, sig)
 
 
-
-
-
 # ---------------------------------------------------------------------------
 # LatentSchemaBuilder vsa_mode guards
 # ---------------------------------------------------------------------------
+
 
 class TestBuilderVsaModeGuards:
     """Constructor validation for LatentSchemaBuilder vsa_mode."""
 
     def test_invalid_mode_raises(self):
         from slowave.latent.schema import LatentSchemaBuilder
+
         with pytest.raises(ValueError, match="vsa_mode must be"):
             LatentSchemaBuilder(vsa_mode="invalid")
 
     def test_lexical_without_encoder_raises(self):
         from slowave.latent.schema import LatentSchemaBuilder
+
         with pytest.raises(ValueError, match="requires an encoder"):
             LatentSchemaBuilder(vsa_mode="lexical")
 
     def test_geometric_default_no_encoder_needed(self):
         from slowave.latent.schema import LatentSchemaBuilder
+
         b = LatentSchemaBuilder(vsa_mode="geometric")
         assert b.vsa_mode == "geometric"
 
     def test_default_vsa_mode_is_geometric(self):
         from slowave.latent.schema import LatentSchemaBuilder
+
         b = LatentSchemaBuilder()
         assert b.vsa_mode == "geometric"

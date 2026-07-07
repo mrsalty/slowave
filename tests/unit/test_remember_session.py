@@ -9,6 +9,7 @@ Verifies:
 - Calling remember() twice with the same content inside a live session produces
   no duplicate episodes.
 """
+
 from __future__ import annotations
 
 import os
@@ -19,10 +20,10 @@ import pytest
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _fake_encoder_engine(db_path: str, dim: int = 32) -> SlowaveEngine:
     """Build an engine with a deterministic stub encoder (no model download)."""
@@ -59,22 +60,23 @@ def _episode_count(eng: SlowaveEngine) -> int:
 
 def _session_ended(eng: SlowaveEngine, session_id: str) -> bool:
     conn = eng.db.connect()
-    row = conn.execute(
-        "SELECT ended_ts FROM sessions WHERE id = ?", (session_id,)
-    ).fetchone()
+    row = conn.execute("SELECT ended_ts FROM sessions WHERE id = ?", (session_id,)).fetchone()
     return row is not None and row["ended_ts"] is not None
 
 
 def _episodes_for_session(eng: SlowaveEngine, session_id: str) -> int:
     conn = eng.db.connect()
-    return int(conn.execute(
-        "SELECT COUNT(*) FROM episode_text WHERE session_id = ?", (session_id,)
-    ).fetchone()[0])
+    return int(
+        conn.execute(
+            "SELECT COUNT(*) FROM episode_text WHERE session_id = ?", (session_id,)
+        ).fetchone()[0]
+    )
 
 
 # ---------------------------------------------------------------------------
 # Standalone path (no session_id)
 # ---------------------------------------------------------------------------
+
 
 class TestRememberStandalone:
     def test_episodes_formed_immediately(self, eng):
@@ -97,6 +99,7 @@ class TestRememberStandalone:
 # ---------------------------------------------------------------------------
 # Live-session path (session_id passed)
 # ---------------------------------------------------------------------------
+
 
 class TestRememberLiveSession:
     def test_session_not_ended(self, eng):

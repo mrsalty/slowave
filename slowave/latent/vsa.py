@@ -52,6 +52,7 @@ Two role-extraction strategies are provided, selectable via
       Requires an encoder (encode_many is called once per schema).
       English-optimised but no language-specific model dependency.
 """
+
 from __future__ import annotations
 
 import base64
@@ -262,7 +263,9 @@ def _extract_roles_lexical(text: str, lexical_sig: dict) -> tuple[str, str, str]
     tokens = _re.findall(r"\b[A-Za-z][a-zA-Z0-9_\-]*\b", text)
     subject = next((t for t in tokens if t[0].isupper() and len(t) > 1), "")
     if not subject:
-        subject = list(lexical_sig.keys())[0] if lexical_sig else (tokens[0] if tokens else "entity")
+        subject = (
+            list(lexical_sig.keys())[0] if lexical_sig else (tokens[0] if tokens else "entity")
+        )
     vm = _VERB_RE.search(text)
     predicate = vm.group(0).lower() if vm else ""
     if not predicate:
@@ -272,13 +275,6 @@ def _extract_roles_lexical(text: str, lexical_sig: dict) -> tuple[str, str, str]
     obj_terms = [t for t in lexical_sig.keys() if t.lower() not in used][:3]
     obj = " ".join(obj_terms) if obj_terms else (tokens[-1] if tokens else "thing")
     return subject, predicate, obj
-
-
-
-
-
-
-
 
 
 # ---------------------------------------------------------------------------
@@ -296,6 +292,3 @@ def build_schema_vsa_lexical(
     subj_str, pred_str, obj_str = _extract_roles_lexical(text, lexical_sig)
     vecs = encoder.encode_many([subj_str, pred_str, obj_str])
     return encode_triple(vecs[0], vecs[1], vecs[2])
-
-
-

@@ -65,8 +65,13 @@ class SemanticStore:
         self._save_index()
 
     def upsert_prototype(
-        self, *, prototype_id: int | None, centroid: np.ndarray,
-        support_count: int, variance: float, ts: int | None = None,
+        self,
+        *,
+        prototype_id: int | None,
+        centroid: np.ndarray,
+        support_count: int,
+        variance: float,
+        ts: int | None = None,
         scale: str = "fine",
     ) -> int:
         """Insert or update a prototype.
@@ -88,9 +93,16 @@ class SemanticStore:
                 INSERT INTO semantic_prototypes (centroid, dim, support_count, variance, last_updated_ts, scale)
                 VALUES (?, ?, ?, ?, ?, ?)
                 """,
-                (pack_f32(c), self.cfg.dim, int(support_count), float(variance), int(ts), str(scale)),
+                (
+                    pack_f32(c),
+                    self.cfg.dim,
+                    int(support_count),
+                    float(variance),
+                    int(ts),
+                    str(scale),
+                ),
             )
-            prototype_id = int(cur.lastrowid)
+            prototype_id = int(cur.lastrowid or 0)
         else:
             conn.execute(
                 """
@@ -107,7 +119,7 @@ class SemanticStore:
         x = c.reshape(1, -1).copy()
         faiss.normalize_L2(x)
         try:
-            self._index.remove_ids(np.asarray([prototype_id], dtype=np.int64))
+            self._index.remove_ids(np.asarray([prototype_id], dtype=np.int64))  # type: ignore[arg-type]
         except Exception:
             pass
         self._index.add_with_ids(x, np.asarray([prototype_id], dtype=np.int64))
@@ -284,7 +296,11 @@ class SemanticStore:
         return scores.reshape(-1), ids.reshape(-1)
 
     def search_by_scale(
-        self, query: np.ndarray, *, scale: str, top_k: int,
+        self,
+        query: np.ndarray,
+        *,
+        scale: str,
+        top_k: int,
     ) -> tuple[np.ndarray, np.ndarray]:
         """Stage 9: scale-restricted FAISS search.
 

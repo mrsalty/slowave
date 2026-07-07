@@ -4,6 +4,7 @@ Default model: paraphrase-multilingual-MiniLM-L12-v2 (384-dim, 50+ languages).
 Any model with a Xenova ONNX conversion on Hugging Face Hub can be used by
 passing model_name to ONNXTextEncoder or EncoderConfig.
 """
+
 from __future__ import annotations
 
 import logging
@@ -70,9 +71,7 @@ class ONNXTextEncoder:
 
                 # Create ONNX Runtime session with CPU optimization
                 sess_options = ort.SessionOptions()
-                sess_options.graph_optimization_level = (
-                    ort.GraphOptimizationLevel.ORT_ENABLE_ALL
-                )
+                sess_options.graph_optimization_level = ort.GraphOptimizationLevel.ORT_ENABLE_ALL
                 sess_options.intra_op_num_threads = os.cpu_count() or 4
 
                 self._session = ort.InferenceSession(
@@ -107,9 +106,7 @@ class ONNXTextEncoder:
         else:
             # Use HF_HOME or default .cache
             cache_dir = Path(
-                os.environ.get(
-                    "HF_HOME", Path.home() / ".cache" / "huggingface" / "hub"
-                )
+                os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface" / "hub")
             )
 
         # Xenova hosts ONNX conversions of popular sentence-transformers models.
@@ -203,16 +200,12 @@ class ONNXTextEncoder:
 
         # Mean pooling: average over sequence dimension
         attention_mask = encoded["attention_mask"].astype(np.float32)
-        attention_mask_expanded = np.expand_dims(
-            attention_mask, axis=2
-        )  # [batch_size, seq_len, 1]
+        attention_mask_expanded = np.expand_dims(attention_mask, axis=2)  # [batch_size, seq_len, 1]
 
         sum_embeddings = np.sum(
             last_hidden_state * attention_mask_expanded, axis=1
         )  # [batch_size, 384]
-        sum_mask = np.sum(
-            attention_mask_expanded, axis=1
-        )  # [batch_size, 1]
+        sum_mask = np.sum(attention_mask_expanded, axis=1)  # [batch_size, 1]
 
         embeddings = sum_embeddings / (sum_mask + 1e-8)  # [batch_size, 384]
 

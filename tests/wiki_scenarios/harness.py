@@ -4,6 +4,7 @@ Follows the same pattern as tests/temporal_eval/harness.py exactly.  Only adds:
   - ingest_page(title, consolidate)  — opens a scoped session per page
   - build_hypothesis(result) -> str  — assembles result text for keyword testing
 """
+
 from __future__ import annotations
 
 import sys
@@ -11,10 +12,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
-from tests.temporal_eval.harness import TemporalHarness, ScenarioResult, keyword_hit
-from tests.wiki_scenarios.corpus import paragraphs_for
 from slowave.core.engine import RecallResult
 from slowave.symbolic.encoder import TextEncoder
+from tests.temporal_eval.harness import ScenarioResult, TemporalHarness, keyword_hit
+from tests.wiki_scenarios.corpus import paragraphs_for
 
 
 class WikiHarness(TemporalHarness):

@@ -2,19 +2,20 @@
 
 Merges SlowWave's latent-side configs with new symbolic-side configs.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from pathlib import Path
 
+from slowave.core.feedback import FeedbackConfig
+from slowave.core.paths import default_db_path
 from slowave.latent.graph_manager import GraphConfig
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
 from slowave.latent.salience import SalienceConfig
 from slowave.latent.transition_model import TransitionModelConfig
 from slowave.symbolic.encoder import EncoderConfig
-from slowave.core.paths import default_db_path
-from slowave.core.feedback import FeedbackConfig
 
 
 @dataclass(frozen=True)
@@ -48,7 +49,6 @@ class SlowaveConfig:
 
     # feedback system
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
-
 
     @staticmethod
     def default_schema_path() -> str:

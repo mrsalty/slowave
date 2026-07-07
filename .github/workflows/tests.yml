@@ -61,7 +61,15 @@ jobs:
         pip install black isort
 
     - name: Check formatting with black
-      run: black --check slowave/ tests/ || true
+      run: black --check slowave/ tests/
 
     - name: Check import sort with isort
-      run: isort --check-only slowave/ tests/ || true
+      run: isort --check-only slowave/ tests/
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v5
+    - run: uv sync --group dev
+    - run: uv run mypy slowave/
