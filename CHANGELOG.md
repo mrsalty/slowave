@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.13.0](https://github.com/mrsalty/slowave/compare/slowave-v0.12.1...slowave-v0.13.0) (2026-07-07)
+
+
+### Features
+
+* v4 lifecycle block with structured cold-start hints ([77c7d65](https://github.com/mrsalty/slowave/commit/77c7d6581e8a583b99dc7a1585018e12165b7bcd))
+* v4 lifecycle block with structured cold-start hints ([a5b84b7](https://github.com/mrsalty/slowave/commit/a5b84b7f26cee1948b2a3613f28e734868a2e2f0))
+
 ## [0.12.1](https://github.com/mrsalty/slowave/compare/slowave-v0.12.0...slowave-v0.12.1) (2026-07-06)
 
 
