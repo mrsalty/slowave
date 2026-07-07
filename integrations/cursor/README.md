@@ -1,6 +1,6 @@
 # Cursor + Slowave — quick-ref
 
-Full guide: **[../../docs/setup.md](../../docs/setup.md)**
+Full guide: **[../../docs/install.md](../../docs/install.md)**
 
 ---
 
@@ -20,7 +20,7 @@ One manual step remains: add the lifecycle instructions to Cursor.
 
 Open Cursor → **Settings → Rules for AI** (or add a `.cursorrules` file at the root of your project).
 
-**Paste the lifecycle instructions from:** [docs/setup.md#lifecycle-instruction-block](../../docs/setup.md#lifecycle-instruction-block)
+**Paste the lifecycle instructions from:** [docs/install.md#lifecycle-instruction-block](../../docs/install.md#lifecycle-instruction-block)
 
 > **Why Rules for AI, not just the MCP config?**
 > Cursor's MCP integration exposes tools but does not automatically instruct the AI _when_ to call them. The Rules for AI field fires on every request and ensures Slowave's session/event lifecycle is honoured from the first message.
