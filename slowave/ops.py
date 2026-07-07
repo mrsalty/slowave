@@ -74,8 +74,7 @@ def activate(
     _internal = {
         "memory_ids": [f"sch_{item.schema.id}" for item in brief.items],
         "schemas": [
-            {"id": f"sch_{item.schema.id}", "activation": item.activation}
-            for item in brief.items
+            {"id": f"sch_{item.schema.id}", "activation": item.activation} for item in brief.items
         ],
     }
     _filtered = [

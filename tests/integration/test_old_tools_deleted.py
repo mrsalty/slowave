@@ -7,6 +7,7 @@ Old / bare names forbidden: context, session_start, session_end, event, retrieva
 New tools present: slowave_activate, slowave_remember, slowave_recall, slowave_reinforce,
                    slowave_commit, slowave_stats
 """
+
 from __future__ import annotations
 
 
@@ -22,7 +23,9 @@ class TestOldToolsDeleted:
         if cls._tool_names is not None:
             return cls._tool_names
         import asyncio
+
         import slowave.mcp.server as srv
+
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
@@ -34,7 +37,14 @@ class TestOldToolsDeleted:
 
     def test_old_tools_absent(self) -> None:
         tool_names = self._get_tool_names()
-        deleted = {"context", "session_start", "session_end", "event", "retrieval_feedback", "context_feedback"}
+        deleted = {
+            "context",
+            "session_start",
+            "session_end",
+            "event",
+            "retrieval_feedback",
+            "context_feedback",
+        }
         present_old = deleted & tool_names
         assert not present_old, f"Old tools still registered: {present_old}"
 
@@ -50,12 +60,19 @@ class TestOldToolsDeleted:
         tool_names = self._get_tool_names()
         bare = {"activate", "remember", "recall", "reinforce", "commit", "stats"}
         present_bare = bare & tool_names
-        assert not present_bare, (
-            f"Bare tool names registered (must use slowave_ prefix): {present_bare}"
-        )
+        assert (
+            not present_bare
+        ), f"Bare tool names registered (must use slowave_ prefix): {present_bare}"
 
     def test_new_tools_present(self) -> None:
         tool_names = self._get_tool_names()
-        expected = {"slowave_activate", "slowave_remember", "slowave_recall", "slowave_reinforce", "slowave_commit", "slowave_stats"}
+        expected = {
+            "slowave_activate",
+            "slowave_remember",
+            "slowave_recall",
+            "slowave_reinforce",
+            "slowave_commit",
+            "slowave_stats",
+        }
         missing = expected - tool_names
         assert not missing, f"New tools missing from registry: {missing}"

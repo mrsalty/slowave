@@ -220,7 +220,7 @@ class ReplayEngine:
                 # Find the best similarity to any prototype OTHER than
                 # the winner. `sims` is a Python list; .pop is cheap at
                 # cluster-set scale (<= 100).
-                rest = sims[:best_idx] + sims[best_idx + 1:]
+                rest = sims[:best_idx] + sims[best_idx + 1 :]
                 runner_up_sim = float(max(rest)) if rest else 0.0
                 effective_sim = best_sim - self.cfg.dg_separation_lambda * runner_up_sim
 
@@ -272,7 +272,7 @@ class ReplayEngine:
         # Skip if transition model is not enabled
         if self.transition_model is None:
             return 0.0
-        
+
         # build pairs along time-sorted episodes
         mems = self.episodic.get_many(episode_ids)
         mems_sorted = sorted(mems, key=lambda m: m.ts)
@@ -296,7 +296,9 @@ class ReplayEngine:
         # Apply time decay before sampling.
         now = int(time.time())
         conn = self.db.connect()
-        rows = conn.execute("SELECT id, salience, last_salience_ts FROM episodic_memories").fetchall()
+        rows = conn.execute(
+            "SELECT id, salience, last_salience_ts FROM episodic_memories"
+        ).fetchall()
         for r in rows:
             eid = int(r["id"])
             s = float(r["salience"])
@@ -316,13 +318,17 @@ class ReplayEngine:
         # are independent — same episodes, different threshold ->
         # different clustering. See docs/2026-05-26_stage9_proposal.md.
         pairs, touched = self._assign_to_prototypes(
-            episode_ids=sampled_ids, X=X,
-            scale="fine", threshold=self.cfg.assignment_threshold,
+            episode_ids=sampled_ids,
+            X=X,
+            scale="fine",
+            threshold=self.cfg.assignment_threshold,
         )
         if self.cfg.use_multi_scale:
             pairs_coarse, touched_coarse = self._assign_to_prototypes(
-                episode_ids=sampled_ids, X=X,
-                scale="coarse", threshold=self.cfg.coarse_assignment_threshold,
+                episode_ids=sampled_ids,
+                X=X,
+                scale="coarse",
+                threshold=self.cfg.coarse_assignment_threshold,
             )
             # Coactivation / transition graphs are shared across scales —
             # a fine prototype that co-fires with a coarse prototype is
@@ -384,7 +390,9 @@ class ReplayEngine:
         # reduce episodic salience after consolidation
         for eid, _pid in pairs:
             mem = self.episodic.get(eid)
-            self.episodic.update_salience(eid, self.salience.penalize_after_consolidation(mem.salience))
+            self.episodic.update_salience(
+                eid, self.salience.penalize_after_consolidation(mem.salience)
+            )
 
         return {
             "replay_sampled": float(len(sampled_ids)),
@@ -430,8 +438,7 @@ class ReplayEngine:
             "SELECT prototype_id, COUNT(*) AS n FROM episode_prototype_map "
             "GROUP BY prototype_id HAVING n >= ? "
             "ORDER BY n DESC LIMIT ?",
-            (int(self.cfg.self_supervise_min_members),
-             int(self.cfg.self_supervise_max_prototypes)),
+            (int(self.cfg.self_supervise_min_members), int(self.cfg.self_supervise_max_prototypes)),
         ).fetchall()
         # Mutable counters so the helper can update them in place.
         probed = [0]
@@ -439,7 +446,9 @@ class ReplayEngine:
         confuser_penalised = [0]
         coact_delta: dict[tuple[int, int], float] = {}
         self._self_supervise_collect(
-            rows, conn, coact_delta,
+            rows,
+            conn,
+            coact_delta,
             counters=(probed, miss_reinforced, confuser_penalised),
         )
 
@@ -448,8 +457,11 @@ class ReplayEngine:
             ws, wt, wc = self.graph._get_components(src, dst)
             new_wc = max(0.0, float(wc) + float(delta))
             self.graph._upsert_edge(
-                src, dst,
-                w_similarity=ws, w_transition=wt, w_coactivation=new_wc,
+                src,
+                dst,
+                w_similarity=ws,
+                w_transition=wt,
+                w_coactivation=new_wc,
             )
         self.graph.prune_edges()
 
@@ -502,6 +514,7 @@ class ReplayEngine:
                     break
                 try:
                     from slowave.utils.vec import loads_json as _lj
+
                     contra = _lj(sr["contradicting_episode_ids"])
                     if isinstance(contra, dict) and contra.get("ids"):
                         skip_proto = True
@@ -533,7 +546,9 @@ class ReplayEngine:
                 key = (int(proto_id), int(sib_proto))
                 coact_delta[key] = coact_delta.get(key, 0.0) + self.cfg.self_supervise_miss_reward
                 key_r = (int(sib_proto), int(proto_id))
-                coact_delta[key_r] = coact_delta.get(key_r, 0.0) + self.cfg.self_supervise_miss_reward
+                coact_delta[key_r] = (
+                    coact_delta.get(key_r, 0.0) + self.cfg.self_supervise_miss_reward
+                )
                 miss_reinforced[0] += 1
 
             for c_eid in confusers:
@@ -541,6 +556,7 @@ class ReplayEngine:
                 if conf_proto is None or conf_proto == proto_id:
                     continue
                 key = (int(proto_id), int(conf_proto))
-                coact_delta[key] = coact_delta.get(key, 0.0) - self.cfg.self_supervise_confuser_penalty
+                coact_delta[key] = (
+                    coact_delta.get(key, 0.0) - self.cfg.self_supervise_confuser_penalty
+                )
                 confuser_penalised[0] += 1
-

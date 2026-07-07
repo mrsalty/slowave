@@ -81,6 +81,7 @@ class SQLiteDB:
         next open.
         """
         import sqlite3 as _sqlite3
+
         conn = self.connect()
 
         missing_columns = [
@@ -116,7 +117,11 @@ class SQLiteDB:
             ("context_feedback_events", "situation_json", "TEXT NOT NULL DEFAULT '{}'"),
             ("context_feedback_events", "requirements_json", "TEXT NOT NULL DEFAULT '[]'"),
             ("context_feedback_events", "used_procedure_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
-            ("context_feedback_events", "irrelevant_procedure_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
+            (
+                "context_feedback_events",
+                "irrelevant_procedure_ids_json",
+                "TEXT NOT NULL DEFAULT '[]'",
+            ),
             ("context_feedback_events", "stale_procedure_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
             ("context_feedback_events", "wrong_procedure_ids_json", "TEXT NOT NULL DEFAULT '[]'"),
             # source_content: raw event content joined without role prefix; used as schema claim
@@ -128,9 +133,7 @@ class SQLiteDB:
             ("procedural_memories", "source", "TEXT NOT NULL DEFAULT 'implicit'"),
             ("procedural_memories", "superseded_by_id", "INTEGER"),
             ("procedural_memories", "generalization_stage", "INTEGER NOT NULL DEFAULT 0"),
-
             ("schemas", "generalization_stage", "INTEGER NOT NULL DEFAULT 0"),
-
             # Worker run log: additional tracking columns
             ("worker_runs", "procedures_promoted", "INTEGER NOT NULL DEFAULT 0"),
             ("worker_runs", "procedures_generalized", "INTEGER NOT NULL DEFAULT 0"),
@@ -148,9 +151,7 @@ class SQLiteDB:
             if t is None:
                 continue
             try:
-                conn.execute(
-                    f"ALTER TABLE {table} ADD COLUMN {column} {type_spec}"
-                )
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {type_spec}")
             except _sqlite3.OperationalError as e:
                 if "duplicate column" not in str(e).lower():
                     raise
@@ -175,8 +176,7 @@ class SQLiteDB:
         # cannot ALTER a PRIMARY KEY in place; detect the old shape and
         # rebuild the table preserving every row.
         row = conn.execute(
-            "SELECT sql FROM sqlite_master WHERE type='table' "
-            "AND name='episode_prototype_map'"
+            "SELECT sql FROM sqlite_master WHERE type='table' " "AND name='episode_prototype_map'"
         ).fetchone()
         if row is not None:
             old_sql = str(row["sql"])
@@ -191,8 +191,7 @@ class SQLiteDB:
                 # preserves what's there and the engine treats orphans
                 # as no-ops on read. Re-enable FKs after.
                 conn.execute("PRAGMA foreign_keys = OFF")
-                conn.executescript(
-                    """
+                conn.executescript("""
                     CREATE TABLE episode_prototype_map_new (
                       episode_id INTEGER NOT NULL,
                       prototype_id INTEGER NOT NULL,
@@ -204,8 +203,7 @@ class SQLiteDB:
                       SELECT episode_id, prototype_id FROM episode_prototype_map;
                     DROP TABLE episode_prototype_map;
                     ALTER TABLE episode_prototype_map_new RENAME TO episode_prototype_map;
-                    """
-                )
+                    """)
                 conn.execute("PRAGMA foreign_keys = ON")
         # Always (re-)create the indexes; IF NOT EXISTS makes it safe.
         conn.execute(
@@ -213,8 +211,7 @@ class SQLiteDB:
             "ON episode_prototype_map (prototype_id)"
         )
         conn.execute(
-            "CREATE INDEX IF NOT EXISTS idx_map_episode_id "
-            "ON episode_prototype_map (episode_id)"
+            "CREATE INDEX IF NOT EXISTS idx_map_episode_id " "ON episode_prototype_map (episode_id)"
         )
 
         # Fix Bug-2: schema_evidence duplicate NULL-key rows.
@@ -234,9 +231,7 @@ class SQLiteDB:
         # Consolidation is zero-LLM; these columns were always empty.
         for col in ("prompt_text", "response_json", "extracted_claims_json"):
             try:
-                conn.execute(
-                    f"ALTER TABLE consolidation_debug DROP COLUMN {col}"
-                )
+                conn.execute(f"ALTER TABLE consolidation_debug DROP COLUMN {col}")
             except Exception:
                 pass  # column already gone or table doesn't exist
 

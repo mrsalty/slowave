@@ -2,7 +2,7 @@
 
 from slowave.dashboard._js import _APP_JS
 
-_HTML_TEMPLATE = r'''
+_HTML_TEMPLATE = r"""
 <!doctype html>
 <html lang="en">
 <head>
@@ -581,8 +581,8 @@ var is=function(){function e(e){return-e.tension*e.x-e.friction*e.v}function t(t
 
 </script>
 <script>
-'''
+"""
 
-_INDEX_HTML = _HTML_TEMPLATE + _APP_JS + r'''</script>
+_INDEX_HTML = _HTML_TEMPLATE + _APP_JS + r"""</script>
 </body>
-</html>'''
+</html>"""

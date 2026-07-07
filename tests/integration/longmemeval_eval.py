@@ -15,6 +15,7 @@ Usage:
 With no --limit it runs all questions in the selected categories.
 With --no-consolidate it skips consolidation (fast smoke check, embedding recall only).
 """
+
 from __future__ import annotations
 
 import argparse
@@ -25,15 +26,22 @@ import shutil
 import sys
 import tempfile
 import time
-from datetime import datetime
 from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from typing import Any
 
 # Suppress noisy logs from sentence-transformers and other libraries
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
-for noisy in ("sentence_transformers", "transformers", "httpx", "httpcore",
-              "huggingface_hub", "filelock", "tqdm"):
+for noisy in (
+    "sentence_transformers",
+    "transformers",
+    "httpx",
+    "httpcore",
+    "huggingface_hub",
+    "filelock",
+    "tqdm",
+):
     logging.getLogger(noisy).setLevel(logging.ERROR)
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -51,7 +59,6 @@ from slowave.latent.retrieval import RetrievalConfig
 from slowave.latent.salience import SalienceConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
-
 # ---- categories of interest ----
 
 ALL_CATEGORIES = [
@@ -65,15 +72,16 @@ ALL_CATEGORIES = [
 
 # Per-category description for the report
 CATEGORY_DESC = {
-    "knowledge-update":         "Fact stated, then changed — recall must return *new* value",
+    "knowledge-update": "Fact stated, then changed — recall must return *new* value",
     "single-session-preference": "Preference stated once — test basic reinforcement",
-    "multi-session":             "Answer requires synthesising info across sessions",
-    "single-session-user":       "Fact stated by user in one session",
-    "single-session-assistant":  "Fact stated by assistant in one session",
-    "temporal-reasoning":        "Answer depends on when something happened",
+    "multi-session": "Answer requires synthesising info across sessions",
+    "single-session-user": "Fact stated by user in one session",
+    "single-session-assistant": "Fact stated by assistant in one session",
+    "temporal-reasoning": "Answer depends on when something happened",
 }
 
 # ---- scoring ----
+
 
 def keyword_score(hypothesis: str, answer: str) -> float:
     """Simple keyword overlap score in [0, 1].
@@ -83,12 +91,41 @@ def keyword_score(hypothesis: str, answer: str) -> float:
     Avoids the GPT-4o judge cost for iteration purposes.
     """
     import re
-    stop = {"the", "a", "an", "is", "was", "were", "are", "i", "my", "me",
-            "it", "its", "of", "in", "on", "at", "to", "for", "and", "or",
-            "that", "this", "with", "be", "have", "has", "had"}
+
+    stop = {
+        "the",
+        "a",
+        "an",
+        "is",
+        "was",
+        "were",
+        "are",
+        "i",
+        "my",
+        "me",
+        "it",
+        "its",
+        "of",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "and",
+        "or",
+        "that",
+        "this",
+        "with",
+        "be",
+        "have",
+        "has",
+        "had",
+    }
+
     def tokens(s: str) -> set[str]:
         return {
-            w for w in re.findall(r'[a-z0-9]+', s.lower())
+            w
+            for w in re.findall(r"[a-z0-9]+", s.lower())
             if w not in stop and (len(w) > 1 or w.isdigit())
         }
 
@@ -104,6 +141,7 @@ HIT_THRESHOLD = 0.5  # fraction of answer keywords that must appear in recall
 
 
 # ---- per-question runner ----
+
 
 @dataclass
 class QuestionResult:
@@ -157,8 +195,10 @@ def run_question(
 
     # Deterministic seed per question so consolidation sampling is reproducible.
     import hashlib as _hashlib
+
     import numpy as _np
-    _seed = int.from_bytes(_hashlib.sha256(qid.encode('utf-8')).digest()[:4], 'big') % (2**31)
+
+    _seed = int.from_bytes(_hashlib.sha256(qid.encode("utf-8")).digest()[:4], "big") % (2**31)
     _np.random.seed(_seed)
 
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -170,9 +210,12 @@ def run_question(
             dim=shared_encoder.dim,
             encoder=EncoderConfig(),
             salience=SalienceConfig(tau_seconds=86400.0),
-            replay=ReplayConfig(assignment_threshold=assignment_threshold,
-                                sample_size=256, max_prototypes_per_replay=32,
-                                use_multi_scale=not no_multi_scale),
+            replay=ReplayConfig(
+                assignment_threshold=assignment_threshold,
+                sample_size=256,
+                max_prototypes_per_replay=32,
+                use_multi_scale=not no_multi_scale,
+            ),
             retrieval=RetrievalConfig(
                 salience_weight=0.0 if no_salience_rerank else 0.3,
                 neighbor_top_k=0 if no_graph_expansion else 6,
@@ -256,7 +299,9 @@ def run_question(
         component_scores = {
             "schemas": round(keyword_score(schemas_hypothesis, expected), 3),
             "episodes": round(keyword_score(episodes_hypothesis, expected), 3),
-            "hybrid": round(keyword_score(" ".join([schemas_hypothesis, episodes_hypothesis]), expected), 3),
+            "hybrid": round(
+                keyword_score(" ".join([schemas_hypothesis, episodes_hypothesis]), expected), 3
+            ),
             "recall_mode": recall_mode,
         }
         ks = float(component_scores[recall_mode])
@@ -277,10 +322,15 @@ def run_question(
             eng.close()
 
         return QuestionResult(
-            question_id=qid, question_type=qtype, question=qtext,
-            expected_answer=expected, hypothesis=hypothesis[:400],
-            keyword_score=round(ks, 3), hit=hit,
-            n_schemas=len(result.schemas), n_episodes=len(result.episode_texts),
+            question_id=qid,
+            question_type=qtype,
+            question=qtext,
+            expected_answer=expected,
+            hypothesis=hypothesis[:400],
+            keyword_score=round(ks, 3),
+            hit=hit,
+            n_schemas=len(result.schemas),
+            n_episodes=len(result.episode_texts),
             consolidate=consolidate,
             latency_ingest_s=round(latency_ingest, 2),
             latency_recall_s=round(latency_recall, 3),
@@ -294,11 +344,18 @@ def run_question(
 
     except Exception as e:
         return QuestionResult(
-            question_id=qid, question_type=qtype, question=qtext,
-            expected_answer=expected, hypothesis="",
-            keyword_score=0.0, hit=False,
-            n_schemas=0, n_episodes=0, consolidate=consolidate,
-            latency_ingest_s=0.0, latency_recall_s=0.0,
+            question_id=qid,
+            question_type=qtype,
+            question=qtext,
+            expected_answer=expected,
+            hypothesis="",
+            keyword_score=0.0,
+            hit=False,
+            n_schemas=0,
+            n_episodes=0,
+            consolidate=consolidate,
+            latency_ingest_s=0.0,
+            latency_recall_s=0.0,
             error=str(e),
         )
     finally:
@@ -345,16 +402,18 @@ def _build_debug_payload(eng: SlowaveEngine, result: Any, expected: str) -> dict
     all_episodes = []
     for r in episode_rows:
         metadata = json.loads(r["metadata_json"] or "{}")
-        all_episodes.append({
-            "id": int(r["id"]),
-            "kind": metadata.get("kind"),
-            "salience": float(r["salience"]),
-            "recalled_count": int(r["recalled_count"]),
-            "prediction_error": metadata.get("prediction_error"),
-            "session_id": r["session_id"],
-            "content_text": r["content_text"] or "",
-            "event_ids": json.loads(r["event_ids"] or "{\"ids\":[]}").get("ids", []),
-        })
+        all_episodes.append(
+            {
+                "id": int(r["id"]),
+                "kind": metadata.get("kind"),
+                "salience": float(r["salience"]),
+                "recalled_count": int(r["recalled_count"]),
+                "prediction_error": metadata.get("prediction_error"),
+                "session_id": r["session_id"],
+                "content_text": r["content_text"] or "",
+                "event_ids": json.loads(r["event_ids"] or '{"ids":[]}').get("ids", []),
+            }
+        )
 
     relations = [
         {
@@ -364,24 +423,30 @@ def _build_debug_payload(eng: SlowaveEngine, result: Any, expected: str) -> dict
             "confidence": float(r["confidence"]),
             "reason": None if r["reason"] is None else str(r["reason"]),
         }
-        for r in conn.execute("SELECT * FROM schema_relations ORDER BY created_ts, src_schema_id").fetchall()
+        for r in conn.execute(
+            "SELECT * FROM schema_relations ORDER BY created_ts, src_schema_id"
+        ).fetchall()
     ]
     consolidation_debug = []
     try:
-        rows = conn.execute(
-            "SELECT * FROM consolidation_debug ORDER BY id LIMIT 200"
-        ).fetchall()
+        rows = conn.execute("SELECT * FROM consolidation_debug ORDER BY id LIMIT 200").fetchall()
         for r in rows:
-            consolidation_debug.append({
-                "id": int(r["id"]),
-                "prototype_id": None if r["prototype_id"] is None else int(r["prototype_id"]),
-                "episode_ids": json.loads(r["episode_ids"] or "{\"ids\":[]}").get("ids", []),
-                "prompt_text": str(r["prompt_text"]),
-                "response_json": json.loads(r["response_json"] or "{}"),
-                "extracted_claims": json.loads(r["extracted_claims_json"] or "{\"claims\":[]}").get("claims", []),
-                "created_schema_ids": json.loads(r["created_schema_ids"] or "{\"ids\":[]}").get("ids", []),
-                "ts": int(r["ts"]),
-            })
+            consolidation_debug.append(
+                {
+                    "id": int(r["id"]),
+                    "prototype_id": None if r["prototype_id"] is None else int(r["prototype_id"]),
+                    "episode_ids": json.loads(r["episode_ids"] or '{"ids":[]}').get("ids", []),
+                    "prompt_text": str(r["prompt_text"]),
+                    "response_json": json.loads(r["response_json"] or "{}"),
+                    "extracted_claims": json.loads(
+                        r["extracted_claims_json"] or '{"claims":[]}'
+                    ).get("claims", []),
+                    "created_schema_ids": json.loads(r["created_schema_ids"] or '{"ids":[]}').get(
+                        "ids", []
+                    ),
+                    "ts": int(r["ts"]),
+                }
+            )
     except Exception:
         consolidation_debug = []
 
@@ -415,6 +480,7 @@ def _build_debug_payload(eng: SlowaveEngine, result: Any, expected: str) -> dict
 
 # ---- report ----
 
+
 def print_report(results: list[QuestionResult], consolidate: bool) -> None:
     print()
     print("=" * 70)
@@ -431,7 +497,9 @@ def print_report(results: list[QuestionResult], consolidate: bool) -> None:
     for r in results:
         cats.setdefault(r.question_type, []).append(r)
 
-    print(f" {'Category':<30} {'N':>4}  {'Hits':>5}  {'%':>6}  {'AvgKS':>6}  {'AvgIngest':>10}  Errors")
+    print(
+        f" {'Category':<30} {'N':>4}  {'Hits':>5}  {'%':>6}  {'AvgKS':>6}  {'AvgIngest':>10}  Errors"
+    )
     print(f" {'-'*30} {'-'*4}  {'-'*5}  {'-'*6}  {'-'*6}  {'-'*10}  {'-'*6}")
 
     total_hits = 0
@@ -445,7 +513,9 @@ def print_report(results: list[QuestionResult], consolidate: bool) -> None:
         total_hits += hits
         total_n += len(rs)
         desc = CATEGORY_DESC.get(cat, "")
-        print(f" {cat:<30} {len(rs):>4}  {hits:>5}  {pct:>5.1f}%  {avg_ks:>6.3f}  {avg_ingest:>8.1f}s  {errors:>6}")
+        print(
+            f" {cat:<30} {len(rs):>4}  {hits:>5}  {pct:>5.1f}%  {avg_ks:>6.3f}  {avg_ingest:>8.1f}s  {errors:>6}"
+        )
         print(f"   ↳ {desc}")
 
     print(f" {'─'*30} {'─'*4}  {'─'*5}  {'─'*6}")
@@ -454,14 +524,20 @@ def print_report(results: list[QuestionResult], consolidate: bool) -> None:
 
     # Mem0 baselines for the categories we ran
     MEM0_OLD = {
-        "knowledge-update": 79.5, "single-session-preference": 76.7,
-        "multi-session": 70.7, "single-session-user": None,
-        "single-session-assistant": None, "temporal-reasoning": None,
+        "knowledge-update": 79.5,
+        "single-session-preference": 76.7,
+        "multi-session": 70.7,
+        "single-session-user": None,
+        "single-session-assistant": None,
+        "temporal-reasoning": None,
     }
     MEM0_NEW = {
-        "knowledge-update": 93.6, "single-session-preference": 96.7,
-        "multi-session": 88.0, "single-session-user": None,
-        "single-session-assistant": None, "temporal-reasoning": None,
+        "knowledge-update": 93.6,
+        "single-session-preference": 96.7,
+        "multi-session": 88.0,
+        "single-session-user": None,
+        "single-session-assistant": None,
+        "temporal-reasoning": None,
     }
     print()
     print(" Baselines (Mem0, full system with embeddings)")
@@ -485,13 +561,65 @@ def print_report(results: list[QuestionResult], consolidate: bool) -> None:
     if all_ingest:
         all_ingest_s = sorted(all_ingest)
         all_recall_s = sorted(all_recall)
-        print(f"  ingest: mean={sum(all_ingest)/len(all_ingest):.2f}s  "
-              f"p50={all_ingest_s[len(all_ingest_s)//2]:.2f}s  "
-              f"p95={all_ingest_s[int(0.95*(len(all_ingest_s)-1))]:.2f}s  "
-              f"max={all_ingest_s[-1]:.2f}s")
-        print(f"  recall: mean={sum(all_recall)/len(all_recall)*1000:.1f}ms  "
-              f"p50={all_recall_s[len(all_recall_s)//2]*1000:.1f}ms  "
-              f"max={all_recall_s[-1]*1000:.1f}ms")
+        print(
+            f"  ingest: mean={sum(all_ingest)/len(all_ingest):.2f}s  "
+            f"p50={all_ingest_s[len(all_ingest_s)//2]:.2f}s  "
+            f"p95={all_ingest_s[int(0.95*(len(all_ingest_s)-1))]:.2f}s  "
+            f"max={all_ingest_s[-1]:.2f}s"
+        )
+        print(
+            f"  recall: mean={sum(all_recall)/len(all_recall)*1000:.1f}ms  "
+            f"p50={all_recall_s[len(all_recall_s)//2]*1000:.1f}ms  "
+            f"max={all_recall_s[-1]*1000:.1f}ms"
+        )
+
+    # Cost / storage summary — the columns Mem0 publishes and we don't.
+    # Zero in latent / no-LLM mode, real numbers when the LLM is on.
+    print()
+    print(" Cost summary (per question)")
+    valid = [r for r in results if not r.error]
+    if valid:
+        calls = [r.n_llm_calls for r in valid]
+        prompt = [r.llm_prompt_tokens for r in valid]
+        compl = [r.llm_completion_tokens for r in valid]
+        total = [p + c for p, c in zip(prompt, compl)]
+        sizes_mb = [r.db_size_bytes / (1024 * 1024) for r in valid]
+        print(
+            f"  llm_calls:       mean={sum(calls)/len(calls):.1f}   max={max(calls)}   total={sum(calls)}"
+        )
+        print(f"  prompt_tokens:   mean={sum(prompt)/len(prompt):.0f}    total={sum(prompt)}")
+        print(f"  completion_tok:  mean={sum(compl)/len(compl):.0f}    total={sum(compl)}")
+        print(f"  total tokens/q:  mean={sum(total)/len(total):.0f}    total={sum(total)}")
+        print(
+            f"  db size:         mean={sum(sizes_mb)/len(sizes_mb):.2f}MB   max={max(sizes_mb):.2f}MB"
+        )
+        # Rough cost estimate for two common API points.
+        total_tokens_all = sum(total)
+        n_q = max(1, len(valid))
+        # gpt-4o-mini ~ $0.15/$0.60 per Mtok in/out; assume 80/20 split as a rough average
+        gpt4mini_cost = (sum(prompt) * 0.15 + sum(compl) * 0.60) / 1_000_000
+        haiku_cost = (sum(prompt) * 1.00 + sum(compl) * 5.00) / 1_000_000
+        print(
+            f"  est. cost (gpt-4o-mini):    ${gpt4mini_cost:.4f}   (${gpt4mini_cost/n_q*1000:.2f} / 1K queries)"
+        )
+        print(
+            f"  est. cost (claude-haiku):   ${haiku_cost:.4f}   (${haiku_cost/n_q*1000:.2f} / 1K queries)"
+        )
+        if sum(calls) == 0:
+            print("  ↳ ZERO LLM CALLS — brain-only mode. All cost numbers are $0.")
+
+    # top misses
+    print()
+    print(" Top misses (first 5 per category with hit=False):")
+    for cat, rs in sorted(cats.items()):
+        misses = [r for r in rs if not r.hit and not r.error][:3]
+        if misses:
+            print(f"  [{cat}]")
+            for r in misses:
+                print(f"    Q: {r.question[:90]}")
+                print(f"    A: {r.expected_answer[:80]}")
+                print(f"    H: {r.hypothesis[:80]}")
+                print(f"    ks={r.keyword_score}")
 
     print()
     print("=" * 70)
@@ -599,70 +727,96 @@ def _write_payload(out_path: Path, payload: dict[str, Any]) -> None:
 
 # ---- main ----
 
+
 def main() -> None:
-    parser = argparse.ArgumentParser(
-        description="LongMemEval evaluation harness for Slowave"
-    )
+    parser = argparse.ArgumentParser(description="LongMemEval evaluation harness for Slowave")
     parser.add_argument(
-        "--dataset", default="data/longmemeval/longmemeval_oracle.json",
+        "--dataset",
+        default="data/longmemeval/longmemeval_oracle.json",
         help="Path to longmemeval JSON file",
     )
     parser.add_argument(
-        "--categories", nargs="+", default=["knowledge-update","single-session-preference","multi-session","single-session-user","single-session-assistant","temporal-reasoning"],
+        "--categories",
+        nargs="+",
+        default=[
+            "knowledge-update",
+            "single-session-preference",
+            "multi-session",
+            "single-session-user",
+            "single-session-assistant",
+            "temporal-reasoning",
+        ],
         help="Question types to evaluate",
     )
     parser.add_argument(
-        "--limit", type=int, default=0,
+        "--limit",
+        type=int,
+        default=0,
         help="Max questions per category (0 = all)",
     )
     parser.add_argument(
-        "--no-consolidate", action="store_true",
+        "--no-consolidate",
+        action="store_true",
         help="Skip consolidation (fast smoke check with embedding recall only)",
     )
     parser.add_argument(
-        "--replay-only", action="store_true",
+        "--replay-only",
+        action="store_true",
         help="Run replay/transition training without consolidation (Stage 3 latent-only test)",
     )
     parser.add_argument(
-        "--no-multi-scale", action="store_true",
+        "--no-multi-scale",
+        action="store_true",
         help="Stage 9 ablation: disable CA3+CA1 dual-scale prototypes. "
-             "Default keeps both scales active.",
+        "Default keeps both scales active.",
     )
     parser.add_argument(
-        "--assignment-threshold", type=float, default=0.65,
+        "--assignment-threshold",
+        type=float,
+        default=0.65,
         help="Cosine similarity threshold for prototype clustering (default 0.65)",
     )
     parser.add_argument(
-        "--out", default="",
+        "--out",
+        default="",
         help="Output JSON path. Default: timestamped file under data/longmemeval/runs/",
     )
     parser.add_argument(
-        "--debug", action="store_true",
+        "--debug",
+        action="store_true",
         help="Include retrieved/all schemas, episodes, relations, and answer-presence diagnostics.",
     )
     parser.add_argument(
-        "--keep-debug-dbs", action="store_true",
+        "--keep-debug-dbs",
+        action="store_true",
         help="Copy per-question temp DBs for misses (or all debug runs) to data/longmemeval/debug_dbs/.",
     )
     parser.add_argument(
-        "--recall-mode", choices=["hybrid", "schemas", "episodes"], default="hybrid",
+        "--recall-mode",
+        choices=["hybrid", "schemas", "episodes"],
+        default="hybrid",
         help="Which recalled components to score as the hypothesis. Debug always records component scores.",
     )
     parser.add_argument(
-        "--top-k", type=int, default=5,
+        "--top-k",
+        type=int,
+        default=5,
         help="Number of schemas/episodes to request from recall.",
     )
     # ablation flags
     parser.add_argument(
-        "--no-salience-rerank", action="store_true",
+        "--no-salience-rerank",
+        action="store_true",
         help="Ablation: disable salience-weighted episode reranking (salience_weight=0).",
     )
     parser.add_argument(
-        "--no-graph-expansion", action="store_true",
+        "--no-graph-expansion",
+        action="store_true",
         help="Ablation: disable prototype graph expansion at recall (neighbor_top_k=0).",
     )
     parser.add_argument(
-        "--no-temporal", action="store_true",
+        "--no-temporal",
+        action="store_true",
         help="Ablation: disable temporal context weighting at recall (use_temporal=False).",
     )
     args = parser.parse_args()
@@ -739,11 +893,20 @@ def main() -> None:
                 no_multi_scale=args.no_multi_scale,
             )
             elapsed = time.time() - t0
-            status = "HIT " if r.hit else "miss"
+            status = "HIT" if r.hit else "miss"
             err = f" ERROR:{r.error[:60]}" if r.error else ""
+            comp = ""
+            if r.component_scores:
+                comp = (
+                    f" comp[s={r.component_scores.get('schemas', 0):.2f},"
+                    f"e={r.component_scores.get('episodes', 0):.2f},"
+                    f"h={r.component_scores.get('hybrid', 0):.2f}]"
+                )
             print(
                 f"[{i+1:>3}/{len(selected)}] {r.question_type:<30} "
-                f"{status}  ks={r.keyword_score:.2f}  ingest={r.latency_ingest_s:.1f}s{err}",
+                f"{status}  ks={r.keyword_score:.2f}  "
+                f"ingest={r.latency_ingest_s:.1f}s recall={r.latency_recall_s*1000:.0f}ms  "
+                f"sch={r.n_schemas} epi={r.n_episodes}{comp}{err}",
                 flush=True,
             )
             results.append(r)

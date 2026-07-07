@@ -7,6 +7,7 @@ The encoder is loaded lazily on first use so that imports stay cheap and
 test runs that don't need embeddings (e.g. with synthetic vectors) don't
 pay the cost of loading model weights.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass

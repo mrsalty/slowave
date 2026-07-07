@@ -15,6 +15,7 @@ Usage in engine:
     if cosine(emb_new, emb_old) > 0.35 and score > 0.10:
         flag_needs_review()
 """
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
@@ -50,11 +51,17 @@ _SEED_PAIRS: list[tuple[str, str]] = [
     ("The contract value is $200,000.", "The contract value is $250,000."),
     # ── science ───────────────────────────────────────────────────────────────
     ("The experiment runs at 37°C.", "The experiment runs at 42°C."),
-    ("The study uses a sample size of 50 participants.", "The study uses a sample size of 100 participants."),
+    (
+        "The study uses a sample size of 50 participants.",
+        "The study uses a sample size of 100 participants.",
+    ),
     # ── multilingual (IT/FR/DE) ───────────────────────────────────────────────
     ("Il progetto usa SQLite per lo storage.", "Il progetto usa DuckDB per lo storage."),
     ("Le projet utilise SQLite pour le stockage.", "Le projet utilise DuckDB pour le stockage."),
-    ("Il paziente assume metformina 500 mg al giorno.", "Il paziente assume metformina 1000 mg al giorno."),
+    (
+        "Il paziente assume metformina 500 mg al giorno.",
+        "Il paziente assume metformina 1000 mg al giorno.",
+    ),
     ("Il budget del progetto è di 50.000 euro.", "Il budget del progetto è di 75.000 euro."),
     ("Alice riporta a Giovanni.", "Alice riporta a Sara."),
 ]

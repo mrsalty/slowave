@@ -4,6 +4,7 @@ Dependency-free: stdlib HTTP server + SQLite read APIs + embedded UI.
 The dashboard is local-only by default and read-only unless future actions
 are explicitly enabled.
 """
+
 from __future__ import annotations
 
 import json
@@ -18,9 +19,15 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-
 VALID_SCHEMA_STATUSES = ("active", "needs_review", "superseded", "contradicted", "archived")
-VALID_SCHEMA_RELATIONS = ("reinforces", "refines", "contradicts", "supersedes", "related_to", "part_of")
+VALID_SCHEMA_RELATIONS = (
+    "reinforces",
+    "refines",
+    "contradicts",
+    "supersedes",
+    "related_to",
+    "part_of",
+)
 
 
 def run_dashboard(
@@ -34,6 +41,7 @@ def run_dashboard(
 ) -> None:
     """Run the local dashboard HTTP server."""
     import sys as _sys
+
     db_path = os.path.abspath(os.path.expanduser(db_path))
     if host not in ("127.0.0.1", "localhost", "::1"):
         print(
@@ -127,7 +135,9 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                 elif path == "/api/supersessions":
                     self._send_json(_supersessions_payload(db_path, qs))
                 else:
-                    self._send_json({"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND)
+                    self._send_json(
+                        {"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND
+                    )
             except Exception as e:
                 self._send_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -141,7 +151,9 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                 if path == "/api/recall":
                     self._send_json(_recall_payload(db_path, payload))
                 else:
-                    self._send_json({"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND)
+                    self._send_json(
+                        {"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND
+                    )
             except Exception as e:
                 self._send_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
@@ -324,8 +336,7 @@ def _status_payload(db_path: str) -> dict[str, Any]:
                     "FROM sessions GROUP BY COALESCE(scope_id, '(none)') ORDER BY n DESC"
                 ).fetchall()
             ]
-            raw_sessions = conn.execute(
-                """
+            raw_sessions = conn.execute("""
                 SELECT s.id, s.agent, s.scope_id, s.started_ts, s.ended_ts,
                        COUNT(re.id) AS events,
                        COUNT(DISTINCT et.episode_id) AS episodes
@@ -335,8 +346,7 @@ def _status_payload(db_path: str) -> dict[str, Any]:
                 GROUP BY s.id
                 ORDER BY s.started_ts DESC
                 LIMIT 10
-                """
-            ).fetchall()
+                """).fetchall()
             recent_sessions = []
             for r in raw_sessions:
                 d = dict(r)
@@ -356,8 +366,12 @@ def _status_payload(db_path: str) -> dict[str, Any]:
             "db_path": db_path,
             "db_exists": exists,
             "db_size_bytes": db_file.stat().st_size if exists else 0,
-            "wal_size_bytes": Path(db_path + "-wal").stat().st_size if Path(db_path + "-wal").exists() else 0,
-            "shm_size_bytes": Path(db_path + "-shm").stat().st_size if Path(db_path + "-shm").exists() else 0,
+            "wal_size_bytes": (
+                Path(db_path + "-wal").stat().st_size if Path(db_path + "-wal").exists() else 0
+            ),
+            "shm_size_bytes": (
+                Path(db_path + "-shm").stat().st_size if Path(db_path + "-shm").exists() else 0
+            ),
             "stats": stats,
             "schema_health": schema_health,
             "scopes": scopes,
@@ -427,8 +441,8 @@ def _pulse_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
 
         channels = {
             "raw_events": _bucketize(raw_rows),
-            "episodes":   _bucketize(epi_rows),
-            "schemas":    _bucketize(sch_rows),
+            "episodes": _bucketize(epi_rows),
+            "schemas": _bucketize(sch_rows),
         }
         global_max = max(
             (b["n"] for ch in channels.values() for b in ch),
@@ -461,7 +475,9 @@ def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
     total = _table_count(conn, "schemas")
     by_status = {
         str(r["status"]): int(r["n"])
-        for r in conn.execute("SELECT status, COUNT(*) AS n FROM schemas GROUP BY status").fetchall()
+        for r in conn.execute(
+            "SELECT status, COUNT(*) AS n FROM schemas GROUP BY status"
+        ).fetchall()
     }
     active = int(by_status.get("active", 0))
     needs_review = int(by_status.get("needs_review", 0))
@@ -471,15 +487,13 @@ def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
     ).fetchone()
     dup_rows = 0
     try:
-        rows = conn.execute(
-            """
+        rows = conn.execute("""
             SELECT scope_id, lower(trim(content_text)) AS norm, COUNT(*) AS n
             FROM schemas
             WHERE status IN ('active', 'needs_review')
             GROUP BY scope_id, lower(trim(content_text))
             HAVING COUNT(*) > 1
-            """
-        ).fetchall()
+            """).fetchall()
         dup_rows = sum(int(r["n"]) - 1 for r in rows)
     except sqlite3.Error:
         dup_rows = 0
@@ -492,9 +506,15 @@ def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
         "active_exact_duplicate_rows": dup_rows,
         "active_exact_duplicate_ratio": dup_rows / denom,
         "active_salience": {
-            "min": 0.0 if sal is None or sal["min_salience"] is None else float(sal["min_salience"]),
-            "avg": 0.0 if sal is None or sal["avg_salience"] is None else float(sal["avg_salience"]),
-            "max": 0.0 if sal is None or sal["max_salience"] is None else float(sal["max_salience"]),
+            "min": (
+                0.0 if sal is None or sal["min_salience"] is None else float(sal["min_salience"])
+            ),
+            "avg": (
+                0.0 if sal is None or sal["avg_salience"] is None else float(sal["avg_salience"])
+            ),
+            "max": (
+                0.0 if sal is None or sal["max_salience"] is None else float(sal["max_salience"])
+            ),
         },
     }
 
@@ -506,14 +526,19 @@ def _warnings(schema_health: dict[str, Any], daemon: dict[str, Any]) -> list[str
     if schema_health.get("needs_review_schemas", 0):
         out.append(f"{schema_health['needs_review_schemas']} schemas need review.")
     if schema_health.get("active_exact_duplicate_rows", 0):
-        out.append(f"{schema_health['active_exact_duplicate_rows']} active duplicate schema rows detected.")
+        out.append(
+            f"{schema_health['active_exact_duplicate_rows']} active duplicate schema rows detected."
+        )
     return out
 
 
 def _daemon_health() -> dict[str, Any]:
     """Fetch live status from the HTTP MCP daemon health endpoint."""
     try:
-        import urllib.request, urllib.error, json as _json
+        import json as _json
+        import urllib.error
+        import urllib.request
+
         with urllib.request.urlopen("http://127.0.0.1:8766/health", timeout=2) as resp:
             data = _json.loads(resp.read())
         return {
@@ -573,15 +598,17 @@ def _slowave_processes() -> list[dict[str, Any]]:
         if not (is_worker or is_dashboard):
             continue
         parent_command = all_commands.get(int(ppid)) or None
-        rows.append({
-            "pid": int(pid),
-            "ppid": int(ppid),
-            "stat": stat,
-            "age_seconds": _parse_etime_seconds(etime),
-            "rss_kb": int(rss),
-            "command": command,
-            "kind": "worker" if is_worker else "dashboard",
-        })
+        rows.append(
+            {
+                "pid": int(pid),
+                "ppid": int(ppid),
+                "stat": stat,
+                "age_seconds": _parse_etime_seconds(etime),
+                "rss_kb": int(rss),
+                "command": command,
+                "kind": "worker" if is_worker else "dashboard",
+            }
+        )
     return rows
 
 
@@ -634,7 +661,15 @@ def _db_health(db_path: str) -> dict[str, Any]:
         except sqlite3.Error as e:
             fk = [{"error": str(e)}]
         tables = [
-            {"name": r["name"], "type": r["type"], "count": _table_count(conn, r["name"]) if r["type"] == "table" and not str(r["name"]).startswith("sqlite_") else None}
+            {
+                "name": r["name"],
+                "type": r["type"],
+                "count": (
+                    _table_count(conn, r["name"])
+                    if r["type"] == "table" and not str(r["name"]).startswith("sqlite_")
+                    else None
+                ),
+            }
             for r in conn.execute(
                 "SELECT name, type FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY type, name"
             ).fetchall()
@@ -698,12 +733,16 @@ def _schema_graph_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, A
     limit_raw = str((qs.get("limit") or [120])[0]).strip().lower()
     limit_all = limit_raw in ("all", "*")
     try:
-        limit = _GRAPH_HARD_CAP if limit_all else max(1, min(_GRAPH_HARD_CAP, int(limit_raw or "120")))
+        limit = (
+            _GRAPH_HARD_CAP if limit_all else max(1, min(_GRAPH_HARD_CAP, int(limit_raw or "120")))
+        )
     except ValueError:
         limit = 120
     scope = (qs.get("scope") or [""])[0]
     statuses_raw = (qs.get("statuses") or ["active,needs_review,contradicted,superseded"])[0]
-    relations_raw = (qs.get("relations") or ["reinforces,refines,contradicts,supersedes,related_to,part_of"])[0]
+    relations_raw = (
+        qs.get("relations") or ["reinforces,refines,contradicts,supersedes,related_to,part_of"]
+    )[0]
     statuses = [s for s in statuses_raw.split(",") if s in VALID_SCHEMA_STATUSES]
     relations = [r for r in relations_raw.split(",") if r in VALID_SCHEMA_RELATIONS]
     if not statuses:
@@ -739,7 +778,8 @@ def _schema_graph_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, A
             ph_ids = ",".join(["?"] * len(schema_ids))
             ph_rel = ",".join(["?"] * len(relations))
             edge_rows = [
-                r for r in conn.execute(
+                r
+                for r in conn.execute(
                     f"""
                     SELECT * FROM schema_relations
                     WHERE src_schema_id IN ({ph_ids})
@@ -754,17 +794,19 @@ def _schema_graph_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, A
                 src = int(r["src_schema_id"])
                 dst = int(r["dst_schema_id"])
                 rel = str(r["relation"])
-                edges.append({
-                    "id": f"rel_{src}_{dst}_{rel}",
-                    "source": f"sch_{src}",
-                    "target": f"sch_{dst}",
-                    "src_schema_id": src,
-                    "dst_schema_id": dst,
-                    "relation": rel,
-                    "confidence": float(r["confidence"]),
-                    "reason": r["reason"],
-                    "created_ts": int(r["created_ts"]),
-                })
+                edges.append(
+                    {
+                        "id": f"rel_{src}_{dst}_{rel}",
+                        "source": f"sch_{src}",
+                        "target": f"sch_{dst}",
+                        "src_schema_id": src,
+                        "dst_schema_id": dst,
+                        "relation": rel,
+                        "confidence": float(r["confidence"]),
+                        "reason": r["reason"],
+                        "created_ts": int(r["created_ts"]),
+                    }
+                )
         return {
             "nodes": nodes,
             "edges": edges,
@@ -796,7 +838,8 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
         proto_map = _prototype_map(conn, [schema_id])
         schema = _schema_row_to_node(row, proto_map.get(schema_id, []))
         evidence = [
-            dict(r) for r in conn.execute(
+            dict(r)
+            for r in conn.execute(
                 "SELECT se.*, re.content AS event_content, re.type AS event_type, "
                 "re.ts AS event_ts, re.session_id AS event_session "
                 "FROM schema_evidence se "
@@ -841,14 +884,20 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
             schema["recalled_scopes"] = [str(r["scope_id"]) for r in scope_rows]
         except Exception:
             pass
-        outgoing = [dict(r) for r in conn.execute(
-            "SELECT * FROM schema_relations WHERE src_schema_id = ? ORDER BY created_ts DESC",
-            (schema_id,),
-        ).fetchall()]
-        incoming = [dict(r) for r in conn.execute(
-            "SELECT * FROM schema_relations WHERE dst_schema_id = ? ORDER BY created_ts DESC",
-            (schema_id,),
-        ).fetchall()]
+        outgoing = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM schema_relations WHERE src_schema_id = ? ORDER BY created_ts DESC",
+                (schema_id,),
+            ).fetchall()
+        ]
+        incoming = [
+            dict(r)
+            for r in conn.execute(
+                "SELECT * FROM schema_relations WHERE dst_schema_id = ? ORDER BY created_ts DESC",
+                (schema_id,),
+            ).fetchall()
+        ]
         return {"schema": schema, "evidence": evidence, "outgoing": outgoing, "incoming": incoming}
     finally:
         conn.close()
@@ -888,32 +937,32 @@ def _generalization_payload(db_path: str) -> dict[str, Any]:
             pass
 
         # Top promoted schemas (stage >= 1), sorted by breadth
-        promoted_rows = conn.execute(
-            """
+        promoted_rows = conn.execute("""
             SELECT id, content_text, scope_id, generalization_stage,
                    salience, facets_json
             FROM schemas
             WHERE generalization_stage >= 1 AND status = 'active'
             ORDER BY generalization_stage DESC, salience DESC
             LIMIT 50
-            """
-        ).fetchall()
+            """).fetchall()
         top_promoted = []
         for r in promoted_rows:
             facets = _json_loads(r["facets_json"], {})
-            top_promoted.append({
-                "id": f"sch_{int(r['id'])}",
-                "schema_id": int(r["id"]),
-                "content": str(r["content_text"])[:200],
-                "scope": r["scope_id"],
-                "stage": int(r["generalization_stage"]),
-                "salience": float(r["salience"]),
-                "distinct_scope_count": int(facets.get("distinct_scope_count", 0)),
-                "distinct_scope_kind_count": int(facets.get("distinct_scope_kind_count", 0)),
-                "scope_breadth_pct": float(facets.get("scope_breadth_pct", 0.0)),
-                "scope_kind_breadth_pct": float(facets.get("scope_kind_breadth_pct", 0.0)),
-                "cross_scope_recall_count": int(facets.get("cross_scope_recall_count", 0)),
-            })
+            top_promoted.append(
+                {
+                    "id": f"sch_{int(r['id'])}",
+                    "schema_id": int(r["id"]),
+                    "content": str(r["content_text"])[:200],
+                    "scope": r["scope_id"],
+                    "stage": int(r["generalization_stage"]),
+                    "salience": float(r["salience"]),
+                    "distinct_scope_count": int(facets.get("distinct_scope_count", 0)),
+                    "distinct_scope_kind_count": int(facets.get("distinct_scope_kind_count", 0)),
+                    "scope_breadth_pct": float(facets.get("scope_breadth_pct", 0.0)),
+                    "scope_kind_breadth_pct": float(facets.get("scope_kind_breadth_pct", 0.0)),
+                    "cross_scope_recall_count": int(facets.get("cross_scope_recall_count", 0)),
+                }
+            )
 
         total_active = sum(stage_dist.values())
         promoted_count = sum(v for k, v in stage_dist.items() if k >= 1)
@@ -962,7 +1011,9 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
                 "total_passes": int(total_row["n"]) if total_row else 0,
                 "last_run_ts": total_row["last_ts"] if total_row else None,
                 "total_schemas_created": int(total_row["schemas_created"] or 0) if total_row else 0,
-                "total_schemas_reinforced": int(total_row["schemas_reinforced"] or 0) if total_row else 0,
+                "total_schemas_reinforced": (
+                    int(total_row["schemas_reinforced"] or 0) if total_row else 0
+                ),
                 "total_schemas_decayed": int(total_row["schemas_decayed"] or 0) if total_row else 0,
                 "avg_duration_ms": round(float(total_row["avg_ms"] or 0), 1) if total_row else 0,
             },
@@ -973,7 +1024,6 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
         conn.close()
 
 
-
 # Cached engine instance — created lazily on first recall request.
 # Avoids creating a new SlowaveEngine (with FAISS + encoder) per request.
 _cached_engine: Any = None
@@ -982,6 +1032,7 @@ _cached_engine_lock: Any = None
 
 def _get_cached_engine(db_path: str) -> Any:
     import threading
+
     global _cached_engine, _cached_engine_lock
     if _cached_engine_lock is None:
         _cached_engine_lock = threading.Lock()
@@ -993,6 +1044,7 @@ def _get_cached_engine(db_path: str) -> Any:
         from slowave.core.config import SlowaveConfig
         from slowave.core.engine import SlowaveEngine
         from slowave.symbolic.encoder import EncoderConfig
+
         _cached_engine = SlowaveEngine(
             SlowaveConfig(
                 db_path=db_path,
@@ -1028,8 +1080,14 @@ def _episodes_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
         for r in rows:
             rec = dict(r)
             meta = _json_loads(rec.pop("metadata_json", None), {})
-            rec["content_preview"] = str(meta.get("text", meta.get("content",
-                f'{meta.get("kind","")} session={meta.get("session_id","")}')))[:200]
+            rec["content_preview"] = str(
+                meta.get(
+                    "text",
+                    meta.get(
+                        "content", f'{meta.get("kind","")} session={meta.get("session_id","")}'
+                    ),
+                )
+            )[:200]
             rec["type"] = str(meta.get("type", meta.get("event_type", "")))
             rec["session_id"] = str(meta.get("session_id", rec.get("event_id", "")))
             episodes.append(rec)
@@ -1102,7 +1160,8 @@ def _event_detail(db_path: str, event_id: int) -> dict[str, Any]:
     try:
         row = conn.execute(
             "SELECT id, ts, type, content, session_id, metadata_json "
-            "FROM raw_events WHERE id = ?", (event_id,)
+            "FROM raw_events WHERE id = ?",
+            (event_id,),
         ).fetchone()
         if not row:
             return {"error": "event not found"}
@@ -1117,9 +1176,7 @@ def _session_timeline(db_path: str, session_id: str) -> dict[str, Any]:
         return {"error": "db not found"}
     conn = _connect(db_path)
     try:
-        sess = conn.execute(
-            "SELECT * FROM sessions WHERE id = ?", (session_id,)
-        ).fetchone()
+        sess = conn.execute("SELECT * FROM sessions WHERE id = ?", (session_id,)).fetchone()
         if not sess:
             return {"error": "session not found"}
         events = conn.execute(
@@ -1174,7 +1231,6 @@ def _supersessions_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, 
         conn.close()
 
 
-
 def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
     query = str(payload.get("query") or "").strip()
     if not query:
@@ -1192,4 +1248,6 @@ def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
         "raw_events": r.raw_events,
         "expanded_neighbors": {str(k): v for k, v in r.expanded_neighbors.items()},
     }
+
+
 from slowave.dashboard._html import _INDEX_HTML  # noqa: E402
