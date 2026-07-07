@@ -292,9 +292,11 @@ You are the reasoning module; Slowave is the memory module. Give it honest signa
 - Call ONCE.
 
    **Cold start gate — if the response contains `cold_start: true`:**
-   - Find the most stable context document available (project README/overview, system instructions, or user profile).
-   - For each fact, ask: is it durable AND not already observable from the current context? If yes to both, call `slowave_remember(content, type, scope)` — one call per fact, never grouped.
-   - Exhaust that document before responding. Do NOT scan the full codebase.
+   - Read the full `cold_start_hints` field in the response. It contains a numbered checklist.
+   - Follow EVERY step in order. Do NOT skip steps or stop after the first file.
+   - The gate is satisfied only when ALL listed files are exhausted AND slowave_remember
+     has been called for every durable fact found (one call per fact, never grouped).
+   - Do NOT respond to the user until the self-verification step passes.
 
 **2 — `slowave_remember` (encode durable knowledge)**
 `slowave_remember(content, type, scope="project:<basename(cwd)>")` — call per durable fact.
