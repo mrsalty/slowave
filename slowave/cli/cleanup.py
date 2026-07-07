@@ -11,18 +11,18 @@ import click
 
 # Import helpers from setup
 from slowave.cli.setup import (
-    _home,
-    _clients,
-    _read_json,
-    _write_json,
-    _section,
-    _ok,
-    _skip,
-    _warn,
-    _MARKER_START,
     _MARKER_END,
-    _strip_legacy_slowave_section,
+    _MARKER_START,
+    _clients,
+    _home,
+    _ok,
     _opencode_instructions_path,
+    _read_json,
+    _section,
+    _skip,
+    _strip_legacy_slowave_section,
+    _warn,
+    _write_json,
 )
 
 SYSTEM = platform.system()
@@ -37,8 +37,9 @@ def _remove_daemon_service(dry_run: bool) -> int:
                 _ok(f"Would stop and remove: {plist_path}")
                 return 0
             try:
-                subprocess.run(["launchctl", "unload", str(plist_path)],
-                               check=False, capture_output=True)
+                subprocess.run(
+                    ["launchctl", "unload", str(plist_path)], check=False, capture_output=True
+                )
                 plist_path.unlink()
                 _ok(f"Removed launchd daemon service: {plist_path}")
                 return 1
@@ -49,6 +50,7 @@ def _remove_daemon_service(dry_run: bool) -> int:
 
     elif SYSTEM == "Linux":
         import os
+
         xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
         service_path = Path(xdg) / "systemd" / "user" / "slowave-daemon.service"
         if service_path.exists():
@@ -56,13 +58,20 @@ def _remove_daemon_service(dry_run: bool) -> int:
                 _ok(f"Would stop and remove: {service_path}")
                 return 0
             try:
-                subprocess.run(["systemctl", "--user", "stop", "slowave-daemon"],
-                               check=False, capture_output=True)
-                subprocess.run(["systemctl", "--user", "disable", "slowave-daemon"],
-                               check=False, capture_output=True)
+                subprocess.run(
+                    ["systemctl", "--user", "stop", "slowave-daemon"],
+                    check=False,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["systemctl", "--user", "disable", "slowave-daemon"],
+                    check=False,
+                    capture_output=True,
+                )
                 service_path.unlink()
-                subprocess.run(["systemctl", "--user", "daemon-reload"],
-                               check=False, capture_output=True)
+                subprocess.run(
+                    ["systemctl", "--user", "daemon-reload"], check=False, capture_output=True
+                )
                 _ok(f"Removed systemd daemon service: {service_path}")
                 return 1
             except Exception as e:
@@ -77,7 +86,8 @@ def _remove_daemon_service(dry_run: bool) -> int:
         try:
             subprocess.run(
                 ["schtasks", "/Delete", "/TN", "SlowaveDaemon", "/F"],
-                check=False, capture_output=True
+                check=False,
+                capture_output=True,
             )
             _ok("Removed Task Scheduler task: SlowaveDaemon")
             return 1
@@ -97,8 +107,9 @@ def _remove_worker_service(dry_run: bool) -> int:
                 _ok(f"Would stop and remove: {plist_path}")
                 return 0
             try:
-                subprocess.run(["launchctl", "unload", str(plist_path)], 
-                             check=False, capture_output=True)
+                subprocess.run(
+                    ["launchctl", "unload", str(plist_path)], check=False, capture_output=True
+                )
                 plist_path.unlink()
                 _ok(f"Removed launchd service: {plist_path}")
                 return 1
@@ -106,7 +117,7 @@ def _remove_worker_service(dry_run: bool) -> int:
                 _warn(f"Could not remove launchd service: {e}")
         else:
             _skip("No launchd service found")
-            
+
     elif SYSTEM == "Linux":
         service_path = _home() / ".config" / "systemd" / "user" / "slowave-worker.service"
         if service_path.exists():
@@ -114,20 +125,27 @@ def _remove_worker_service(dry_run: bool) -> int:
                 _ok(f"Would stop and remove: {service_path}")
                 return 0
             try:
-                subprocess.run(["systemctl", "--user", "stop", "slowave-worker"], 
-                             check=False, capture_output=True)
-                subprocess.run(["systemctl", "--user", "disable", "slowave-worker"],
-                             check=False, capture_output=True)
+                subprocess.run(
+                    ["systemctl", "--user", "stop", "slowave-worker"],
+                    check=False,
+                    capture_output=True,
+                )
+                subprocess.run(
+                    ["systemctl", "--user", "disable", "slowave-worker"],
+                    check=False,
+                    capture_output=True,
+                )
                 service_path.unlink()
-                subprocess.run(["systemctl", "--user", "daemon-reload"],
-                             check=False, capture_output=True)
+                subprocess.run(
+                    ["systemctl", "--user", "daemon-reload"], check=False, capture_output=True
+                )
                 _ok(f"Removed systemd service: {service_path}")
                 return 1
             except Exception as e:
                 _warn(f"Could not remove systemd service: {e}")
         else:
             _skip("No systemd service found")
-            
+
     elif SYSTEM == "Windows":
         if dry_run:
             _ok("Would remove Task Scheduler task: SlowaveWorker")
@@ -135,7 +153,8 @@ def _remove_worker_service(dry_run: bool) -> int:
         try:
             subprocess.run(
                 ["schtasks", "/Delete", "/TN", "SlowaveWorker", "/F"],
-                check=False, capture_output=True
+                check=False,
+                capture_output=True,
             )
             _ok("Removed Task Scheduler task: SlowaveWorker")
             return 1
@@ -155,8 +174,9 @@ def _remove_backup_service(dry_run: bool) -> int:
                 _ok(f"Would stop and remove: {plist_path}")
                 return 0
             try:
-                subprocess.run(["launchctl", "unload", str(plist_path)],
-                             check=False, capture_output=True)
+                subprocess.run(
+                    ["launchctl", "unload", str(plist_path)], check=False, capture_output=True
+                )
                 plist_path.unlink()
                 _ok(f"Removed launchd backup service: {plist_path}")
                 return 1
@@ -176,10 +196,16 @@ def _remove_backup_service(dry_run: bool) -> int:
                     _ok(f"Would stop and remove: {p}")
                     continue
                 try:
-                    subprocess.run(["systemctl", "--user", "stop", f"slowave-backup.{name}"],
-                                 check=False, capture_output=True)
-                    subprocess.run(["systemctl", "--user", "disable", f"slowave-backup.{name}"],
-                                 check=False, capture_output=True)
+                    subprocess.run(
+                        ["systemctl", "--user", "stop", f"slowave-backup.{name}"],
+                        check=False,
+                        capture_output=True,
+                    )
+                    subprocess.run(
+                        ["systemctl", "--user", "disable", f"slowave-backup.{name}"],
+                        check=False,
+                        capture_output=True,
+                    )
                     p.unlink()
                     _ok(f"Removed systemd backup {name}: {p}")
                     removed = 1
@@ -187,8 +213,9 @@ def _remove_backup_service(dry_run: bool) -> int:
                     _warn(f"Could not remove systemd backup {name}: {e}")
         if removed:
             try:
-                subprocess.run(["systemctl", "--user", "daemon-reload"],
-                             check=False, capture_output=True)
+                subprocess.run(
+                    ["systemctl", "--user", "daemon-reload"], check=False, capture_output=True
+                )
             except Exception:
                 pass
         if not timer_path.exists() and not svc_path.exists() and removed == 0:
@@ -202,7 +229,8 @@ def _remove_backup_service(dry_run: bool) -> int:
         try:
             subprocess.run(
                 ["schtasks", "/Delete", "/TN", "SlowaveBackup", "/F"],
-                check=False, capture_output=True
+                check=False,
+                capture_output=True,
             )
             _ok("Removed Task Scheduler task: SlowaveBackup")
             return 1
@@ -266,7 +294,6 @@ def _remove_lifecycle_blocks(dry_run: bool) -> int:
             _skip(f"{spec.label}: no slowave content in {lc_file}")
 
     return count
-
 
 
 def _remove_mcp_configs(dry_run: bool) -> int:
@@ -340,7 +367,6 @@ def _remove_mcp_configs(dry_run: bool) -> int:
     return count
 
 
-
 def _remove_setup_backups(dry_run: bool) -> int:
     """Remove ``*.bak.*`` files left by _backup_file() next to config files.
 
@@ -384,16 +410,16 @@ def _remove_setup_backups(dry_run: bool) -> int:
 @click.confirmation_option(prompt="This will remove all slowave configuration and data. Continue?")
 def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
     """Remove all slowave configuration and data from this system.
-    
+
     This command cleans up everything that 'slowave setup' installed:
     - MCP server configs (Claude Code, Claude Desktop, Cline, Cursor)
     - Lifecycle blocks (.clinerules, CLAUDE.md)
     - Background worker service
     - Daily database backup service
     - Local database and data (~/.slowave)
-    
+
     Use this before uninstalling slowave or when you want a fresh start.
-    
+
     \\b
     Example:
       slowave cleanup              # interactive confirmation
@@ -402,9 +428,9 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
     click.echo(click.style("\nSlowave cleanup", bold=True))
     if dry_run:
         click.echo(click.style("  [DRY RUN — no files will be removed]\n", fg="yellow"))
-    
+
     removed_count = 0
-    
+
     # 1. Stop and remove HTTP MCP daemon service
     _section("1. HTTP MCP daemon service")
     removed_count += _remove_daemon_service(dry_run)
@@ -439,13 +465,19 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
                 try:
                     subprocess.run(
                         [
-                            "powershell", "-NonInteractive", "-Command",
+                            "powershell",
+                            "-NonInteractive",
+                            "-Command",
                             "Get-Process | Where-Object { $_.Path -like '*slowave*' } "
                             "| Stop-Process -Force -ErrorAction SilentlyContinue",
                         ],
-                        capture_output=True, check=False, timeout=5,
+                        capture_output=True,
+                        check=False,
+                        timeout=5,
                     )
-                    import time as _time; _time.sleep(0.6)
+                    import time as _time
+
+                    _time.sleep(0.6)
                 except Exception:
                     pass
 
@@ -500,5 +532,3 @@ def cleanup_cmd(dry_run: bool, as_json: bool = False) -> None:
         click.echo("  • Claude Desktop → Settings → General → Instructions for Claude")
         click.echo("    (Remove any slowave lifecycle instructions)")
         click.echo("\nYou can now safely run: pipx uninstall slowave")
-
-

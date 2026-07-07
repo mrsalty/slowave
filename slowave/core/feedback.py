@@ -6,11 +6,11 @@ Brain-inspired feedback model:
 - signals drive memory reinforcement/suppression/review
 - outcome is separate from memory-quality signal
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Any
-
 
 # ============================================================================
 # Feedback signal: numeric vector of learning dynamics
@@ -114,14 +114,14 @@ class FeedbackConfig:
 
     # Salience delta per label (negative reinforcement)
     # Negative reinforcement: increased penalties so wrong/stale feedback visibly suppresses ranking
-    irrelevant_salience_delta: float = -0.05   # query-local only; no global damage
-    stale_salience_delta: float = -0.20        # was -0.15
-    wrong_salience_delta: float = -0.30        # was -0.25
+    irrelevant_salience_delta: float = -0.05  # query-local only; no global damage
+    stale_salience_delta: float = -0.20  # was -0.15
+    wrong_salience_delta: float = -0.30  # was -0.25
 
     # Confidence delta per label
     useful_confidence_delta: float = 0.02
-    stale_confidence_delta: float = -0.20      # was -0.15
-    wrong_confidence_delta: float = -0.40      # was -0.30
+    stale_confidence_delta: float = -0.20  # was -0.15
+    wrong_confidence_delta: float = -0.40  # was -0.30
 
     # Review thresholds
     stale_review_threshold: float = 0.7
@@ -142,22 +142,26 @@ class FeedbackConfig:
 # ============================================================================
 
 
-VALID_FEEDBACK_LABELS = frozenset((
-    "useful",
-    "partially_useful",
-    "irrelevant",
-    "stale",
-    "wrong",
-    "missing",
-    "too_much_context",
-))
+VALID_FEEDBACK_LABELS = frozenset(
+    (
+        "useful",
+        "partially_useful",
+        "irrelevant",
+        "stale",
+        "wrong",
+        "missing",
+        "too_much_context",
+    )
+)
 
-VALID_OUTCOME_LABELS = frozenset((
-    "success",
-    "failure",
-    "partial",
-    "unknown",
-))
+VALID_OUTCOME_LABELS = frozenset(
+    (
+        "success",
+        "failure",
+        "partial",
+        "unknown",
+    )
+)
 
 
 def normalize_feedback_label(label: str) -> str:
@@ -165,8 +169,7 @@ def normalize_feedback_label(label: str) -> str:
     normalized = str(label).strip().lower()
     if normalized not in VALID_FEEDBACK_LABELS:
         raise ValueError(
-            f"Invalid feedback label: {label}. "
-            f"Must be one of {sorted(VALID_FEEDBACK_LABELS)}"
+            f"Invalid feedback label: {label}. " f"Must be one of {sorted(VALID_FEEDBACK_LABELS)}"
         )
     return normalized
 

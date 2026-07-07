@@ -29,19 +29,20 @@ os.environ.setdefault("TQDM_DISABLE", "1")
 os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")
 
 import logging as _logging
+
 _logging.getLogger("huggingface_hub").setLevel(_logging.ERROR)
 _logging.getLogger("onnxruntime").setLevel(_logging.ERROR)
 _logging.getLogger("transformers").setLevel(_logging.ERROR)
 
 import click
 
+import slowave.ops as ops
 from slowave.cli.output import safe_emoji
 from slowave.cli.setup import setup_cmd
 from slowave.core.config import SlowaveConfig
-from slowave.core.paths import default_db_path
 from slowave.core.engine import SlowaveEngine
+from slowave.core.paths import default_db_path
 from slowave.symbolic.encoder import EncoderConfig
-import slowave.ops as ops
 
 DEFAULT_DB = "__DEFAULT_DB__"
 
@@ -171,17 +172,26 @@ def event_append(ctx: click.Context, session_id: str, type_: str, content: str) 
 
 @cli.command("remember")
 @click.argument("content")
-@click.option("--type", "memory_type", default="decision", help="Memory type: fact|decision|lesson|warning|...")
+@click.option(
+    "--type",
+    "memory_type",
+    default="decision",
+    help="Memory type: fact|decision|lesson|warning|...",
+)
 @click.option("--scope", default=None, help="Scope id, e.g. 'project:my-repo'.")
 @click.option("--session", "session_id", default=None, help="Session id to attach this memory to.")
 @click.pass_context
-def remember_cmd(ctx: click.Context, content: str, memory_type: str, scope: str | None, session_id: str | None) -> None:
+def remember_cmd(
+    ctx: click.Context, content: str, memory_type: str, scope: str | None, session_id: str | None
+) -> None:
     """Explicitly remember a typed claim.
 
     MCP equivalent of slowave_remember.
     """
     eng = _build_engine(ctx.obj["db"])
-    result = ops.remember(eng, content=content, memory_type=memory_type, scope=scope, session_id=session_id)
+    result = ops.remember(
+        eng, content=content, memory_type=memory_type, scope=scope, session_id=session_id
+    )
     _print(result, ctx.obj["json"])
     eng.close()
 
@@ -198,7 +208,9 @@ def remember_cmd(ctx: click.Context, content: str, memory_type: str, scope: str 
 @click.option("--top-k", default=5, show_default=True)
 @click.option("--evidence", is_flag=True, help="Include raw event citations.")
 @click.pass_context
-def recall_cmd(ctx: click.Context, query: str, scope: str | None, mode: str, top_k: int, evidence: bool) -> None:
+def recall_cmd(
+    ctx: click.Context, query: str, scope: str | None, mode: str, top_k: int, evidence: bool
+) -> None:
     """Recall memories relevant to a query.
 
     MCP equivalent of slowave_recall.
@@ -219,6 +231,7 @@ def recall_cmd(ctx: click.Context, query: str, scope: str | None, mode: str, top
 def _sal_bar(sal: float, width: int = 8, scale: float = 80.0) -> str:
     """Render a compact salience bar.  sal is unbounded; normalise to [0,1] with a soft cap."""
     import math
+
     norm = 1.0 - math.exp(-sal / scale)
     filled = round(norm * width)
     return "█" * filled + "░" * (width - filled)
@@ -271,12 +284,14 @@ def _format_recall_human(payload: dict[str, Any]) -> None:
             # ts is a unix timestamp (seconds); convert to YYYY-MM-DD
             try:
                 import datetime
+
                 date = datetime.datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d")
             except Exception:
                 date = str(ts)[:10] if ts else "—"
             text = (ep.get("content_text") or "").replace("\n", " ").strip()
             # Strip leading [YYYY-MM-DD] date prefix already shown in the date column
             import re as _re
+
             text = _re.sub(r"^\[\d{4}-\d{2}-\d{2}\]\s*", "", text)
             if len(text) > 100:
                 text = text[:100] + "…"
@@ -300,7 +315,9 @@ def _format_recall_human(payload: dict[str, Any]) -> None:
 @cli.command("activate")
 @click.option("--query", required=True, help="Current task description.")
 @click.option("--scope", default=None, help="Scope id, e.g. 'project:my-repo'.")
-@click.option("--goal", default=None, help="3-6 word verb-noun phrase, e.g. 'fix session reaper race'.")
+@click.option(
+    "--goal", default=None, help="3-6 word verb-noun phrase, e.g. 'fix session reaper race'."
+)
 @click.option("--task-type", default=None, help="Category, e.g. 'coding' or 'debugging'.")
 @click.option("--situation", default=None, help="JSON object with situational metadata.")
 @click.option("--requirement", "requirements", multiple=True, help="Requirement cue; repeatable.")
@@ -356,13 +373,27 @@ def activate_cmd(
 
 
 @cli.command("context")
-@click.option("--scope", default=None, help="Generic scope id, e.g. project:slowave or domain:cooking.")
-@click.option("--session", "session_id", default=None, help="Bind to existing session (for recording). Auto-starts one if --scope is set.")
+@click.option(
+    "--scope", default=None, help="Generic scope id, e.g. project:slowave or domain:cooking."
+)
+@click.option(
+    "--session",
+    "session_id",
+    default=None,
+    help="Bind to existing session (for recording). Auto-starts one if --scope is set.",
+)
 @click.option("--query", default=None, help="Current task/chat cue for relevance gating.")
 @click.option("--goal", default=None, help="Goal-oriented cue for context/procedure recall.")
-@click.option("--task-type", default=None, help="Broad activity type, e.g. writing/planning/debugging.")
+@click.option(
+    "--task-type", default=None, help="Broad activity type, e.g. writing/planning/debugging."
+)
 @click.option("--situation", default=None, help="JSON object with situational metadata.")
-@click.option("--requirement", "requirements", multiple=True, help="Requirement/condition cue; can be repeated.")
+@click.option(
+    "--requirement",
+    "requirements",
+    multiple=True,
+    help="Requirement/condition cue; can be repeated.",
+)
 @click.option(
     "--application",
     default=None,
@@ -431,8 +462,7 @@ def context_cmd(
     _internal = {
         "memory_ids": [f"sch_{item.schema.id}" for item in brief.items],
         "schemas": [
-            {"id": f"sch_{item.schema.id}", "activation": item.activation}
-            for item in brief.items
+            {"id": f"sch_{item.schema.id}", "activation": item.activation} for item in brief.items
         ],
     }
     eng.record_context_recall(
@@ -491,7 +521,10 @@ def context_cmd(
             True,
         )
     else:
-        click.echo(f"  retrieval_id: {context_id}" + (f"  session: {active_session_id}" if active_session_id else ""))
+        click.echo(
+            f"  retrieval_id: {context_id}"
+            + (f"  session: {active_session_id}" if active_session_id else "")
+        )
         click.echo("=== Working Memory Context ===")
         if not brief.items:
             click.echo("  (no memories yet)")
@@ -506,6 +539,7 @@ def context_cmd(
                 f" tags={','.join(s.tags)}"
                 f" reason={item.reason}" + ("  needs_review" if s.needs_review else "")
             )
+
 
 @cli.command("show")
 @click.argument("ref")
@@ -553,7 +587,15 @@ def show(ctx: click.Context, ref: str) -> None:
     default="useful",
     show_default=True,
     type=click.Choice(
-        ["useful", "partially_useful", "irrelevant", "stale", "wrong", "missing", "too_much_context"]
+        [
+            "useful",
+            "partially_useful",
+            "irrelevant",
+            "stale",
+            "wrong",
+            "missing",
+            "too_much_context",
+        ]
     ),
     help="Quality label for the retrieved memories.",
 )
@@ -564,14 +606,34 @@ def show(ctx: click.Context, ref: str) -> None:
     type=click.Choice(["success", "partial", "failure", "unknown"]),
     help="Result of the downstream task.",
 )
-@click.option("--used", "used_memory_ids", multiple=True, metavar="SCH_ID",
-              help="Schema IDs that were relied on (e.g. sch_5). Repeatable.")
-@click.option("--irrelevant", "irrelevant_memory_ids", multiple=True, metavar="SCH_ID",
-              help="Schema IDs that were not relevant. Repeatable.")
-@click.option("--stale", "stale_memory_ids", multiple=True, metavar="SCH_ID",
-              help="Schema IDs that are outdated. Repeatable.")
-@click.option("--wrong", "wrong_memory_ids", multiple=True, metavar="SCH_ID",
-              help="Schema IDs that are factually wrong. Repeatable.")
+@click.option(
+    "--used",
+    "used_memory_ids",
+    multiple=True,
+    metavar="SCH_ID",
+    help="Schema IDs that were relied on (e.g. sch_5). Repeatable.",
+)
+@click.option(
+    "--irrelevant",
+    "irrelevant_memory_ids",
+    multiple=True,
+    metavar="SCH_ID",
+    help="Schema IDs that were not relevant. Repeatable.",
+)
+@click.option(
+    "--stale",
+    "stale_memory_ids",
+    multiple=True,
+    metavar="SCH_ID",
+    help="Schema IDs that are outdated. Repeatable.",
+)
+@click.option(
+    "--wrong",
+    "wrong_memory_ids",
+    multiple=True,
+    metavar="SCH_ID",
+    help="Schema IDs that are factually wrong. Repeatable.",
+)
 @click.pass_context
 def reinforce_cmd(
     ctx: click.Context,
@@ -635,24 +697,25 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
 @click.pass_context
 def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
     """Print memory and storage statistics."""
-    from slowave.cli.output import get_renderer
     import os
     from pathlib import Path
-    
+
+    from slowave.cli.output import get_renderer
+
     eng = _build_engine(ctx.obj["db"], disable_encoder=True)  # Don't load embeddings
     data = eng.stats()
-    
+
     # Get file size
     db_path = Path(ctx.obj["db"])
     db_size_bytes = db_path.stat().st_size if db_path.exists() else 0
     db_size_mb = db_size_bytes / (1024 * 1024)
-    
+
     # Get health
     health = eng.schema_health()
     eng.close()
-    
+
     as_json = ctx.obj["json"]
-    
+
     if as_json:
         result = {
             "version": "1.0",
@@ -674,17 +737,17 @@ def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
     else:
         renderer = get_renderer(use_emoji=False)
         renderer.title("Slowave Stats")
-        
+
         renderer.section("Memory (Stored Schemas)")
         renderer.item("Episodes", f"{data.get('episodes', 0):,}")
         renderer.item("Schemas", f"{data.get('schemas', 0):,}")
         renderer.item("Prototypes", f"{data.get('prototypes', 0):,}")
         renderer.item("Edges", f"{data.get('edges', 0):,}")
-        
+
         renderer.section("Storage")
         renderer.item("Database", str(db_path), dim=True)
         renderer.item("Size", f"{db_size_mb:.1f} MB")
-        
+
         renderer.section("Health")
         active = health.get("active_schemas", 0)
         unique = health.get("active_unique_exact_by_scope", 0)
@@ -692,7 +755,7 @@ def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
         renderer.item("Active schemas", f"{active:,}")
         renderer.item("Unique (exact)", f"{unique:,}")
         renderer.item("Duplicate ratio", f"{dup_ratio:.1%}")
-        
+
         # Hints
         if data.get("episodes", 0) == 0:
             renderer.hint("No memories yet. Episodes will appear after sessions.")
@@ -706,6 +769,7 @@ def _slowave_processes() -> list[dict[str, Any]]:
     On macOS / Linux uses ``ps -axo``.
     """
     import platform as _platform
+
     if _platform.system() == "Windows":
         return _slowave_processes_windows()
 
@@ -723,13 +787,16 @@ def _slowave_processes() -> list[dict[str, Any]]:
         if len(parts) < 5:
             continue
         pid, ppid, stat, rss, command = parts
-        if not any(token in command for token in (
-            "slowave.mcp.http_server",
-            "slowave-mcp-http",
-            "slowave worker",
-            "slowave.cli.main",
-            "slowave serve",
-        )):
+        if not any(
+            token in command
+            for token in (
+                "slowave.mcp.http_server",
+                "slowave-mcp-http",
+                "slowave worker",
+                "slowave.cli.main",
+                "slowave serve",
+            )
+        ):
             continue
         rows.append(
             {
@@ -758,7 +825,10 @@ def _slowave_processes_windows() -> list[dict[str, Any]]:
     try:
         result = subprocess.run(
             ["powershell", "-NonInteractive", "-Command", ps_cmd],
-            capture_output=True, text=True, check=False, timeout=10,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=10,
         )
     except Exception:
         return []
@@ -768,6 +838,7 @@ def _slowave_processes_windows() -> list[dict[str, Any]]:
 
     try:
         import json as _json
+
         procs = _json.loads(result.stdout.strip())
         if isinstance(procs, dict):  # single result → normalise to list
             procs = [procs]
@@ -802,17 +873,18 @@ def _worker_health() -> dict[str, Any]:
     that MCP clients are sending post-recall feedback.
     """
     processes = _slowave_processes()
-    worker_processes = [
-        p for p in processes
-        if "slowave worker" in p.get("command", "")
-    ]
+    worker_processes = [p for p in processes if "slowave worker" in p.get("command", "")]
     return {
         "process_detected": bool(worker_processes),
         "process_count": len(worker_processes),
         "processes": worker_processes,
-        "warnings": [] if worker_processes else [
-            "no background worker process detected; run 'slowave worker' or configure the worker service if you want automatic consolidation"
-        ],
+        "warnings": (
+            []
+            if worker_processes
+            else [
+                "no background worker process detected; run 'slowave worker' or configure the worker service if you want automatic consolidation"
+            ]
+        ),
     }
 
 
@@ -891,7 +963,8 @@ def _feedback_health(db_path: str) -> dict[str, Any]:
         result["available"] = True
 
         event_tables = [
-            table for table in (
+            table
+            for table in (
                 "raw_events",
                 "events",
                 "event_log",
@@ -1031,7 +1104,10 @@ def _session_lifecycle_health(db_path: str) -> dict[str, Any]:
             elif "status" in cols:
                 result["sessions_committed"] = max(
                     result["sessions_committed"],
-                    _count(cur, f"SELECT COUNT(*) FROM {table} WHERE status IN ('ended', 'closed', 'committed')"),
+                    _count(
+                        cur,
+                        f"SELECT COUNT(*) FROM {table} WHERE status IN ('ended', 'closed', 'committed')",
+                    ),
                 )
 
         conn.close()
@@ -1047,8 +1123,13 @@ def _session_lifecycle_health(db_path: str) -> dict[str, Any]:
 
     if result["sessions_started"] > 0 and result["sessions_committed"] == 0:
         result["warnings"].append("sessions are started but never ended/committed")
-    elif result["sessions_started"] >= 3 and result["sessions_committed"] / max(result["sessions_started"], 1) < 0.5:
-        result["warnings"].append("many sessions are started but fewer than half are ended/committed")
+    elif (
+        result["sessions_started"] >= 3
+        and result["sessions_committed"] / max(result["sessions_started"], 1) < 0.5
+    ):
+        result["warnings"].append(
+            "many sessions are started but fewer than half are ended/committed"
+        )
 
     return result
 
@@ -1091,10 +1172,7 @@ def status_cmd(ctx: click.Context) -> None:
         )
 
     wh = payload["worker_health"]
-    click.echo(
-        "Worker health: "
-        f"detected={wh['process_detected']} count={wh['process_count']}"
-    )
+    click.echo("Worker health: " f"detected={wh['process_detected']} count={wh['process_count']}")
     sh = payload["session_lifecycle_health"]
     click.echo(
         "Session lifecycle health: "
@@ -1208,8 +1286,8 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
       slowave worker --interval 600          # consolidate every 10 min
       slowave worker --interval 3600 &       # background hourly consolidation
     """
-    import time as _time
     import signal
+    import time as _time
 
     eng = _build_engine(ctx.obj["db"])
     stop = False
@@ -1264,9 +1342,6 @@ def worker_cmd(ctx: click.Context, interval: int, once: bool) -> None:
     click.echo("  💤 worker stopped.")
 
 
-
-
-
 @cli.command("doctor")
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
 @click.option("--verbose", is_flag=True, help="Verbose diagnostics.")
@@ -1278,30 +1353,26 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
     SQLite write access, and MCP server availability.
     Exits with code 1 if any check fails (FAIL status).
     """
-    from slowave.cli.output import get_renderer, Status
-    from slowave.cli.diagnostics import (
-        get_runtime_info,
-        check_python,
-        check_faiss,
-        check_onnxruntime,
-        check_embedding_backend,
-        check_sqlite_write,
-        check_mcp_server,
-        check_http_daemon,
-    )
-    from slowave.cli.clients import get_client_statuses, summarize_client_status
     from slowave import __version__
+    from slowave.cli.clients import get_client_statuses, summarize_client_status
+    from slowave.cli.diagnostics import (
+        check_embedding_backend,
+        check_faiss,
+        check_http_daemon,
+        check_mcp_server,
+        check_onnxruntime,
+        check_python,
+        check_sqlite_write,
+        get_runtime_info,
+    )
+    from slowave.cli.output import Status, get_renderer
 
     as_json = as_json or ctx.obj["json"]
     renderer = get_renderer(use_emoji=False)
 
     if as_json:
         # JSON mode
-        result = {
-            "status": "ok",
-            "version": __version__,
-            "runtime": {}
-        }
+        result = {"status": "ok", "version": __version__, "runtime": {}}
 
         runtime = get_runtime_info(__version__)
         result["runtime_info"] = {
@@ -1350,10 +1421,12 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             ("FEEDBACK_HEALTH", feedback),
         ):
             for warning in health.get("warnings", []):
-                warnings.append({
-                    "code": source,
-                    "message": str(warning),
-                })
+                warnings.append(
+                    {
+                        "code": source,
+                        "message": str(warning),
+                    }
+                )
 
         for key, client in clients.items():
             status, detail = summarize_client_status(client)
@@ -1363,10 +1436,12 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
                 "detail": detail,
             }
             if status == Status.WARN:
-                warnings.append({
-                    "code": f"{key.upper()}_INCOMPLETE",
-                    "message": f"{client.name}: {detail}",
-                })
+                warnings.append(
+                    {
+                        "code": f"{key.upper()}_INCOMPLETE",
+                        "message": f"{client.name}: {detail}",
+                    }
+                )
 
         # Determine overall status
         has_fail = any(c.status == Status.FAIL for c in checks.values())
@@ -1418,12 +1493,17 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
 
         renderer.section("Session Lifecycle Health")
         renderer.item("Sessions started", f"{session_lifecycle.get('sessions_started', 0):,}")
-        renderer.item("Sessions ended/committed", f"{session_lifecycle.get('sessions_committed', 0):,}")
+        renderer.item(
+            "Sessions ended/committed", f"{session_lifecycle.get('sessions_committed', 0):,}"
+        )
 
         renderer.section("Feedback Health")
         renderer.item("Recall/context calls", f"{feedback.get('recall_or_context_calls', 0):,}")
         renderer.item("Remember calls", f"{feedback.get('remember_calls', 0):,}")
-        renderer.item("Feedback/reinforcement calls", f"{feedback.get('feedback_or_reinforcement_calls', 0):,}")
+        renderer.item(
+            "Feedback/reinforcement calls",
+            f"{feedback.get('feedback_or_reinforcement_calls', 0):,}",
+        )
         age = feedback.get("last_feedback_age_days")
         renderer.item(
             "Last feedback",
@@ -1471,8 +1551,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
             for name, detail in warnings_list:
                 if "custom instructions" in detail.lower():
                     renderer.warning(
-                        f"{name}: {detail}",
-                        "Run: slowave setup --dry-run, then slowave setup"
+                        f"{name}: {detail}", "Run: slowave setup --dry-run, then slowave setup"
                     )
                 else:
                     renderer.warning(f"{name}: {detail}")
@@ -1491,6 +1570,7 @@ def doctor_cmd(ctx: click.Context, as_json: bool, verbose: bool) -> None:
         else:
             renderer.summary(True, "All systems ready.")
 
+
 @cli.command("uninstall")
 @click.option("--dry-run", is_flag=True, help="Preview what would be removed.")
 def uninstall_cmd(dry_run: bool) -> None:
@@ -1500,13 +1580,22 @@ def uninstall_cmd(dry_run: bool) -> None:
     hooks, and worker service. Never deletes entire files or breaks configs.
     Database at ~/.slowave/ is preserved — remove manually if desired.
     """
-    from slowave.cli.setup import (
-        _claude_settings_path, _claude_desktop_config_path, _cline_mcp_settings_path,
-        _claude_md_path, _clinerules_path, _read_json, _write_json,
-        _MARKER_START, _MARKER_END, _HOOKS_MARKER, _home,
-    )
     import platform
     from pathlib import Path
+
+    from slowave.cli.setup import (
+        _HOOKS_MARKER,
+        _MARKER_END,
+        _MARKER_START,
+        _claude_desktop_config_path,
+        _claude_md_path,
+        _claude_settings_path,
+        _cline_mcp_settings_path,
+        _clinerules_path,
+        _home,
+        _read_json,
+        _write_json,
+    )
 
     click.echo(click.style("\nSlowave uninstall", bold=True))
     if dry_run:
@@ -1544,7 +1633,7 @@ def uninstall_cmd(dry_run: bool) -> None:
             except ValueError:
                 errors.append(f"{desc}: mismatched markers")
                 return
-            new_content = content[:start_idx] + content[end_idx + len(_MARKER_END):]
+            new_content = content[:start_idx] + content[end_idx + len(_MARKER_END) :]
             new_content = new_content.lstrip("\n")
             if new_content != content and not dry_run:
                 path.write_text(new_content, encoding="utf-8")
@@ -1565,8 +1654,11 @@ def uninstall_cmd(dry_run: bool) -> None:
                 if event in cfg["hooks"]:
                     orig_len = len(cfg["hooks"][event])
                     cfg["hooks"][event] = [
-                        g for g in cfg["hooks"][event]
-                        if not any(_HOOKS_MARKER in h.get("command", "") for h in g.get("hooks", []))
+                        g
+                        for g in cfg["hooks"][event]
+                        if not any(
+                            _HOOKS_MARKER in h.get("command", "") for h in g.get("hooks", [])
+                        )
                     ]
                     if len(cfg["hooks"][event]) < orig_len:
                         modified = True
@@ -1606,28 +1698,48 @@ def uninstall_cmd(dry_run: bool) -> None:
         if system == "Darwin":
             plist = _home() / "Library/LaunchAgents/com.slowave.worker.plist"
             if plist.exists():
-                subprocess.run(["launchctl", "unload", str(plist)], capture_output=True, check=False)
+                subprocess.run(
+                    ["launchctl", "unload", str(plist)], capture_output=True, check=False
+                )
                 plist.unlink()
                 changes.append("launchd worker")
         elif system == "Linux":
             xdg = Path(os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config")))
             svc = xdg / "systemd/user/slowave-worker.service"
             if svc.exists():
-                subprocess.run(["systemctl", "--user", "disable", "--now", "slowave-worker"], capture_output=True, check=False)
+                subprocess.run(
+                    ["systemctl", "--user", "disable", "--now", "slowave-worker"],
+                    capture_output=True,
+                    check=False,
+                )
                 svc.unlink()
                 changes.append("systemd worker")
         elif system == "Windows":
             try:
-                subprocess.run(["powershell", "-NonInteractive", "-Command",
-                                "Unregister-ScheduledTask -TaskName SlowaveDaemon -Confirm:$false -ErrorAction SilentlyContinue"],
-                               capture_output=True, check=False)
+                subprocess.run(
+                    [
+                        "powershell",
+                        "-NonInteractive",
+                        "-Command",
+                        "Unregister-ScheduledTask -TaskName SlowaveDaemon -Confirm:$false -ErrorAction SilentlyContinue",
+                    ],
+                    capture_output=True,
+                    check=False,
+                )
                 changes.append("Task Scheduler daemon (SlowaveDaemon)")
             except Exception:
                 pass
             try:
-                subprocess.run(["powershell", "-NonInteractive", "-Command",
-                                "Unregister-ScheduledTask -TaskName SlowaveWorker -Confirm:$false -ErrorAction SilentlyContinue"],
-                               capture_output=True, check=False)
+                subprocess.run(
+                    [
+                        "powershell",
+                        "-NonInteractive",
+                        "-Command",
+                        "Unregister-ScheduledTask -TaskName SlowaveWorker -Confirm:$false -ErrorAction SilentlyContinue",
+                    ],
+                    capture_output=True,
+                    check=False,
+                )
                 changes.append("Task Scheduler worker (SlowaveWorker)")
             except Exception:
                 pass
@@ -1647,14 +1759,16 @@ def uninstall_cmd(dry_run: bool) -> None:
 
     if not dry_run:
         click.echo(f"\n  {safe_emoji('⚠️', '!!')}  Manual steps:")
-        click.echo("    - Claude Desktop Custom Instructions (delete the Slowave block if you added it manually)")
+        click.echo(
+            "    - Claude Desktop Custom Instructions (delete the Slowave block if you added it manually)"
+        )
         click.echo("    - Package: pipx uninstall slowave")
         click.echo("    - Database (optional): rm -rf ~/.slowave")
     click.echo()
 
 
-from slowave.cli.cleanup import cleanup_cmd
 from slowave.cli.backup import backup_cmd, restore_cmd
+from slowave.cli.cleanup import cleanup_cmd
 
 cli.add_command(setup_cmd)
 cli.add_command(cleanup_cmd)
@@ -1672,6 +1786,7 @@ if __name__ == "__main__":
 # ---------------------------------------------------------------------------
 # serve command group
 # ---------------------------------------------------------------------------
+
 
 @cli.group("serve")
 def serve_cmd() -> None:
@@ -1698,7 +1813,8 @@ def serve_cmd() -> None:
     type=click.Choice(["DEBUG", "INFO", "WARNING", "ERROR"], case_sensitive=False),
 )
 @click.option(
-    "--foreground", "-f",
+    "--foreground",
+    "-f",
     is_flag=True,
     help="Run in foreground (block). Default: run in foreground (background not yet supported).",
 )
@@ -1741,7 +1857,7 @@ def serve_start(
 @serve_cmd.command("stop")
 def serve_stop() -> None:
     """Stop the running Slowave HTTP MCP daemon."""
-    from slowave.mcp.daemon import is_running, stop_daemon, read_pid
+    from slowave.mcp.daemon import is_running, read_pid, stop_daemon
 
     if not is_running():
         click.echo("  No daemon is currently running.")
@@ -1759,11 +1875,12 @@ def serve_stop() -> None:
 @click.option("--json", "as_json", is_flag=True, help="JSON output.")
 def serve_status(as_json: bool) -> None:
     """Show the status of the Slowave HTTP MCP daemon."""
-    import urllib.request
-    import urllib.error
     import json as _json
-    from slowave.mcp.daemon import daemon_status
+    import urllib.error
+    import urllib.request
+
     from slowave import __version__
+    from slowave.mcp.daemon import daemon_status
 
     status = daemon_status()
     mcp_url = f"http://127.0.0.1:8766/mcp"
@@ -1788,7 +1905,7 @@ def serve_status(as_json: bool) -> None:
         click.echo(_json.dumps(payload, indent=2))
         return
 
-    from slowave.cli.output import get_renderer, Status
+    from slowave.cli.output import Status, get_renderer
 
     renderer = get_renderer(use_emoji=False)
     renderer.title("Slowave HTTP MCP Daemon")
@@ -1820,7 +1937,8 @@ def serve_status(as_json: bool) -> None:
 def serve_restart(host: str, port: int, log_level: str) -> None:
     """Restart the Slowave HTTP MCP daemon."""
     import time as _time
-    from slowave.mcp.daemon import is_running, stop_daemon, read_pid
+
+    from slowave.mcp.daemon import is_running, read_pid, stop_daemon
     from slowave.mcp.http_server import main as http_main
 
     if is_running():

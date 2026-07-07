@@ -3,6 +3,7 @@
 Previously implemented as methods on SlowaveEngine. Extracted so the retrieval
 pipeline can be read, tested, and reasoned about independently.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -39,7 +40,9 @@ class RecallResult:
     episode_texts: list[dict[str, Any]]
     raw_events: list[dict[str, Any]]
     expanded_neighbors: dict[int, list[tuple[int, float]]]
-    schema_activations: dict[int, float] = field(default_factory=dict)  # schema_id -> cosine/activation score
+    schema_activations: dict[int, float] = field(
+        default_factory=dict
+    )  # schema_id -> cosine/activation score
 
 
 def _prefix_date(text: str, ts: int) -> str:
@@ -119,7 +122,15 @@ class RetrievalService:
         self.episodic.reset_faiss_from_db()
         self.semantic.reset_faiss_from_db()
 
-    def recall(self, query: str, *, top_k: int = 5, evidence: bool = False, mode: str = "default", scope: str | None = None) -> RecallResult:
+    def recall(
+        self,
+        query: str,
+        *,
+        top_k: int = 5,
+        evidence: bool = False,
+        mode: str = "default",
+        scope: str | None = None,
+    ) -> RecallResult:
         if self.encoder is None:
             raise RuntimeError("recall requires an encoder; cfg.disable_encoder=True")
         self.refresh_indices()
@@ -147,7 +158,9 @@ class RetrievalService:
         scope_id = normalize_scope(scope=scope) if scope else None
 
         schema_scores: dict[int, float] = {}
-        for sid, score in self.schemas.search_embedding(q, limit=max(20, top_k * 4), scope_id=scope_id):
+        for sid, score in self.schemas.search_embedding(
+            q, limit=max(20, top_k * 4), scope_id=scope_id
+        ):
             schema_scores[sid] = max(schema_scores.get(sid, -1e9), score + 0.25)
 
         # FTS candidates: scope-filter early to avoid collecting candidates
@@ -203,8 +216,10 @@ class RetrievalService:
         # a stored embedding fall back to a small flat baseline (0.10) so they
         # can still enter the candidate set and be ranked by salience.
         if scope_id and mode == "strict_scope":
-            from slowave.utils.vec import unpack_f32
             import numpy as _np
+
+            from slowave.utils.vec import unpack_f32
+
             _qn = float(_np.linalg.norm(q)) + 1e-12
             promoted_rows = conn.execute(
                 "SELECT id, embedding, dim FROM schemas "
@@ -247,6 +262,7 @@ class RetrievalService:
 
         filtered_schemas = []
         from slowave.core.scope import scope_kind as _scope_kind
+
         for s in schemas_all:
             if s.status not in recall_statuses:
                 continue
@@ -290,10 +306,11 @@ class RetrievalService:
                 schema_scores[s.id] = schema_scores.get(s.id, 0.0) * 0.20
 
             filtered_schemas.append(s)
-        
+
         schemas = sorted(
             filtered_schemas,
-            key=lambda s: schema_scores.get(s.id, 0.0) + self._retrieval_cfg.salience_weight * _norm_salience(s.salience),
+            key=lambda s: schema_scores.get(s.id, 0.0)
+            + self._retrieval_cfg.salience_weight * _norm_salience(s.salience),
             reverse=True,
         )[:top_k]
         for s in schemas:
@@ -322,25 +339,27 @@ class RetrievalService:
         # repeat an already-surfaced schema are suppressed regardless of the
         # evidence flag.
         seen_episodes: set[str] = set()
-        schema_texts = {_normalize_episode_text(s.content_text or "") for s in schemas if s.content_text}
-        
+        schema_texts = {
+            _normalize_episode_text(s.content_text or "") for s in schemas if s.content_text
+        }
+
         for _score, m in scored_pairs[:top_k]:
             ep = ep_by_id.get(m.id)
             raw_text = ep.content_text if ep else ""
             dated_text = _prefix_date(raw_text, int(m.ts))
-            
+
             # Skip if this episode content was already emitted (normalised).
             normalized = _normalize_episode_text(raw_text)
             if normalized and normalized in seen_episodes:
                 continue
-            
+
             # Skip if episode duplicates a schema already surfaced in results.
             if normalized and normalized in schema_texts:
                 continue
-            
+
             if normalized:
                 seen_episodes.add(normalized)
-            
+
             episode_dicts.append(
                 {
                     "id": m.id,
@@ -374,7 +393,9 @@ class RetrievalService:
                     e = self.raw_log.get(rid)
                 except KeyError:
                     continue
-                raw_events_out.append({"id": e.id, "ts": e.ts, "type": e.type, "content": e.content})
+                raw_events_out.append(
+                    {"id": e.id, "ts": e.ts, "type": e.type, "content": e.content}
+                )
 
         return RecallResult(
             schemas=schemas,
@@ -418,15 +439,25 @@ class RetrievalService:
             fetch_statuses = ("active", "needs_review")
         if mode == "debug":
             fetch_statuses = ("active", "needs_review", "superseded")
-        
+
         if scope_id:
             # Fetch active schemas for scope
-            add_many(self.schemas.list(limit=max(60, limit * 6), scope_id=scope_id, status="active"))
+            add_many(
+                self.schemas.list(limit=max(60, limit * 6), scope_id=scope_id, status="active")
+            )
             # Fetch needs_review/superseded for scope if in appropriate mode
             if mode in ("broad", "debug"):
-                add_many(self.schemas.list(limit=max(60, limit * 6), scope_id=scope_id, status="needs_review"))
+                add_many(
+                    self.schemas.list(
+                        limit=max(60, limit * 6), scope_id=scope_id, status="needs_review"
+                    )
+                )
             if mode == "debug":
-                add_many(self.schemas.list(limit=max(60, limit * 6), scope_id=scope_id, status="superseded"))
+                add_many(
+                    self.schemas.list(
+                        limit=max(60, limit * 6), scope_id=scope_id, status="superseded"
+                    )
+                )
             # Stage 11: also inject generalization-promoted schemas (Stage 2/3) as candidates.
             # Stage 1 (portable) is handled inside _eligible via scope_kind match.
             # Stage 2/3 are surfaced here so the working-memory gate can score them;
@@ -472,7 +503,9 @@ class RetrievalService:
                     continue
             if self.encoder is not None:
                 cue_embedding = self.encoder.encode(cue_text)
-                for sid, _score in self.schemas.search_embedding(cue_embedding, limit=max(50, limit * 8)):
+                for sid, _score in self.schemas.search_embedding(
+                    cue_embedding, limit=max(50, limit * 8)
+                ):
                     try:
                         candidates_by_id[sid] = self.schemas.get(sid)
                     except KeyError:
@@ -535,7 +568,11 @@ class RetrievalService:
                         schema_obj = self.schemas.get(sid)
                     except KeyError:
                         pass
-                    utility = float((schema_obj.facets or {}).get("schema_utility", 0.0)) if schema_obj else 0.0
+                    utility = (
+                        float((schema_obj.facets or {}).get("schema_utility", 0.0))
+                        if schema_obj
+                        else 0.0
+                    )
                     utility_mult = 1.0 + 0.5 * utility
                     boost = 0.08 * float(qsim) * float(conf) * utility_mult
                     prior_boost[eid] = max(prior_boost.get(eid, 0.0), boost)

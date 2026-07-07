@@ -52,35 +52,39 @@ def engine_with_encoder(tmp_db: str) -> SlowaveEngine:
 class TestScopeHandling:
     """Strict scope mode validation."""
 
-    def test_strict_scope_excludes_other_project_facts(self, engine_with_encoder: SlowaveEngine) -> None:
+    def test_strict_scope_excludes_other_project_facts(
+        self, engine_with_encoder: SlowaveEngine
+    ) -> None:
         """Strict scope should exclude memories from other projects."""
         eng = engine_with_encoder
-        
+
         # Remember facts in different scopes
         proj_a_id = eng.remember(
             content="Project A specific fact",
             type="fact",
             scope="project:alpha",
         ).schema_id
-        
+
         proj_b_id = eng.remember(
             content="Project B specific fact",
             type="fact",
             scope="project:beta",
         ).schema_id
-        
+
         # Get context in strict_scope mode for project:alpha
         context = eng.context_brief(
             query="project specific",
             scope="project:alpha",
             mode="strict_scope",
         )
-        
+
         returned_ids = {s.id for s in context.schemas}
         # Project A should be included, Project B should not
         assert proj_a_id in returned_ids, "Project A fact should be included"
-        assert proj_b_id not in returned_ids, "Project B fact should be excluded in strict_scope mode"
-    
+        assert (
+            proj_b_id not in returned_ids
+        ), "Project B fact should be excluded in strict_scope mode"
+
     def test_strict_scope_is_mcp_activate_default(self, engine_with_encoder: SlowaveEngine) -> None:
         """strict_scope is the correct default for activate: any scoped call isolates by default.
 
@@ -112,111 +116,124 @@ class TestScopeHandling:
         ctx_no_scope = eng.context_brief(query="fact", scope=None, mode="strict_scope")
         ids_no_scope = {s.id for s in ctx_no_scope.schemas}
         # Both facts may appear when no scope is set (no hard block fires)
-        assert fact_a_sid in ids_no_scope or fact_b_sid in ids_no_scope, (
-            "strict_scope with no scope must not hard-block anything"
-        )
+        assert (
+            fact_a_sid in ids_no_scope or fact_b_sid in ids_no_scope
+        ), "strict_scope with no scope must not hard-block anything"
 
-    def test_strict_scope_allows_global_scope_none_memories(self, engine_with_encoder: SlowaveEngine) -> None:
+    def test_strict_scope_allows_global_scope_none_memories(
+        self, engine_with_encoder: SlowaveEngine
+    ) -> None:
         """Strict scope should allow memories with scope_id=None."""
         eng = engine_with_encoder
-        
+
         # Remember a global fact (no scope)
         global_id = eng.remember(
             content="Global system fact",
             type="fact",
             scope=None,
         ).schema_id
-        
+
         # Remember project-specific fact
         proj_id = eng.remember(
             content="Project specific fact",
             type="fact",
             scope="project:alpha",
         ).schema_id
-        
+
         # Get context in strict_scope mode for project:alpha
         context = eng.context_brief(
             query="fact",
             scope="project:alpha",
             mode="strict_scope",
         )
-        
+
         returned_ids = {s.id for s in context.schemas}
         # Both should be included: project fact + global fact
         assert proj_id in returned_ids, "Project fact should be included"
-        assert global_id in returned_ids, "Global fact (scope_id=None) should be included in strict scope"
-
+        assert (
+            global_id in returned_ids
+        ), "Global fact (scope_id=None) should be included in strict scope"
 
 
 class TestFeedbackSuppression:
     """Wrong/stale feedback suppression."""
 
-    def test_wrong_feedback_removes_memory_from_top_3(self, engine_with_encoder: SlowaveEngine) -> None:
+    def test_wrong_feedback_removes_memory_from_top_3(
+        self, engine_with_encoder: SlowaveEngine
+    ) -> None:
         """Wrong feedback should remove memory from top-k."""
         eng = engine_with_encoder
-        
+
         # Remember two similar facts
         schema_id_1 = eng.remember(
             content="Python is a dynamically typed language",
             type="fact",
         )
-        
+
         schema_id_2 = eng.remember(
             content="JavaScript is also dynamically typed",
             type="fact",
         )
-        
+
         # Recall without feedback - both should appear
         result1 = eng.recall("dynamically typed language", top_k=5)
         ids_before = {s.id for s in result1.schemas}
         assert schema_id_1 in ids_before or schema_id_2 in ids_before
-        
+
         # Directly update schema status to needs_review to simulate feedback
         eng.schemas.update_status(schema_id_1, status="needs_review")
-        
+
         # Recall again - needs_review schema should be suppressed in default mode
         result2 = eng.recall("dynamically typed language", top_k=5)
         ids_after = {s.id for s in result2.schemas}
-        
+
         # Schema with needs_review should no longer appear in default mode
-        assert schema_id_1 not in ids_after, "Needs-review schema should be removed from recall in default mode"
-    
-    def test_needs_review_excluded_from_default_recall(self, engine_with_encoder: SlowaveEngine) -> None:
+        assert (
+            schema_id_1 not in ids_after
+        ), "Needs-review schema should be removed from recall in default mode"
+
+    def test_needs_review_excluded_from_default_recall(
+        self, engine_with_encoder: SlowaveEngine
+    ) -> None:
         """Memories with status=needs_review should be excluded."""
         eng = engine_with_encoder
-        
+
         # Remember fact and mark as needs_review via status update
         schema_id = eng.remember(
             content="Deprecated API endpoint /v1/old",
             type="fact",
         )
-        
+
         eng.schemas.update_status(schema_id, status="needs_review")
-        
+
         # Recall in default mode - should not appear
         result_default = eng.recall("deprecated endpoint", top_k=5)
         ids_default = {s.id for s in result_default.schemas}
-        assert schema_id not in ids_default, "Needs-review schema should be excluded in default mode"
-    
+        assert (
+            schema_id not in ids_default
+        ), "Needs-review schema should be excluded in default mode"
+
     def test_needs_review_visible_in_broad_mode(self, engine_with_encoder: SlowaveEngine) -> None:
         """Memories with status=needs_review visible in broad/debug."""
         eng = engine_with_encoder
-        
+
         # Remember fact and mark as needs_review
         schema_id = eng.remember(
             content="Deprecated API endpoint /v1/old",
             type="fact",
         )
-        
+
         # Mark as needs_review
         eng.schemas.update_status(schema_id, status="needs_review")
-        
+
         # In broad mode, should still be visible
         result_broad = eng.context_brief(query="deprecated endpoint", mode="broad", limit=10)
         ids_broad = {s.id for s in result_broad.schemas}
         assert schema_id in ids_broad, "Needs-review schema should be visible in broad mode"
 
-    def test_wrong_failed_combo_sets_status_needs_review(self, engine_with_encoder: SlowaveEngine) -> None:
+    def test_wrong_failed_combo_sets_status_needs_review(
+        self, engine_with_encoder: SlowaveEngine
+    ) -> None:
         """wrong + failed feedback escalates schema status to needs_review."""
         eng = engine_with_encoder
 
@@ -238,15 +255,15 @@ class TestFeedbackSuppression:
 
         # Status must have been escalated to needs_review (not just flag set)
         schema = eng.schemas.get(schema_id)
-        assert schema.status == "needs_review", (
-            f"wrong+failed should escalate status to needs_review, got {schema.status}"
-        )
+        assert (
+            schema.status == "needs_review"
+        ), f"wrong+failed should escalate status to needs_review, got {schema.status}"
 
         # And it must be excluded from default recall
         result = eng.recall("database fact failure", top_k=5)
-        assert schema_id not in {s.id for s in result.schemas}, (
-            "needs_review schema must be excluded from default recall"
-        )
+        assert schema_id not in {
+            s.id for s in result.schemas
+        }, "needs_review schema must be excluded from default recall"
 
 
 class TestBroadSummaryDemotion:
@@ -257,7 +274,7 @@ class TestBroadSummaryDemotion:
     ) -> None:
         """Multi-sentence summaries excluded from default context (P5-A/B) via eligibility gate."""
         eng = engine_with_encoder
-        
+
         # Create a consolidated multi-sentence summary (simulating consolidation)
         long_text = "First sentence. Second sentence. Third sentence. This is a long summary with multiple claims."
         long_summary_id = eng.schemas.create(
@@ -269,58 +286,59 @@ class TestBroadSummaryDemotion:
             tags=["summary"],
             embedding=eng.encoder.encode(long_text),
         )
-        
+
         # Verify P5 gate behavior
         long_summary = eng.schemas.get(long_summary_id)
-        
+
         # Test the eligibility gate directly:
         # Multi-sentence consolidated schemas should be filtered in default mode
-        from slowave.core.context import MemoryCue, WorkingMemoryGate, GatePolicy
-        
+        from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate
+
         gate = WorkingMemoryGate()
         cue_default = MemoryCue(mode="default", scope=None)
         cue_broad = MemoryCue(mode="broad", scope=None)
         policy = GatePolicy()
-        
+
         # In default mode, episodic_summary should be excluded
-        eligible_default, reason_default = gate._eligible(long_summary, cue=cue_default, policy=policy)
-        assert not eligible_default, \
-            f"Multi-sentence summary should be excluded in default mode (reason: {reason_default})"
-        
+        eligible_default, reason_default = gate._eligible(
+            long_summary, cue=cue_default, policy=policy
+        )
+        assert (
+            not eligible_default
+        ), f"Multi-sentence summary should be excluded in default mode (reason: {reason_default})"
+
         # In broad mode, episodic_summary should be included
         eligible_broad, reason_broad = gate._eligible(long_summary, cue=cue_broad, policy=policy)
-        assert eligible_broad, \
-            f"Multi-sentence summary should be eligible in broad mode (reason: {reason_broad})"
+        assert (
+            eligible_broad
+        ), f"Multi-sentence summary should be eligible in broad mode (reason: {reason_broad})"
 
     def test_explicit_long_memory_not_filtered(self, engine_with_encoder: SlowaveEngine) -> None:
         """Explicitly remembered long memories NOT filtered (P5-A)."""
         eng = engine_with_encoder
-        
+
         # Create an explicitly remembered long memory (should never be filtered)
         explicit_long_id = eng.remember(
             content="First explicit sentence. Second explicit sentence. Third explicit sentence. User provided this explicit long memory.",
             type="fact",
         )
-        
+
         # Get context in default mode
-        context_default = eng.context_brief(
-            query="explicit sentence",
-            mode="default",
-            limit=10
-        )
-        
+        context_default = eng.context_brief(query="explicit sentence", mode="default", limit=10)
+
         returned_ids = {s.id for s in context_default.schemas}
         # Explicit memory should NEVER be filtered, even if long and multi-sentence
-        assert explicit_long_id in returned_ids, \
-            "Explicitly remembered long memory should never be filtered from default context"
-
-
+        assert (
+            explicit_long_id in returned_ids
+        ), "Explicitly remembered long memory should never be filtered from default context"
 
 
 class TestEpisodeDeduplication:
     """Episode deduplication."""
 
-    def test_explicit_remember_no_duplicate_episodes(self, engine_with_encoder: SlowaveEngine) -> None:
+    def test_explicit_remember_no_duplicate_episodes(
+        self, engine_with_encoder: SlowaveEngine
+    ) -> None:
         """Episode dedup should not duplicate facts."""
         eng = engine_with_encoder
 
@@ -358,8 +376,4 @@ class TestEpisodeDeduplication:
 
         # Check for duplicate schema IDs
         schema_ids = [s.id for s in context.schemas]
-        assert len(schema_ids) == len(set(schema_ids)), (
-            f"Duplicate schemas: {schema_ids}"
-        )
-
-
+        assert len(schema_ids) == len(set(schema_ids)), f"Duplicate schemas: {schema_ids}"

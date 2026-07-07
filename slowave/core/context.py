@@ -10,10 +10,10 @@ context for an agent/chatbot prompt.
 from __future__ import annotations
 
 import re
-
-import numpy as np
 from dataclasses import dataclass, field, replace
 from typing import Any, Iterable
+
+import numpy as np
 
 from slowave.symbolic.schema_store import Schema
 
@@ -248,7 +248,9 @@ class WorkingMemoryGate:
                 traces.append(ActivationTrace(schema.id, 0.0, reason, False))
                 continue
 
-            activation, reason = self._activation(schema, cue=cue, cue_terms=cue_terms, cue_embedding=cue_embedding)
+            activation, reason = self._activation(
+                schema, cue=cue, cue_terms=cue_terms, cue_embedding=cue_embedding
+            )
             if activation < policy.min_activation:
                 suppressed["below_activation"] = suppressed.get("below_activation", 0) + 1
                 traces.append(ActivationTrace(schema.id, activation, reason, False))
@@ -276,10 +278,16 @@ class WorkingMemoryGate:
             if cue.scope and schema.scope_id and schema.scope_id != cue.scope:
                 _gs = getattr(schema, "generalization_stage", 0)
                 if _gs in (1, 2):
-                    _min_cross_activation = 0.30  # matches GeneralizationConfig.cross_scope_min_score
+                    _min_cross_activation = (
+                        0.30  # matches GeneralizationConfig.cross_scope_min_score
+                    )
                     if activation < _min_cross_activation:
-                        suppressed["cross_scope_below_floor"] = suppressed.get("cross_scope_below_floor", 0) + 1
-                        traces.append(ActivationTrace(schema.id, activation, "cross_scope_below_floor", False))
+                        suppressed["cross_scope_below_floor"] = (
+                            suppressed.get("cross_scope_below_floor", 0) + 1
+                        )
+                        traces.append(
+                            ActivationTrace(schema.id, activation, "cross_scope_below_floor", False)
+                        )
                         continue
                     # Cosine gate: when both query and schema embeddings are present,
                     # require minimum geometric similarity so surface-word overlap
@@ -291,8 +299,17 @@ class WorkingMemoryGate:
                         _vn = float(np.linalg.norm(_v)) + 1e-12
                         _cosine = float(_q.dot(_v) / (_qn * _vn))
                         if _cosine < 0.25:
-                            suppressed["cross_scope_low_cosine"] = suppressed.get("cross_scope_low_cosine", 0) + 1
-                            traces.append(ActivationTrace(schema.id, activation, f"cross_scope_low_cosine:{_cosine:.2f}", False))
+                            suppressed["cross_scope_low_cosine"] = (
+                                suppressed.get("cross_scope_low_cosine", 0) + 1
+                            )
+                            traces.append(
+                                ActivationTrace(
+                                    schema.id,
+                                    activation,
+                                    f"cross_scope_low_cosine:{_cosine:.2f}",
+                                    False,
+                                )
+                            )
                             continue
 
             item = WorkingMemoryItem(
@@ -352,7 +369,7 @@ class WorkingMemoryGate:
             # Default/strict_scope: only active
             if schema.status != "active":
                 return False, "inactive"
-        
+
         if cue.mode == "debug":
             return True, "debug"
 
@@ -377,6 +394,7 @@ class WorkingMemoryGate:
                 elif gen_stage == 1:
                     # portable: only pass if same scope_kind
                     from slowave.core.scope import scope_kind as _scope_kind
+
                     if _scope_kind(schema.scope_id) != _scope_kind(cue.scope):
                         return False, "strict_scope_excluded"
                 else:
@@ -447,7 +465,9 @@ class WorkingMemoryGate:
 
         # Lexical overlap — full weight as fallback when embeddings absent,
         # reduced to a complement signal when the cosine path is active.
-        lexical_weight = 0.15 if (cue_embedding is not None and schema.embedding is not None) else 0.40
+        lexical_weight = (
+            0.15 if (cue_embedding is not None and schema.embedding is not None) else 0.40
+        )
         if overlap:
             activation += lexical_weight * overlap
             reasons.append(f"cue_overlap={overlap:.2f}")

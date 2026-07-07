@@ -8,21 +8,22 @@ Covers the three bugs identified in the Opus review:
 Each test creates real in-memory SQLite stores so the full code path
 (FAISS search + SQL edge query) executes without mocking.
 """
+
 from __future__ import annotations
 
-import tempfile
 import os
+import tempfile
+from pathlib import Path
+
 import numpy as np
 import pytest
 
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
-from slowave.latent.transition_model import TransitionModel, TransitionModelConfig
+from slowave.latent.graph_manager import GraphConfig, GraphManager
 from slowave.latent.semantic_store import SemanticStore, SemanticStoreConfig
-from slowave.latent.graph_manager import GraphManager, GraphConfig
-from slowave.storage.sqlite_db import SQLiteDB, SQLiteConfig
-from pathlib import Path
-
+from slowave.latent.transition_model import TransitionModel, TransitionModelConfig
+from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 SCHEMA_PATH = str(REPO_ROOT / "slowave" / "storage" / "schema.sql")
@@ -63,7 +64,9 @@ class TestFindNearestPrototype:
         db, semantic, graph, dim = stores
         # Add one prototype
         centroid = _rand_unit(dim, seed=1)
-        pid = semantic.upsert_prototype(prototype_id=None, centroid=centroid, support_count=1, variance=0.0)
+        pid = semantic.upsert_prototype(
+            prototype_id=None, centroid=centroid, support_count=1, variance=0.0
+        )
         semantic.reset_faiss_from_db()
 
         cfg = TransitionModelConfig(dim=dim)
@@ -93,18 +96,23 @@ class TestGetSuccessorPrototypes:
         # Create two prototypes
         c1 = _rand_unit(dim, seed=10)
         c2 = _rand_unit(dim, seed=20)
-        p1 = semantic.upsert_prototype(prototype_id=None, centroid=c1, support_count=2, variance=0.0)
-        p2 = semantic.upsert_prototype(prototype_id=None, centroid=c2, support_count=2, variance=0.0)
+        p1 = semantic.upsert_prototype(
+            prototype_id=None, centroid=c1, support_count=2, variance=0.0
+        )
+        p2 = semantic.upsert_prototype(
+            prototype_id=None, centroid=c2, support_count=2, variance=0.0
+        )
         semantic.reset_faiss_from_db()
 
         # Manually insert an edge with w_transition > 0 using the CORRECT column names
         import time
+
         conn = db.connect()
         conn.execute(
             "INSERT INTO prototype_edges "
             "(src_prototype_id, dst_prototype_id, w_similarity, w_transition, w_coactivation, weight, last_updated_ts) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (p1, p2, 0.5, 0.8, 0.3, 0.6, int(time.time()))
+            (p1, p2, 0.5, 0.8, 0.3, 0.6, int(time.time())),
         )
         conn.commit()
 
@@ -120,7 +128,9 @@ class TestGetSuccessorPrototypes:
     def test_returns_empty_when_no_edges(self, stores):
         db, semantic, graph, dim = stores
         c1 = _rand_unit(dim, seed=10)
-        p1 = semantic.upsert_prototype(prototype_id=None, centroid=c1, support_count=1, variance=0.0)
+        p1 = semantic.upsert_prototype(
+            prototype_id=None, centroid=c1, support_count=1, variance=0.0
+        )
         semantic.reset_faiss_from_db()
 
         cfg = TransitionModelConfig(dim=dim)
@@ -135,17 +145,22 @@ class TestGetSuccessorPrototypes:
         db, semantic, graph, dim = stores
         c1 = _rand_unit(dim, seed=10)
         c2 = _rand_unit(dim, seed=20)
-        p1 = semantic.upsert_prototype(prototype_id=None, centroid=c1, support_count=1, variance=0.0)
-        p2 = semantic.upsert_prototype(prototype_id=None, centroid=c2, support_count=1, variance=0.0)
+        p1 = semantic.upsert_prototype(
+            prototype_id=None, centroid=c1, support_count=1, variance=0.0
+        )
+        p2 = semantic.upsert_prototype(
+            prototype_id=None, centroid=c2, support_count=1, variance=0.0
+        )
         semantic.reset_faiss_from_db()
 
         import time
+
         conn = db.connect()
         conn.execute(
             "INSERT INTO prototype_edges "
             "(src_prototype_id, dst_prototype_id, w_similarity, w_transition, w_coactivation, weight, last_updated_ts) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (p1, p2, 0.5, 0.0, 0.3, 0.4, int(time.time()))  # w_transition == 0
+            (p1, p2, 0.5, 0.0, 0.3, 0.4, int(time.time())),  # w_transition == 0
         )
         conn.commit()
 
@@ -183,17 +198,22 @@ class TestPredict:
         db, semantic, graph, dim = stores
         c1 = _rand_unit(dim, seed=1)
         c2 = _rand_unit(dim, seed=2)
-        p1 = semantic.upsert_prototype(prototype_id=None, centroid=c1, support_count=3, variance=0.0)
-        p2 = semantic.upsert_prototype(prototype_id=None, centroid=c2, support_count=3, variance=0.0)
+        p1 = semantic.upsert_prototype(
+            prototype_id=None, centroid=c1, support_count=3, variance=0.0
+        )
+        p2 = semantic.upsert_prototype(
+            prototype_id=None, centroid=c2, support_count=3, variance=0.0
+        )
         semantic.reset_faiss_from_db()
 
         import time
+
         conn = db.connect()
         conn.execute(
             "INSERT INTO prototype_edges "
             "(src_prototype_id, dst_prototype_id, w_similarity, w_transition, w_coactivation, weight, last_updated_ts) "
             "VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (p1, p2, 0.4, 1.0, 0.2, 0.7, int(time.time()))
+            (p1, p2, 0.4, 1.0, 0.2, 0.7, int(time.time())),
         )
         conn.commit()
 
@@ -221,12 +241,12 @@ class TestEngineAutoInstantiatesTransitionModel:
         try:
             cfg = SlowaveConfig(db_path=db_path, disable_encoder=True)
             eng = SlowaveEngine(cfg)
-            assert eng.transition_model is not None, (
-                "transition_model should never be None — Stage 3 is always-on"
-            )
-            assert eng.retrieval.transition_model is not None, (
-                "RetrievalPipeline must receive the transition_model"
-            )
+            assert (
+                eng.transition_model is not None
+            ), "transition_model should never be None — Stage 3 is always-on"
+            assert (
+                eng.retrieval.transition_model is not None
+            ), "RetrievalPipeline must receive the transition_model"
             eng.close()
         finally:
             for ext in ("", "-wal", "-shm"):

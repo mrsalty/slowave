@@ -23,6 +23,7 @@ Usage:
   # Full run (1200 scenarios):
   python tests/integration/stalememory_eval.py
 """
+
 from __future__ import annotations
 
 import argparse
@@ -38,8 +39,15 @@ from pathlib import Path
 from typing import Any
 
 logging.basicConfig(level=logging.WARNING, format="%(levelname)s %(name)s %(message)s")
-for noisy in ("sentence_transformers", "transformers", "httpx", "httpcore",
-              "huggingface_hub", "filelock", "tqdm"):
+for noisy in (
+    "sentence_transformers",
+    "transformers",
+    "httpx",
+    "httpcore",
+    "huggingface_hub",
+    "filelock",
+    "tqdm",
+):
     logging.getLogger(noisy).setLevel(logging.ERROR)
 
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -57,14 +65,20 @@ from slowave.latent.salience import SalienceConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
 ALL_ATTRIBUTES = [
-    "programming_language", "output_format", "communication_style",
-    "naming_convention", "error_handling", "explanation_approach",
-    "example_scope", "tool_preference",
+    "programming_language",
+    "output_format",
+    "communication_style",
+    "naming_convention",
+    "error_handling",
+    "explanation_approach",
+    "example_scope",
+    "tool_preference",
 ]
 DRIFT_PATTERNS = ["abrupt", "gradual", "noisy"]
 
 
 # ── Scoring ──────────────────────────────────────────────────────────────────
+
 
 def _value_present(text: str, value: str) -> bool:
     text_lower = text.lower()
@@ -79,9 +93,7 @@ def _value_present(text: str, value: str) -> bool:
     return False
 
 
-def score_recall(
-    hypothesis: str, post_val: str, pre_val: str
-) -> tuple[bool, bool, bool]:
+def score_recall(hypothesis: str, post_val: str, pre_val: str) -> tuple[bool, bool, bool]:
     """Return (detected, stale, no_answer)."""
     detected = _value_present(hypothesis, post_val)
     if detected:
@@ -92,6 +104,7 @@ def score_recall(
 
 
 # ── Per-scenario runner ───────────────────────────────────────────────────────
+
 
 @dataclass
 class ScenarioResult:
@@ -134,8 +147,10 @@ def run_scenario(
 
     # Deterministic seed per scenario so consolidation sampling is reproducible.
     import hashlib as _hashlib
+
     import numpy as _np
-    _seed = int.from_bytes(_hashlib.sha256(str(sid).encode('utf-8')).digest()[:4], 'big') % (2**31)
+
+    _seed = int.from_bytes(_hashlib.sha256(str(sid).encode("utf-8")).digest()[:4], "big") % (2**31)
     _np.random.seed(_seed)
 
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
@@ -149,11 +164,14 @@ def run_scenario(
             salience=SalienceConfig(tau_seconds=86400.0),
             replay=ReplayConfig(
                 assignment_threshold=assignment_threshold,
-                sample_size=256, max_prototypes_per_replay=32,
+                sample_size=256,
+                max_prototypes_per_replay=32,
                 use_multi_scale=True,
             ),
             retrieval=RetrievalConfig(
-                salience_weight=0.3, neighbor_top_k=6, use_multi_scale=True,
+                salience_weight=0.3,
+                neighbor_top_k=6,
+                use_multi_scale=True,
             ),
             disable_encoder=False,
         )
@@ -164,10 +182,11 @@ def run_scenario(
         # the temporal recency bonus operate on realistic time separations.
         # Pre-drift sessions are months old; post-drift sessions are recent.
         _now = int(time.time())
-        _window_end = _now - 86400          # 1 day ago
+        _window_end = _now - 86400  # 1 day ago
         _window_start = _now - 180 * 86400  # 180 days ago
         _non_probe = [s for s in sessions if not s["is_probe"]]
         _n_non_probe = max(1, len(_non_probe))
+
         def _session_ts(idx: int) -> int:
             frac = idx / (_n_non_probe - 1) if _n_non_probe > 1 else 0.0
             return int(_window_start + frac * (_window_end - _window_start))
@@ -202,12 +221,19 @@ def run_scenario(
         eng.close()
 
         return ScenarioResult(
-            scenario_id=sid, attribute=attribute, drift_pattern=drift_pattern,
-            pre_drift_value=pre_val, post_drift_value=post_val,
-            probe_question=probe_question, expected_answer=expected,
+            scenario_id=sid,
+            attribute=attribute,
+            drift_pattern=drift_pattern,
+            pre_drift_value=pre_val,
+            post_drift_value=post_val,
+            probe_question=probe_question,
+            expected_answer=expected,
             hypothesis=hypothesis[:400],
-            detected=detected, stale=stale, no_answer=no_answer,
-            n_schemas=len(result.schemas), n_episodes=len(result.episode_texts),
+            detected=detected,
+            stale=stale,
+            no_answer=no_answer,
+            n_schemas=len(result.schemas),
+            n_episodes=len(result.episode_texts),
             consolidate=consolidate,
             latency_ingest_s=round(latency_ingest, 2),
             latency_recall_s=round(latency_recall, 4),
@@ -216,12 +242,23 @@ def run_scenario(
 
     except Exception as e:
         return ScenarioResult(
-            scenario_id=sid, attribute=attribute, drift_pattern=drift_pattern,
-            pre_drift_value=pre_val, post_drift_value=post_val,
-            probe_question=probe_question, expected_answer=expected,
-            hypothesis="", detected=False, stale=False, no_answer=True,
-            n_schemas=0, n_episodes=0, consolidate=consolidate,
-            latency_ingest_s=0.0, latency_recall_s=0.0, n_sessions_ingested=0,
+            scenario_id=sid,
+            attribute=attribute,
+            drift_pattern=drift_pattern,
+            pre_drift_value=pre_val,
+            post_drift_value=post_val,
+            probe_question=probe_question,
+            expected_answer=expected,
+            hypothesis="",
+            detected=False,
+            stale=False,
+            no_answer=True,
+            n_schemas=0,
+            n_episodes=0,
+            consolidate=consolidate,
+            latency_ingest_s=0.0,
+            latency_recall_s=0.0,
+            n_sessions_ingested=0,
             error=str(e),
         )
     finally:
@@ -232,6 +269,7 @@ def run_scenario(
 
 
 # ── Report ────────────────────────────────────────────────────────────────────
+
 
 def print_report(results: list[ScenarioResult]) -> None:
     print()
@@ -283,10 +321,14 @@ def print_report(results: list[ScenarioResult]) -> None:
         ingests = sorted(r.latency_ingest_s for r in valid)
         recalls = sorted(r.latency_recall_s for r in valid)
         print(" Latency summary")
-        print(f"  ingest: mean={sum(ingests)/len(ingests):.2f}s  "
-              f"p50={ingests[len(ingests)//2]:.2f}s  max={ingests[-1]:.2f}s")
-        print(f"  recall: mean={sum(recalls)/len(recalls)*1000:.1f}ms  "
-              f"p50={recalls[len(recalls)//2]*1000:.1f}ms  max={recalls[-1]*1000:.1f}ms")
+        print(
+            f"  ingest: mean={sum(ingests)/len(ingests):.2f}s  "
+            f"p50={ingests[len(ingests)//2]:.2f}s  max={ingests[-1]:.2f}s"
+        )
+        print(
+            f"  recall: mean={sum(recalls)/len(recalls)*1000:.1f}ms  "
+            f"p50={recalls[len(recalls)//2]*1000:.1f}ms  max={recalls[-1]*1000:.1f}ms"
+        )
     print()
     print()
     print("=" * 70)
@@ -294,22 +336,36 @@ def print_report(results: list[ScenarioResult]) -> None:
 
 # ── Payload helpers ───────────────────────────────────────────────────────────
 
+
 def _result_row(r: ScenarioResult) -> dict[str, Any]:
     return {
-        "scenario_id": r.scenario_id, "attribute": r.attribute,
-        "drift_pattern": r.drift_pattern, "pre_drift_value": r.pre_drift_value,
-        "post_drift_value": r.post_drift_value, "probe_question": r.probe_question,
-        "expected_answer": r.expected_answer, "hypothesis": r.hypothesis,
-        "detected": r.detected, "stale": r.stale, "no_answer": r.no_answer,
-        "n_schemas": r.n_schemas, "n_episodes": r.n_episodes,
-        "latency_ingest_s": r.latency_ingest_s, "latency_recall_s": r.latency_recall_s,
-        "n_sessions_ingested": r.n_sessions_ingested, "error": r.error,
+        "scenario_id": r.scenario_id,
+        "attribute": r.attribute,
+        "drift_pattern": r.drift_pattern,
+        "pre_drift_value": r.pre_drift_value,
+        "post_drift_value": r.post_drift_value,
+        "probe_question": r.probe_question,
+        "expected_answer": r.expected_answer,
+        "hypothesis": r.hypothesis,
+        "detected": r.detected,
+        "stale": r.stale,
+        "no_answer": r.no_answer,
+        "n_schemas": r.n_schemas,
+        "n_episodes": r.n_episodes,
+        "latency_ingest_s": r.latency_ingest_s,
+        "latency_recall_s": r.latency_recall_s,
+        "n_sessions_ingested": r.n_sessions_ingested,
+        "error": r.error,
     }
 
 
 def _build_payload(
-    *, results: list[ScenarioResult], dataset_path: Path,
-    args: argparse.Namespace, total_elapsed: float, partial: bool,
+    *,
+    results: list[ScenarioResult],
+    dataset_path: Path,
+    args: argparse.Namespace,
+    total_elapsed: float,
+    partial: bool,
 ) -> dict[str, Any]:
     valid = [r for r in results if not r.error]
     n = len(valid)
@@ -344,8 +400,10 @@ def _build_payload(
         "meta": {
             "benchmark": "StaleMemory",
             "created_at": datetime.now().isoformat(timespec="seconds"),
-            "partial": partial, "dataset": str(dataset_path),
-            "limit": args.limit, "attributes": args.attributes,
+            "partial": partial,
+            "dataset": str(dataset_path),
+            "limit": args.limit,
+            "attributes": args.attributes,
             "drift_patterns": args.drift_patterns,
             "consolidate": not args.no_consolidate,
             "assignment_threshold": args.assignment_threshold,
@@ -354,7 +412,8 @@ def _build_payload(
             "llm_calls": 0,
         },
         "summary": {
-            "n": len(results), "n_valid": n,
+            "n": len(results),
+            "n_valid": n,
             "detection_rate": round(detected / max(1, n), 4),
             "stale_rate": round(stale_c / max(1, n), 4),
             "no_answer_rate": round(no_ans / max(1, n), 4),
@@ -375,13 +434,17 @@ def _write_payload(out_path: Path, payload: dict[str, Any]) -> None:
 
 # ── Main ──────────────────────────────────────────────────────────────────────
 
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="StaleMemory evaluation harness for Slowave")
     parser.add_argument("--dataset", default="data/stalememory/scenarios.jsonl")
     parser.add_argument("--attributes", nargs="+", default=ALL_ATTRIBUTES)
-    parser.add_argument("--drift-patterns", nargs="+", default=DRIFT_PATTERNS, dest="drift_patterns")
-    parser.add_argument("--limit", type=int, default=0,
-                        help="Max scenarios per attribute×pattern (0=all)")
+    parser.add_argument(
+        "--drift-patterns", nargs="+", default=DRIFT_PATTERNS, dest="drift_patterns"
+    )
+    parser.add_argument(
+        "--limit", type=int, default=0, help="Max scenarios per attribute×pattern (0=all)"
+    )
     parser.add_argument("--no-consolidate", action="store_true")
     parser.add_argument("--assignment-threshold", type=float, default=0.85)
     parser.add_argument("--top-k", type=int, default=10)
@@ -418,7 +481,9 @@ def main() -> None:
     print(f"Selected: {len(selected)} scenarios")
     if args.limit:
         print(f"(capped at {args.limit} per attribute×pattern)")
-    print(f"consolidate={not args.no_consolidate}  threshold={args.assignment_threshold}  top_k={args.top_k}")
+    print(
+        f"consolidate={not args.no_consolidate}  threshold={args.assignment_threshold}  top_k={args.top_k}"
+    )
 
     print("Loading encoder (paraphrase-multilingual-MiniLM-L12-v2)...", end=" ", flush=True)
     enc_cfg = EncoderConfig()
@@ -459,14 +524,24 @@ def main() -> None:
             results.append(r)
             _write_payload(
                 out_path,
-                _build_payload(results=results, dataset_path=dataset_path,
-                                args=args, total_elapsed=time.time() - t_start, partial=True),
+                _build_payload(
+                    results=results,
+                    dataset_path=dataset_path,
+                    args=args,
+                    total_elapsed=time.time() - t_start,
+                    partial=True,
+                ),
             )
     except KeyboardInterrupt:
         _write_payload(
             out_path,
-            _build_payload(results=results, dataset_path=dataset_path,
-                            args=args, total_elapsed=time.time() - t_start, partial=True),
+            _build_payload(
+                results=results,
+                dataset_path=dataset_path,
+                args=args,
+                total_elapsed=time.time() - t_start,
+                partial=True,
+            ),
         )
         print(f"\nInterrupted. Partial results saved to: {out_path}")
         raise
@@ -474,8 +549,13 @@ def main() -> None:
     total_elapsed = time.time() - t_start
     print(f"\nCompleted {len(results)} scenarios in {total_elapsed:.1f}s")
     print_report(results)
-    payload = _build_payload(results=results, dataset_path=dataset_path,
-                             args=args, total_elapsed=total_elapsed, partial=False)
+    payload = _build_payload(
+        results=results,
+        dataset_path=dataset_path,
+        args=args,
+        total_elapsed=total_elapsed,
+        partial=False,
+    )
     _write_payload(out_path, payload)
     print(f"\nResults saved to: {out_path}")
 

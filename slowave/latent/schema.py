@@ -29,6 +29,7 @@ pure geometric operation: two schemas conflict when their centroids
 are close (same topic) but a measurable facet axis differs and the
 newer one has higher confidence.
 """
+
 from __future__ import annotations
 
 import re
@@ -39,7 +40,6 @@ from typing import Optional
 import numpy as np
 
 from slowave.symbolic.episode_text import EpisodeText
-
 
 # ---- Data types ----------------------------------------------------------
 
@@ -53,23 +53,24 @@ class LatentSchema:
     ``Consolidator._create_and_relate_schema`` flow that the
     integration patch is small.
     """
+
     # Geometry
-    centroid: np.ndarray            # mean embedding of member episodes
-    facet_axes: np.ndarray          # top-k principal directions (k x dim)
-    facet_strengths: np.ndarray     # variance explained per axis (k,)
+    centroid: np.ndarray  # mean embedding of member episodes
+    facet_axes: np.ndarray  # top-k principal directions (k x dim)
+    facet_strengths: np.ndarray  # variance explained per axis (k,)
 
     # Provenance
     member_episode_ids: list[int]
-    central_episode_id: int          # closest member to centroid
-    central_episode_text: str        # human-readable text of that member
+    central_episode_id: int  # closest member to centroid
+    central_episode_text: str  # human-readable text of that member
 
     # Temporal
     mean_ts: int
-    ts_span_s: int                  # max - min of member timestamps
+    ts_span_s: int  # max - min of member timestamps
 
     # Statistics
-    confidence: float               # 1.0 - normalised within-cluster variance
-    support_count: int              # how many episodes back this schema
+    confidence: float  # 1.0 - normalised within-cluster variance
+    support_count: int  # how many episodes back this schema
 
     # Lexical abstraction (Stage 7a) — contrastive TF-IDF over cluster texts.
     # A dict of {term: score} where score is the within-cluster term frequency
@@ -102,12 +103,12 @@ class GeometricVerdict:
     so the Consolidator can route either backend through the same code
     path.
     """
-    verdict: str   # 'reinforces' | 'refines' | 'contradicts' | 'unrelated'
+
+    verdict: str  # 'reinforces' | 'refines' | 'contradicts' | 'unrelated'
     reasoning: str
     similarity: float
     facet_distance: float
     time_delta_s: int
-
 
 
 # ---------------------------------------------------------------------------
@@ -115,26 +116,105 @@ class GeometricVerdict:
 # ---------------------------------------------------------------------------
 
 # Minimal English stopword list — no external dependency.
-_STOPWORDS = frozenset({
-    "a", "an", "the", "and", "or", "but", "in", "on", "at", "to", "for",
-    "of", "with", "by", "from", "is", "are", "was", "were", "be", "been",
-    "being", "have", "has", "had", "do", "does", "did", "will", "would",
-    "could", "should", "may", "might", "shall", "can", "need", "dare",
-    "it", "its", "this", "that", "these", "those", "i", "we", "you",
-    "he", "she", "they", "me", "us", "him", "her", "them", "my", "our",
-    "your", "his", "their", "what", "which", "who", "when", "where",
-    "why", "how", "all", "each", "every", "both", "few", "more", "most",
-    "other", "some", "such", "no", "not", "only", "own", "same", "so",
-    "than", "too", "very", "just", "user", "assistant", "remember",
-})
+_STOPWORDS = frozenset(
+    {
+        "a",
+        "an",
+        "the",
+        "and",
+        "or",
+        "but",
+        "in",
+        "on",
+        "at",
+        "to",
+        "for",
+        "of",
+        "with",
+        "by",
+        "from",
+        "is",
+        "are",
+        "was",
+        "were",
+        "be",
+        "been",
+        "being",
+        "have",
+        "has",
+        "had",
+        "do",
+        "does",
+        "did",
+        "will",
+        "would",
+        "could",
+        "should",
+        "may",
+        "might",
+        "shall",
+        "can",
+        "need",
+        "dare",
+        "it",
+        "its",
+        "this",
+        "that",
+        "these",
+        "those",
+        "i",
+        "we",
+        "you",
+        "he",
+        "she",
+        "they",
+        "me",
+        "us",
+        "him",
+        "her",
+        "them",
+        "my",
+        "our",
+        "your",
+        "his",
+        "their",
+        "what",
+        "which",
+        "who",
+        "when",
+        "where",
+        "why",
+        "how",
+        "all",
+        "each",
+        "every",
+        "both",
+        "few",
+        "more",
+        "most",
+        "other",
+        "some",
+        "such",
+        "no",
+        "not",
+        "only",
+        "own",
+        "same",
+        "so",
+        "than",
+        "too",
+        "very",
+        "just",
+        "user",
+        "assistant",
+        "remember",
+    }
+)
 
 
 def _tokenize(text: str) -> list[str]:
     """Lowercase alphabetic tokens, length >= 3, not stopwords."""
-    return [
-        w for w in re.split(r"[^a-z]+", text.lower())
-        if len(w) >= 3 and w not in _STOPWORDS
-    ]
+    return [w for w in re.split(r"[^a-z]+", text.lower()) if len(w) >= 3 and w not in _STOPWORDS]
 
 
 def _build_lexical_signature(
@@ -158,6 +238,7 @@ def _build_lexical_signature(
     descending by score.
     """
     import math
+
     if not cluster_texts:
         return {}
 
@@ -272,18 +353,14 @@ class LatentSchemaBuilder:
             ts_span = 0
 
         # central member (closest to centroid)
-        sims = embs @ cen / (
-            np.linalg.norm(embs, axis=1) * (np.linalg.norm(cen) + 1e-12) + 1e-12
-        )
+        sims = embs @ cen / (np.linalg.norm(embs, axis=1) * (np.linalg.norm(cen) + 1e-12) + 1e-12)
         central_idx = int(np.argmax(sims))
         central_episode_id = int(member_episode_ids[central_idx])
         # Prefer source_content (raw, no role prefix) as the schema claim.
         # Falls back to content_text for legacy rows that predate source_content.
         central_ep = member_episodes[central_idx]
         central_text = str(
-            central_ep.source_content
-            if central_ep.source_content
-            else central_ep.content_text
+            central_ep.source_content if central_ep.source_content else central_ep.content_text
         )
 
         # facet axes (within-cluster principal directions)
@@ -329,12 +406,17 @@ class LatentSchemaBuilder:
         # VSA binding: encode as a role-bound triple.
         # Mode is controlled by self.vsa_mode (set at builder construction).
         from slowave.latent.vsa import (
-            build_schema_vsa, build_schema_vsa_lexical,
+            build_schema_vsa,
+            build_schema_vsa_lexical,
             vec_to_b64,
         )
+
         if self.vsa_mode == "lexical":
             vsa_vec = build_schema_vsa_lexical(
-                cen, central_text, lexical_sig, self.encoder,
+                cen,
+                central_text,
+                lexical_sig,
+                self.encoder,
             )
         else:  # "geometric" — default, no encoder needed
             vsa_vec = build_schema_vsa(cen, facet_axes)
@@ -427,13 +509,19 @@ class GeometricContradictionJudge:
 
         if cos < self.cfg.same_topic_cosine:
             return GeometricVerdict(
-                verdict="unrelated", reasoning=f"centroid_cos={cos:.3f}<thr",
-                similarity=cos, facet_distance=0.0, time_delta_s=dt_s,
+                verdict="unrelated",
+                reasoning=f"centroid_cos={cos:.3f}<thr",
+                similarity=cos,
+                facet_distance=0.0,
+                time_delta_s=dt_s,
             )
         if cos >= self.cfg.reinforce_cosine:
             return GeometricVerdict(
-                verdict="reinforces", reasoning=f"centroid_cos={cos:.3f}>=reinforce",
-                similarity=cos, facet_distance=0.0, time_delta_s=dt_s,
+                verdict="reinforces",
+                reasoning=f"centroid_cos={cos:.3f}>=reinforce",
+                similarity=cos,
+                facet_distance=0.0,
+                time_delta_s=dt_s,
             )
 
         # Same topic, less than maximal similarity: compare facet axes.
@@ -458,7 +546,9 @@ class GeometricContradictionJudge:
             return GeometricVerdict(
                 verdict=verdict,
                 reasoning=f"centroid_cos={cos:.3f} facet_dist={facet_dist:.3f}",
-                similarity=cos, facet_distance=facet_dist, time_delta_s=dt_s,
+                similarity=cos,
+                facet_distance=facet_dist,
+                time_delta_s=dt_s,
             )
 
         # Same topic, axes mostly agree, but not maximally similar:
@@ -466,5 +556,7 @@ class GeometricContradictionJudge:
         return GeometricVerdict(
             verdict="refines",
             reasoning=f"centroid_cos={cos:.3f} facet_dist={facet_dist:.3f}",
-            similarity=cos, facet_distance=facet_dist, time_delta_s=dt_s,
+            similarity=cos,
+            facet_distance=facet_dist,
+            time_delta_s=dt_s,
         )

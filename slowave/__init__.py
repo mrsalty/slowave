@@ -8,6 +8,7 @@ every ``import slowave``.
     from slowave.core.engine import SlowaveEngine
     from slowave.core.config import SlowaveConfig
 """
+
 from importlib.metadata import PackageNotFoundError, version
 
 try:

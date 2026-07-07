@@ -54,7 +54,9 @@ class SalienceEngine:
         if not ids_and_salience or n <= 0:
             return []
         ids = np.asarray([i for i, _ in ids_and_salience], dtype=np.int64)
-        w = np.asarray([max(self.cfg.min_salience, float(s)) for _, s in ids_and_salience], dtype=np.float64)
+        w = np.asarray(
+            [max(self.cfg.min_salience, float(s)) for _, s in ids_and_salience], dtype=np.float64
+        )
         w = w / (w.sum() + 1e-12)
         n = min(int(n), ids.size)
         chosen = np.random.choice(ids, size=n, replace=False, p=w)

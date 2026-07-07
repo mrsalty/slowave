@@ -5,6 +5,7 @@ then filtered later. Now scope filtering happens immediately after
 collection, preventing cross-scope candidates from entering the
 candidate pool in strict_scope mode.
 """
+
 from __future__ import annotations
 
 import numpy as np
@@ -75,6 +76,7 @@ def test_same_scope_recall_returns_own_schema(eng):
     result = eng.recall("Redis caching", scope="project:alpha", mode="strict_scope")
     schema_ids = {s.id for s in result.schemas}
     assert r.schema_id in schema_ids
+
 
 def test_fts_candidates_are_scope_filtered(eng, tmp_path):
     """End-to-end: schema in wrong scope does not appear via FTS recall."""

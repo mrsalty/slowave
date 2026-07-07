@@ -1,4 +1,5 @@
 """`python -m slowave` dispatches to the Click CLI."""
+
 import os
 import sys
 
@@ -31,6 +32,7 @@ os.environ.setdefault("HF_HUB_DISABLE_PROGRESS_BARS", "1")
 os.environ.setdefault("TQDM_DISABLE", "1")
 
 import logging as _logging
+
 _logging.getLogger("huggingface_hub").setLevel(_logging.ERROR)
 _logging.getLogger("onnxruntime").setLevel(_logging.ERROR)
 
