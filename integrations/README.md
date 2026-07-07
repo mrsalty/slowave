@@ -1,6 +1,6 @@
 # Slowave — client integrations
 
-Full install and setup guide: **[../docs/setup.md](../docs/setup.md)**
+Full install and setup guide: **[../docs/install.md](../docs/install.md)**
 
 ---
 
@@ -20,7 +20,7 @@ slowave cleanup         # remove all configuration
 pipx uninstall slowave  # remove package
 ```
 
-> **Claude Desktop & Cursor:** after `slowave setup`, paste the lifecycle block into the client UI — see [docs/setup.md#lifecycle-instruction-block](../docs/setup.md#lifecycle-instruction-block).
+> **Claude Desktop & Cursor:** after `slowave setup`, paste the lifecycle block into the client UI — see [docs/install.md#lifecycle-instruction-block](../docs/install.md#lifecycle-instruction-block).
 
 ---
 
@@ -35,4 +35,4 @@ pipx uninstall slowave  # remove package
 | Windsurf | [windsurf/README.md](windsurf/README.md) | Fully automated; MCP config at `~/.codeium/windsurf/mcp_config.json`, lifecycle block injected into `global_rules.md` |
 | OpenCode | [opencode/README.md](opencode/README.md) | Uses local MCP (`mcp` key, not `mcpServers`); lifecycle via Slowave-owned file registered in `instructions` array |
 
-Each card is a one-screen reminder of where that client stores MCP config and lifecycle instructions. The full guide, including the exact lifecycle block, is in [docs/setup.md](../docs/setup.md).
+Each card is a one-screen reminder of where that client stores MCP config and lifecycle instructions. The full guide, including the exact lifecycle block, is in [docs/install.md](../docs/install.md).

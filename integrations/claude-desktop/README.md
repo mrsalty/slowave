@@ -1,6 +1,6 @@
 # Claude Desktop + Slowave — quick-ref
 
-Full guide: **[../../docs/setup.md](../../docs/setup.md)**
+Full guide: **[../../docs/install.md](../../docs/install.md)**
 
 ---
 
@@ -20,7 +20,7 @@ One manual step remains: add the lifecycle instructions to Claude Desktop.
 
 Open Claude Desktop → **Settings → General → Instructions for Claude**
 
-**Paste the lifecycle instructions from:** [docs/setup.md#lifecycle-instruction-block](../../docs/setup.md#lifecycle-instruction-block)
+**Paste the lifecycle instructions from:** [docs/install.md#lifecycle-instruction-block](../../docs/install.md#lifecycle-instruction-block)
 
 > **Why Custom Instructions, not a Skill?**
 > Claude Desktop Skills fire from turn 2 onward. Custom Instructions fire before turn 1.

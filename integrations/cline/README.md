@@ -1,6 +1,6 @@
 # Cline + Slowave — quick-ref
 
-Full guide: **[../../docs/setup.md](../../docs/setup.md)**
+Full guide: **[../../docs/install.md](../../docs/install.md)**
 
 ---
 
@@ -34,7 +34,7 @@ Restart Cline.
 
 `slowave setup` injects the lifecycle block into `~/.cline/rules/slowave.md`.
 
-**Full lifecycle documentation:** [docs/setup.md#lifecycle-instruction-block](../../docs/setup.md#lifecycle-instruction-block)
+**Full lifecycle documentation:** [docs/install.md#lifecycle-instruction-block](../../docs/install.md#lifecycle-instruction-block)
 
 ---
 

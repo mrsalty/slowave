@@ -1,6 +1,6 @@
 # OpenCode + Slowave — quick-ref
 
-Full guide: **[../../docs/setup.md](../../docs/setup.md)**
+Full guide: **[../../docs/install.md](../../docs/install.md)**
 
 ---
 
@@ -38,7 +38,7 @@ Restart OpenCode.
 and registers it in OpenCode's config under the `instructions` array. OpenCode will pick it
 up automatically on next launch.
 
-**Full lifecycle documentation:** [docs/setup.md#lifecycle-instruction-block](../../docs/setup.md#lifecycle-instruction-block)
+**Full lifecycle documentation:** [docs/install.md#lifecycle-instruction-block](../../docs/install.md#lifecycle-instruction-block)
 
 ---
 
