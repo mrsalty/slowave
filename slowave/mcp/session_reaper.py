@@ -80,9 +80,7 @@ def _reap_once(build_engine: Callable, timeout_s: int) -> list[str]:
         conn.close()
 
 
-def start(
-    build_engine: Callable, poll_interval_s: int = 120
-) -> Optional[threading.Thread]:
+def start(build_engine: Callable, poll_interval_s: int = 120) -> Optional[threading.Thread]:
     """Start the session reaper as a background thread.
 
     Args:

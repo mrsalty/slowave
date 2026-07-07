@@ -1,10 +1,14 @@
 """Client status checking for doctor command."""
+
 from __future__ import annotations
+
 import json
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
 from slowave.cli.output import Status
+
 
 @dataclass
 class ClientStatus:
@@ -55,14 +59,21 @@ def _json_has_slowave_http(path: Path) -> bool:
 def _any_json_has_slowave_mcp(paths: list[Path]) -> bool:
     return any(_json_has_slowave_mcp(path) for path in paths)
 
+
 def get_client_statuses() -> dict[str, ClientStatus]:
     statuses = {}
     try:
         from slowave.cli.setup import (
-            _claude_settings_path, _claude_json_path, _claude_desktop_config_path,
-            _cline_mcp_settings_path, _claude_md_path, _clinerules_path,
-            _read_json, _MARKER_START,
+            _MARKER_START,
+            _claude_desktop_config_path,
+            _claude_json_path,
+            _claude_md_path,
+            _claude_settings_path,
+            _cline_mcp_settings_path,
+            _clinerules_path,
+            _read_json,
         )
+
         cc_json = _claude_json_path()
         cc_settings = _claude_settings_path()
         cc_md = _claude_md_path()
@@ -72,7 +83,8 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             try:
                 cfg_j = _read_json(cc_json)
                 cc_has_mcp = "slowave" in cfg_j.get("mcpServers", {})
-            except: pass
+            except:
+                pass
         if cc_settings.exists():
             try:
                 cfg = _read_json(cc_settings)
@@ -83,15 +95,22 @@ def get_client_statuses() -> dict[str, ClientStatus]:
                     for group in cfg.get("hooks", {}).get("UserPromptSubmit", [])
                     for h in group.get("hooks", [])
                 )
-            except: pass
+            except:
+                pass
         if cc_md.exists():
-            try: cc_has_lifecycle = _MARKER_START in cc_md.read_text(encoding="utf-8", errors="ignore")
-            except: pass
+            try:
+                cc_has_lifecycle = _MARKER_START in cc_md.read_text(
+                    encoding="utf-8", errors="ignore"
+                )
+            except:
+                pass
 
         if cc_json.exists() or cc_settings.exists() or cc_md.exists():
             statuses["claude_code"] = ClientStatus(
-                name="Claude Code", mcp_configured=cc_has_mcp,
-                hooks_installed=cc_has_hooks, lifecycle_enabled=cc_has_lifecycle,
+                name="Claude Code",
+                mcp_configured=cc_has_mcp,
+                hooks_installed=cc_has_hooks,
+                lifecycle_enabled=cc_has_lifecycle,
             )
 
         cd_config = _claude_desktop_config_path()
@@ -100,9 +119,11 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             try:
                 cfg = _read_json(cd_config)
                 cd_has_mcp = "slowave" in cfg.get("mcpServers", {})
-            except: pass
+            except:
+                pass
             statuses["claude_desktop"] = ClientStatus(
-                name="Claude Desktop", mcp_configured=cd_has_mcp,
+                name="Claude Desktop",
+                mcp_configured=cd_has_mcp,
             )
 
         cline_mcp = _cline_mcp_settings_path()
@@ -112,13 +133,19 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             try:
                 cfg = _read_json(cline_mcp)
                 cline_has_mcp = "slowave" in cfg.get("mcpServers", {})
-            except: pass
+            except:
+                pass
         if cline_rules.exists():
-            try: cline_has_lifecycle = _MARKER_START in cline_rules.read_text(encoding="utf-8", errors="ignore")
-            except: pass
+            try:
+                cline_has_lifecycle = _MARKER_START in cline_rules.read_text(
+                    encoding="utf-8", errors="ignore"
+                )
+            except:
+                pass
         if cline_mcp.exists() or cline_rules.exists():
             statuses["cline"] = ClientStatus(
-                name="Cline", mcp_configured=cline_has_mcp,
+                name="Cline",
+                mcp_configured=cline_has_mcp,
                 lifecycle_enabled=cline_has_lifecycle,
             )
 
@@ -136,43 +163,72 @@ def get_client_statuses() -> dict[str, ClientStatus]:
 
         # OpenCode detection — uses `mcp` key (not `mcpServers`) and `instructions` array
         from slowave.cli.setup import _opencode_config_path, _opencode_instructions_path
+
         oc_config = _opencode_config_path()
         oc_has_mcp = oc_has_lifecycle = False
         if oc_config.exists():
             try:
                 cfg = _read_json(oc_config)
                 oc_has_mcp = "slowave" in cfg.get("mcp", {})
-            except: pass
+            except:
+                pass
         oc_inst = _opencode_instructions_path()
         if oc_inst.exists():
-            try: oc_has_lifecycle = _MARKER_START in oc_inst.read_text(encoding="utf-8", errors="ignore")
-            except: pass
+            try:
+                oc_has_lifecycle = _MARKER_START in oc_inst.read_text(
+                    encoding="utf-8", errors="ignore"
+                )
+            except:
+                pass
         if oc_config.exists() or oc_inst.exists():
             statuses["opencode"] = ClientStatus(
-                name="OpenCode", mcp_configured=oc_has_mcp,
+                name="OpenCode",
+                mcp_configured=oc_has_mcp,
                 lifecycle_enabled=oc_has_lifecycle,
             )
-    except ImportError: pass
+    except ImportError:
+        pass
 
     import platform
+
     system = platform.system()
     worker_running = False
     try:
         if system == "Darwin":
-            result = subprocess.run(["launchctl", "list"], capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                ["launchctl", "list"], capture_output=True, text=True, check=False
+            )
             worker_running = "com.slowave.worker" in result.stdout
         elif system == "Linux":
-            result = subprocess.run(["systemctl", "--user", "is-active", "slowave-worker"], capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                ["systemctl", "--user", "is-active", "slowave-worker"],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
             worker_running = result.returncode == 0
         elif system == "Windows":
-            result = subprocess.run(["powershell", "-Command", "Get-ScheduledTask -TaskName SlowaveWorker -ErrorAction SilentlyContinue"], capture_output=True, text=True, check=False)
+            result = subprocess.run(
+                [
+                    "powershell",
+                    "-Command",
+                    "Get-ScheduledTask -TaskName SlowaveWorker -ErrorAction SilentlyContinue",
+                ],
+                capture_output=True,
+                text=True,
+                check=False,
+            )
             worker_running = "SlowaveWorker" in result.stdout
-    except: pass
+    except:
+        pass
 
     statuses["worker"] = ClientStatus(name="Background worker", running=worker_running)
 
     # HTTP MCP daemon check
-    import urllib.request, urllib.error, json as _json
+    import json as _json
+    import urllib.error
+    import urllib.request
+
     http_daemon_running = False
     try:
         with urllib.request.urlopen("http://127.0.0.1:8766/health", timeout=1) as resp:
@@ -183,18 +239,29 @@ def get_client_statuses() -> dict[str, ClientStatus]:
 
     return statuses
 
+
 def summarize_client_status(client: ClientStatus) -> tuple[Status, str]:
     if "http mcp daemon" in client.name.lower():
         return (
             Status.OK if client.running else Status.SKIP,
-            "running on :8766" if client.running else "not running (start with: slowave serve start)",
+            (
+                "running on :8766"
+                if client.running
+                else "not running (start with: slowave serve start)"
+            ),
         )
     if "worker" in client.name.lower():
-        return (Status.OK if client.running else Status.SKIP, "running" if client.running else "not running")
+        return (
+            Status.OK if client.running else Status.SKIP,
+            "running" if client.running else "not running",
+        )
     if client.name in {"Cursor", "Windsurf"}:
         if client.mcp_configured:
             if not client.lifecycle_enabled:
-                return (Status.WARN, "MCP configured (HTTP); lifecycle feedback not configured or not supported")
+                return (
+                    Status.WARN,
+                    "MCP configured (HTTP); lifecycle feedback not configured or not supported",
+                )
             return (Status.OK, "MCP (HTTP)")
         return (Status.SKIP, "not configured (run: slowave setup)")
     if "desktop" in client.name.lower():
@@ -203,7 +270,9 @@ def summarize_client_status(client: ClientStatus) -> tuple[Status, str]:
         return (Status.WARN, "MCP configured (HTTP); custom instructions missing")
     if client.mcp_configured:
         parts = ["MCP (HTTP)"]
-        if client.hooks_installed: parts.append("hooks")
-        if client.lifecycle_enabled: parts.append("lifecycle")
+        if client.hooks_installed:
+            parts.append("hooks")
+        if client.lifecycle_enabled:
+            parts.append("lifecycle")
         return (Status.OK, ", ".join(parts))
     return (Status.SKIP, "not configured (run: slowave setup)")

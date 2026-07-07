@@ -1,4 +1,5 @@
 """Tests for stability_score, recurrence_score, schema_utility, and decay_unused."""
+
 from __future__ import annotations
 
 import os
@@ -159,7 +160,6 @@ class TestSchemaUtility:
             _cleanup(path)
 
 
-
 class TestDecayUnused:
     def _backdate(self, eng: SlowaveEngine, sid: int, days: int) -> None:
         conn = eng.db.connect()
@@ -248,7 +248,10 @@ class TestDecayUnused:
             )
             conn.commit()
             result = eng.schemas.decay_unused(
-                idle_days=30.0, decay_amount=0.15, review_threshold=0.30, dry_run=False,
+                idle_days=30.0,
+                decay_amount=0.15,
+                review_threshold=0.30,
+                dry_run=False,
             )
             s = eng.schemas.get(sid)
             assert s.needs_review is True
@@ -269,4 +272,3 @@ class TestConsolidateOnceIncludesDecay:
         finally:
             eng.close()
             _cleanup(path)
-

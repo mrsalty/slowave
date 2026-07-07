@@ -74,6 +74,26 @@ line-length = 100
 profile = "black"
 line_length = 100
 
+[tool.mypy]
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = [
+    "slowave.cli.main",
+    "slowave.cli.setup",
+    "slowave.core.consolidation",
+    "slowave.core.engine",
+    "slowave.core.services.retrieval",
+    "slowave.core.supersession_manifold",
+    "slowave.dashboard.app",
+    "slowave.latent.retrieval",
+    "slowave.latent.replay_engine",
+    "slowave.latent.transition_model",
+    "slowave.symbolic.encoder",
+    "slowave.symbolic.onnx_encoder",
+]
+ignore_errors = true
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
@@ -86,5 +106,8 @@ markers = [
 
 [dependency-groups]
 dev = [
+    "black",
+    "isort",
+    "mypy>=2.1.0",
     "pytest>=9.0.3",
 ]

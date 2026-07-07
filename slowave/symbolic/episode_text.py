@@ -3,6 +3,7 @@
 Lives alongside the latent EpisodicStore (which holds embeddings). Joined
 via episode_id (1:1 with episodic_memories.id).
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -41,8 +42,13 @@ class EpisodeTextStore:
             "ON CONFLICT(episode_id) DO UPDATE SET "
             "content_text=excluded.content_text, source_content=excluded.source_content, "
             "event_ids=excluded.event_ids, session_id=excluded.session_id",
-            (int(episode_id), str(content_text), source_content,
-             dumps_json({"ids": [int(e) for e in event_ids]}), session_id),
+            (
+                int(episode_id),
+                str(content_text),
+                source_content,
+                dumps_json({"ids": [int(e) for e in event_ids]}),
+                session_id,
+            ),
         )
         # Keep FTS aligned. Standard (non-contentless) FTS5 supports plain
         # DELETE by rowid; the followup INSERT re-indexes.
@@ -83,15 +89,16 @@ class EpisodeTextStore:
     def search_fts(self, query: str, limit: int = 20) -> list[int]:
         conn = self.db.connect()
         rows = conn.execute(
-            "SELECT rowid FROM episodes_fts WHERE episodes_fts MATCH ? "
-            "ORDER BY rank LIMIT ?",
+            "SELECT rowid FROM episodes_fts WHERE episodes_fts MATCH ? " "ORDER BY rank LIMIT ?",
             (query, int(limit)),
         ).fetchall()
         return [int(r["rowid"]) for r in rows]
 
     def _row_to_episode_text(self, row: Any) -> EpisodeText:
         event_ids = loads_json(row["event_ids"]).get("ids", [])
-        raw_source = row["source_content"] if row["source_content"] is not None else row["content_text"]
+        raw_source = (
+            row["source_content"] if row["source_content"] is not None else row["content_text"]
+        )
         return EpisodeText(
             episode_id=int(row["episode_id"]),
             content_text=str(row["content_text"]),

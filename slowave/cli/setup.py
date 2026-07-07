@@ -34,8 +34,10 @@ from slowave.cli.output import safe_emoji
 # Change tracking for summary
 # ---------------------------------------------------------------------------
 
+
 class ChangeType(str, Enum):
     """Types of changes that can be tracked."""
+
     MCP_CONFIG = "mcp_config"
     LIFECYCLE_BLOCK = "lifecycle_block"
     HOOKS = "hooks"
@@ -45,6 +47,7 @@ class ChangeType(str, Enum):
 
 class ChangeStatus(str, Enum):
     """Status of a change."""
+
     NEW = "new"
     UPDATE = "update"
     SKIP = "skip"  # Already present, no change needed
@@ -53,6 +56,7 @@ class ChangeStatus(str, Enum):
 @dataclass
 class Change:
     """Represents a single change to be applied."""
+
     change_type: ChangeType
     client: str  # e.g., "claude-code", "claude-desktop", etc.
     status: ChangeStatus
@@ -63,20 +67,20 @@ class Change:
 
 class Summary:
     """Collects and formats changes for display."""
-    
+
     def __init__(self):
         self.changes: list[Change] = []
         self.binaries: dict[str, str] = {}  # name -> path
         self.manual_steps: list[str] = []
-    
+
     def add_binary(self, name: str, path: str) -> None:
         """Record a binary location."""
         self.binaries[name] = path
-    
+
     def add_change(self, change: Change) -> None:
         """Add a change to the summary."""
         self.changes.append(change)
-    
+
     def add_manual_step(self, step: str) -> None:
         """Add a manual step required after setup."""
         self.manual_steps.append(step)
@@ -84,77 +88,102 @@ class Summary:
     def has_changes(self) -> bool:
         """Return True if any change has status other than SKIP."""
         return any(c.status != ChangeStatus.SKIP for c in self.changes)
-    
+
     def _group_changes(self) -> dict[ChangeType, list[Change]]:
         """Group changes by type."""
         grouped: dict[ChangeType, list[Change]] = {}
         for change_type in ChangeType:
             grouped[change_type] = [c for c in self.changes if c.change_type == change_type]
         return grouped
-    
+
     def format(self) -> str:
         """Format summary as a human-readable string."""
         lines: list[str] = []
-        
+
         # Header
         lines.append(click.style("\n" + "━" * 70, fg="cyan"))
         lines.append(click.style("SUMMARY: Changes to be applied", bold=True, fg="cyan"))
         lines.append(click.style("━" * 70, fg="cyan"))
         lines.append("")
-        
+
         # Binaries
         if self.binaries:
             lines.append(click.style(f"{safe_emoji('📦', '[package]')} Binaries", bold=True))
             for name, path in self.binaries.items():
                 lines.append(f"  ✓ {name}: {path}")
             lines.append("")
-        
+
         # Group by change type
         grouped = self._group_changes()
-        
+
         # MCP Configs
         if grouped[ChangeType.MCP_CONFIG]:
             configs = grouped[ChangeType.MCP_CONFIG]
-            lines.append(click.style(f"{safe_emoji('🔌', '[plug]')} MCP Configurations ({len(configs)} file{'s' if len(configs) != 1 else ''})", bold=True))
+            lines.append(
+                click.style(
+                    f"{safe_emoji('🔌', '[plug]')} MCP Configurations ({len(configs)} file{'s' if len(configs) != 1 else ''})",
+                    bold=True,
+                )
+            )
             for change in configs:
                 status_label = f"({change.status.value.upper()})"
-                lines.append(f"  ✓ {change.client} → {change.path} {click.style(status_label, fg='bright_black')}")
+                lines.append(
+                    f"  ✓ {change.client} → {change.path} {click.style(status_label, fg='bright_black')}"
+                )
             lines.append("")
-        
+
         # Lifecycle Blocks
         if grouped[ChangeType.LIFECYCLE_BLOCK]:
             blocks = grouped[ChangeType.LIFECYCLE_BLOCK]
-            lines.append(click.style(f"{safe_emoji('📝', '[doc]')} Lifecycle Blocks ({len(blocks)} file{'s' if len(blocks) != 1 else ''})", bold=True))
+            lines.append(
+                click.style(
+                    f"{safe_emoji('📝', '[doc]')} Lifecycle Blocks ({len(blocks)} file{'s' if len(blocks) != 1 else ''})",
+                    bold=True,
+                )
+            )
             for change in blocks:
                 status_label = f"({change.status.value.upper()})"
-                lines.append(f"  ✓ {change.client} → {change.path} {click.style(status_label, fg='bright_black')}")
+                lines.append(
+                    f"  ✓ {change.client} → {change.path} {click.style(status_label, fg='bright_black')}"
+                )
             lines.append("")
-        
+
         # Hooks
         if grouped[ChangeType.HOOKS]:
             hooks = grouped[ChangeType.HOOKS]
             lines.append(click.style(f"{safe_emoji('🔐', '[lock]')} Lifecycle Hooks", bold=True))
             for change in hooks:
                 status_label = f"({change.status.value.upper()})"
-                lines.append(f"  ✓ {change.description} {click.style(status_label, fg='bright_black')}")
+                lines.append(
+                    f"  ✓ {change.description} {click.style(status_label, fg='bright_black')}"
+                )
             lines.append("")
-        
+
         # Worker Service
         if grouped[ChangeType.WORKER_SERVICE]:
             services = grouped[ChangeType.WORKER_SERVICE]
-            lines.append(click.style(f"{safe_emoji('⚙️', '[gear]')}  Background Worker Service", bold=True))
+            lines.append(
+                click.style(f"{safe_emoji('⚙️', '[gear]')}  Background Worker Service", bold=True)
+            )
             for change in services:
                 status_label = f"({change.status.value.upper()})"
-                lines.append(f"  ✓ {change.description} → {change.path} {click.style(status_label, fg='bright_black')}")
+                lines.append(
+                    f"  ✓ {change.description} → {change.path} {click.style(status_label, fg='bright_black')}"
+                )
             lines.append("")
-        
+
         # Manual Steps
         if self.manual_steps:
-            lines.append(click.style(f"{safe_emoji('⚠️', '!!')}  Manual Steps Required ({len(self.manual_steps)})", bold=True))
+            lines.append(
+                click.style(
+                    f"{safe_emoji('⚠️', '!!')}  Manual Steps Required ({len(self.manual_steps)})",
+                    bold=True,
+                )
+            )
             for step in self.manual_steps:
                 lines.append(f"  {safe_emoji('⚠', '! ')} {step}")
             lines.append("")
-        
+
         lines.append(click.style("━" * 70, fg="cyan"))
         return "\n".join(lines)
 
@@ -187,6 +216,7 @@ def mark_setup_done() -> None:
 # ---------------------------------------------------------------------------
 # Path helpers
 # ---------------------------------------------------------------------------
+
 
 def _claude_settings_path() -> Path:
     """~/.claude/settings.json — hooks, permissions, env only (NOT mcpServers)."""
@@ -328,6 +358,7 @@ def _opencode_instructions_path() -> Path:
 # ClientSpec — single source of truth for every supported client
 # ---------------------------------------------------------------------------
 
+
 @dataclass(frozen=True)
 class ClientSpec:
     """Describes one AI client that Slowave can configure.
@@ -376,16 +407,17 @@ class ClientSpec:
                 Short string shown at the end of setup reminding the user
                 what to restart, e.g. ``"Restart Claude Code"``.
     """
+
     key: str
     label: str
-    mcp_path: Any                  # Callable[[], Path]
-    lifecycle_path: Any            # Callable[[], Path] | None
+    mcp_path: Any  # Callable[[], Path]
+    lifecycle_path: Any  # Callable[[], Path] | None
     lifecycle_agent: str
     manual_lifecycle: bool = False
     manual_note: str = ""
     hooks_config_path: Any = None  # Callable[[], Path] | None
-    hooks_patch_fn: Any = None     # Callable[(dict), (dict, bool)] | None
-    hooks_cleanup_fn: Any = None   # Callable[(dict), (dict, bool)] | None
+    hooks_patch_fn: Any = None  # Callable[(dict), (dict, bool)] | None
+    hooks_cleanup_fn: Any = None  # Callable[(dict), (dict, bool)] | None
     require_dir_exists: bool = False
     restart_note: str = ""
 
@@ -497,12 +529,13 @@ def _all_lifecycle_paths() -> list[Path]:
 # MCP binary detection
 # ---------------------------------------------------------------------------
 
+
 def _add_exe_if_windows(binary_name: str) -> str:
     """Add .exe extension to binary name on Windows if not already present.
-    
+
     Args:
         binary_name: The base binary name (e.g., 'slowave', 'slowave-mcp')
-    
+
     Returns:
         The binary name with .exe extension on Windows, unchanged on other platforms.
     """
@@ -513,7 +546,7 @@ def _add_exe_if_windows(binary_name: str) -> str:
 
 def _find_mcp_binary(slowave_bin: str) -> str:
     """Derive the slowave-mcp binary path from the slowave binary path.
-    
+
     Handles Windows .exe extensions correctly.
     """
     return str(Path(slowave_bin).parent / _add_exe_if_windows("slowave-mcp"))
@@ -528,16 +561,24 @@ def _find_slowave_binary() -> str:
     candidates: list[Path] = [
         _home() / ".local" / "bin" / _add_exe_if_windows("slowave"),
         _home() / ".local" / "pipx" / "venvs" / "slowave" / "bin" / _add_exe_if_windows("slowave"),
-        _home() / ".local" / "pipx" / "venvs" / "slowave" / "Scripts" / _add_exe_if_windows("slowave"),  # Windows pipx
+        _home()
+        / ".local"
+        / "pipx"
+        / "venvs"
+        / "slowave"
+        / "Scripts"
+        / _add_exe_if_windows("slowave"),  # Windows pipx
         Path("/opt/homebrew/bin/slowave"),  # macOS Homebrew
-        Path("/usr/local/bin/slowave"),     # Linux/Unix
+        Path("/usr/local/bin/slowave"),  # Linux/Unix
     ]
     # On Windows, add common AppData paths
     if SYSTEM == "Windows":
         appdata_local = os.environ.get("LOCALAPPDATA", str(_home() / "AppData" / "Local"))
-        candidates.extend([
-            Path(appdata_local) / "Programs" / "Python" / "Scripts" / "slowave.exe",
-        ])
+        candidates.extend(
+            [
+                Path(appdata_local) / "Programs" / "Python" / "Scripts" / "slowave.exe",
+            ]
+        )
     for c in candidates:
         if c.exists():
             return str(c)
@@ -564,6 +605,7 @@ def _backup_file(path: Path) -> Path | None:
         except OSError:
             pass
     import datetime
+
     ts = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
     backup = path.with_name(f"{path.name}.bak.{ts}")
     shutil.copy2(path, backup)
@@ -619,7 +661,12 @@ def _patch_mcp_servers(
     if existing == want:
         return config, False
     # url-only entry exists and we do not need type — already fine
-    if not include_type and isinstance(existing, dict) and existing.get("url") == effective_url and "command" not in existing:
+    if (
+        not include_type
+        and isinstance(existing, dict)
+        and existing.get("url") == effective_url
+        and "command" not in existing
+    ):
         # Strip any stale type field written by a previous version
         if list(existing.keys()) != ["url"] or existing.get("type"):
             servers["slowave"] = want
@@ -708,64 +755,55 @@ def _remove_mcp_servers_from_settings(config: dict[str, Any]) -> tuple[dict[str,
 # CLAUDE.md / .clinerules injection
 # ---------------------------------------------------------------------------
 
-_MARKER_START = "<!-- slowave-lifecycle-start"   # prefix match — covers all versions
-_MARKER_END = "<!-- slowave-lifecycle-end"     # prefix match — covers all versions
+_MARKER_START = "<!-- slowave-lifecycle-start"  # prefix match — covers v1 and v2
+_MARKER_END = "<!-- slowave-lifecycle-end"  # prefix match — covers v1 and v2
 
 _LIFECYCLE_BLOCK_TEMPLATE = """\
-<!-- slowave-lifecycle-start v4 -->
-## MANDATORY — Slowave memory
+<!-- slowave-lifecycle-start v3 -->
+## MANDATORY — Slowave memory (5-verb cognitive cycle)
 
-Slowave is your persistent memory across sessions — without it, everything learned here is lost when the conversation ends. You are the reasoning module; Slowave is the memory module. Follow steps 1–5 in order.
+You are the reasoning module; Slowave is the memory module. Give it honest signals — what you encoded, what helped, what was noise, the outcome — and trust consolidation to do the rest. Do not respond until step 1 completes. Do not end the task without step 5.
 
-How it works: memory is stored and retrieved as embeddings, not text — verbatim queries always outperform summaries. What you write via `remember` is read by a future instance of you with zero session context. Reinforce feedback directly shapes what survives consolidation — honest signals keep the store clean; defaulting to `useful` degrades future recall.
+**1 — `slowave_activate` (before your first response)**
+`slowave_activate(query="<verbatim task>", goal="<short goal>", scope="project:<basename(cwd)>")` → store `retrieval_id`.
+- `query`: the task verbatim — do not summarize (raw text drives retrieval).
+- `goal`: 3–6 word verb-noun phrase (e.g. `"fix auth null pointer"`). Phrase it naturally; it is folded into the retrieval cue, so roughly consistent wording for the same kind of task gives a small overlap boost. Exact matching is NOT needed.
+- `scope`: `project:<name>` (or `user:<id>` / `domain:<topic>`). Never omit.
+- Call ONCE.
 
-**1 — `slowave_activate`** — *prime working memory, open session*
-When: before your first response · once per task · do not respond until done.
-`slowave_activate(query, goal, scope)` → `retrieval_id`, `cold_start`
-- `query`: verbatim task — do not summarize; raw text drives retrieval
-- `goal`: 3–6 word verb-noun phrase, e.g. `"fix auth null pointer"` — consistent phrasing for similar tasks improves retrieval
-- `scope`: `project:<basename(cwd)>` — always pass; omitting bleeds memories across all projects
+   **Cold start gate — if the response contains `cold_start: true`:**
+   - Find the most stable context document available (project README/overview, system instructions, or user profile).
+   - For each fact, ask: is it durable AND not already observable from the current context? If yes to both, call `slowave_remember(content, type, scope)` — one call per fact, never grouped.
+   - Exhaust that document before responding. Do NOT scan the full codebase.
 
-If `cold_start: true` → read `cold_start_hints` (numbered checklist), follow every step in order, call `slowave_remember` for each durable fact before responding. Do NOT skip steps.
+**2 — `slowave_remember` (encode durable knowledge)**
+`slowave_remember(content, type, scope="project:<basename(cwd)>")` — call per durable fact.
+- Novelty gate — skip if it already surfaced in activate/recall, is reconstructible from current context, or is transient/session-only state.
+- ONE fact per call (never bundle — it blurs the embedding).
+- Blank-slate phrasing: write so a reader with zero session context understands it. WRONG: `"fixed it by adding the field"`. RIGHT: `"SessionReaper idle timeout defaults to 3600s; the HTTP daemon disables it (0)"`.
+- `type` (pick the most specific; default `decision`): `fact` · `preference` (how the user wants things) · `decision` (choice + reason) · `constraint` (invariant) · `procedure` (repeatable steps) · `lesson` (from failure/surprise) · `warning` (hazard) · `open_question` · `task` (durable to-do) · `artifact` (produced/external ref).
+- If a remembered fact changed: remember the corrected version AND flag the old one via `stale_memory_ids`/`wrong_memory_ids` in step 4.
+- Never encode: what is observable right now, transient state, vague impressions, or what you did this session (step 5 captures that).
 
-**2 — `slowave_remember`** — *remember durable knowledge*
-When: each time you learn something durable — not only at task end.
-`slowave_remember(content, type, scope)` → *(no stored value)*
-- `content`: blank-slate phrasing — write so a reader with zero context understands. WRONG: `"fixed it by adding the field"`. RIGHT: `"SessionReaper idle timeout defaults to 3600s; the HTTP daemon disables it (0)"`.
-- `type`: `fact` · `preference` · `decision` · `constraint` · `procedure` · `lesson` · `warning` · `open_question` · `task` · `artifact` — pick the most specific; default `decision`
-- `scope`: same as activate; never omit
+**3 — `slowave_recall` (only when activate fell short)**
+`slowave_recall(query, scope="project:<basename(cwd)>")` — specific, semantic query. WRONG: `"what about auth"`. RIGHT: `"decision on daemon single-instance enforcement"`. Always pass `scope` (omitting returns ALL projects). Store the returned `retrieval_id`. Not a substitute for activate.
 
-One call per fact. When in doubt, remember — skip only if: already surfaced in activate/recall this session · purely ephemeral (irrelevant beyond this task) · doesn't fit any type above. If a fact changed: remember the corrected version AND flag the old one in step 4.
+**4 — `slowave_reinforce` (after ANY retrieval — reward hits, suppress noise)**
+Call whenever activate/recall returned memories — not only when you used some. Penalizing noise is how the store stays clean.
+`slowave_reinforce(retrieval_id=<id>, feedback="useful|partially_useful|irrelevant|stale|wrong|missing|too_much_context", outcome="success|partial|failure|unknown", used_memory_ids=[...], irrelevant_memory_ids=[...], stale_memory_ids=[...], wrong_memory_ids=[...])`
+- `used_memory_ids`: IDs you actually relied on (strengthens them).
+- `irrelevant`/`stale`/`wrong_memory_ids`: IDs that were noise, outdated, or incorrect (this is how the store self-cleans). Use real IDs only — never invent.
+- `feedback` and `outcome`: honest, not optimistic. Use `missing` to flag a needed-but-absent memory.
 
-**3 — `slowave_recall`** — *mid-task memory lookup*
-When: when activate fell short or you lack context to resolve a decision · can be called multiple times.
-`slowave_recall(query, scope)` → `retrieval_id` *(store each — reinforce each in step 4)*
-- `query`: specific and semantic. WRONG: `"what about auth"`. RIGHT: `"decision on daemon single-instance enforcement"`
-- `scope`: same as activate; always pass
+**5 — `slowave_commit` (session close — always)**
+`slowave_commit(scope="project:<basename(cwd)>", outcome="success|partial|failure")`. Non-negotiable. Scope must match activate; outcome honest (`partial` if anything was incomplete). Skipping = no episodes form; the session lingers until the idle reaper closes it with no outcome.
 
-Not a substitute for activate.
-
-**4 — `slowave_reinforce`** — *reward hits, suppress noise*
-When: after activate AND after each recall · even if no memories returned · once per retrieval_id.
-`slowave_reinforce(retrieval_id, feedback, outcome, used_memory_ids, irrelevant_memory_ids, stale_memory_ids, wrong_memory_ids)`
-- `retrieval_id`: the id returned by activate or by the specific recall call
-- `feedback`: quality of the retrieval batch — `useful|partially_useful|irrelevant|stale|wrong|missing|too_much_context`. Use `missing` to flag a needed-but-absent memory.
-- `outcome`: result of the downstream task — `success|partial|failure|unknown`. Honest, not optimistic. Not the same as feedback.
-- `used_memory_ids`: IDs you relied on (strengthens them)
-- `irrelevant`/`stale`/`wrong_memory_ids`: IDs that were noise, outdated, or wrong — real IDs only, never invent
-
-**5 — `slowave_commit`** — *close session, trigger consolidation*
-When: at the end of every task — non-negotiable.
-`slowave_commit(scope, outcome)`
-- `scope`: must match activate
-- `outcome`: honest — `partial` if anything incomplete. Skipping = no episodes form; session lingers until idle reaper closes it with no outcome.
-
-Anti-patterns: skip activate · call activate more than once · `remember` without `scope` · bundle facts in one `remember` call · context-dependent phrasing · remember facts already surfaced in activate/recall · leave a superseded fact unflagged · reinforce only on hits, skip when memories empty · default feedback to `useful` · invent memory IDs · report `success` when partial/failed · skip reinforce or commit · use deleted tools (`slowave_context`, `slowave_session_start/end`, `slowave_event`, `slowave_retrieval_feedback`, `slowave_context_feedback`).
-<!-- slowave-lifecycle-end v4 -->"""
+Anti-patterns: skip activate · `remember` without `scope` · bundle facts in one call · context-dependent phrasing · re-encode facts already surfaced · leave a superseded fact unflagged · reinforce only hits and never penalize noise · default feedback to `useful` · invent memory IDs · report `success` when partial/failed · skip reinforce or commit · use deleted tools (`slowave_context`, `slowave_session_start/end`, `slowave_event`, `slowave_retrieval_feedback`, `slowave_context_feedback`).
+<!-- slowave-lifecycle-end v3 -->"""
 
 
 def _lifecycle_block(agent: str) -> str:
-    # NOTE: `agent` is intentionally unused. The v4 lifecycle block is
+    # NOTE: `agent` is intentionally unused. The v3 lifecycle block is
     # client-agnostic — every AI client receives identical instructions, by
     # design, so Slowave stays consistent across models. The parameter is
     # kept for ClientSpec API stability; the .format() call is a no-op (the
@@ -877,7 +915,7 @@ _USER_PROMPT_CMD = (
 
 _STOP_CMD = (
     "echo 'SLOWAVE MANDATORY: Before finishing this turn call: "
-    "(1) if activate/recall returned memories: slowave_reinforce(retrieval_id=<id>,feedback=useful|partially_useful|irrelevant|stale|wrong|missing,outcome=success|partial|failure|unknown), "
+    "(1) if you used memories: slowave_reinforce(retrieval_id=<id>,feedback=useful|irrelevant|stale|wrong,outcome=success|partial|failure|unknown), "
     "(2) slowave_commit(scope=project:<basename(cwd)>,outcome=success|partial|failure|unknown). "
     "Do NOT end the turn without step 2.'"
 )
@@ -911,7 +949,8 @@ def _patch_claude_code_hooks(config: dict[str, Any]) -> tuple[dict[str, Any], bo
         # Remove any stale Slowave hook group for this event, then re-add.
         if event in hooks:
             hooks[event] = [
-                g for g in hooks[event]
+                g
+                for g in hooks[event]
                 if not any(_HOOKS_MARKER in h.get("command", "") for h in g.get("hooks", []))
             ]
         hooks.setdefault(event, []).append(
@@ -931,7 +970,8 @@ def _remove_claude_code_hooks(config: dict[str, Any]) -> tuple[dict[str, Any], b
     for event in ["UserPromptSubmit", "Stop"]:
         before = config.get("hooks", {}).get(event, [])
         after = [
-            g for g in before
+            g
+            for g in before
             if not any(_HOOKS_MARKER in h.get("command", "") for h in g.get("hooks", []))
         ]
         if after != before:
@@ -1045,7 +1085,8 @@ def _install_worker_linux(slowave_bin: str) -> tuple[str, bool]:
         subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
         subprocess.run(
             ["systemctl", "--user", "enable", "--now", "slowave-worker"],
-            capture_output=True, check=False,
+            capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass
@@ -1060,6 +1101,7 @@ def _find_pythonw() -> str | None:
     Task Scheduler action prevents a visible console window from opening.
     """
     import os as _os
+
     py_dir = _os.path.dirname(sys.executable)
     candidate = _os.path.join(py_dir, "pythonw.exe")
     if Path(candidate).exists():
@@ -1098,10 +1140,17 @@ def _register_windows_task(task_name: str, execute: str, argument: str) -> tuple
     # (marker + executable + arguments). Older registrations get upgraded.
     try:
         check = subprocess.run(
-            ["powershell", "-NonInteractive", "-Command",
-             f"$t = Get-ScheduledTask -TaskName '{name_q}' -ErrorAction SilentlyContinue; "
-             f"if ($t) {{ $t.Description + '|' + $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}"],
-            capture_output=True, text=True, check=False, timeout=60,
+            [
+                "powershell",
+                "-NonInteractive",
+                "-Command",
+                f"$t = Get-ScheduledTask -TaskName '{name_q}' -ErrorAction SilentlyContinue; "
+                f"if ($t) {{ $t.Description + '|' + $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=60,
         )
         parts = check.stdout.strip().split("|")
         if (
@@ -1131,8 +1180,13 @@ def _register_windows_task(task_name: str, execute: str, argument: str) -> tuple
         f"Start-ScheduledTask -TaskName '{name_q}'"
     )
     try:
-        result = subprocess.run(["powershell", "-NonInteractive", "-Command", ps],
-                                capture_output=True, text=True, check=False, timeout=120)
+        result = subprocess.run(
+            ["powershell", "-NonInteractive", "-Command", ps],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=120,
+        )
     except (FileNotFoundError, subprocess.TimeoutExpired):
         return False, "powershell not available"
     if result.returncode != 0:
@@ -1187,7 +1241,8 @@ def _install_daemon_linux(slowave_bin: str) -> tuple[str, bool]:
         subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
         subprocess.run(
             ["systemctl", "--user", "enable", "--now", "slowave-daemon"],
-            capture_output=True, check=False,
+            capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass
@@ -1229,8 +1284,7 @@ def _verify_daemon_health(timeout: float = 15.0) -> bool:
     return False
 
 
-def _build_summary(client: str, worker: bool, install_hooks: bool,
-                   slowave_bin: str) -> Summary:
+def _build_summary(client: str, worker: bool, install_hooks: bool, slowave_bin: str) -> Summary:
     """Build a summary of changes without modifying any files."""
     summary = Summary()
     summary.add_binary("slowave", slowave_bin)
@@ -1247,39 +1301,45 @@ def _build_summary(client: str, worker: bool, install_hooks: bool,
         elif spec.key == "opencode":
             _, changed_mcp = _patch_opencode_mcp(cfg)
             # Also check instructions registration
-            _, _ = _patch_opencode_instructions(
-                cfg, str(_opencode_instructions_path().resolve())
-            )
+            _, _ = _patch_opencode_instructions(cfg, str(_opencode_instructions_path().resolve()))
         else:
-            _, changed_mcp = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
-        summary.add_change(Change(
-            change_type=ChangeType.MCP_CONFIG,
-            client=spec.label,
-            status=ChangeStatus.UPDATE if changed_mcp else ChangeStatus.SKIP,
-            path=str(mcp_file),
-            description="MCP server configuration",
-        ))
+            _, changed_mcp = _patch_mcp_servers(
+                cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline"
+            )
+        summary.add_change(
+            Change(
+                change_type=ChangeType.MCP_CONFIG,
+                client=spec.label,
+                status=ChangeStatus.UPDATE if changed_mcp else ChangeStatus.SKIP,
+                path=str(mcp_file),
+                description="MCP server configuration",
+            )
+        )
         if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None and install_hooks:
             hooks_file = spec.hooks_config_path()
             _, changed_hooks = spec.hooks_patch_fn(_read_json(hooks_file))
-            summary.add_change(Change(
-                change_type=ChangeType.HOOKS,
-                client=spec.label,
-                status=ChangeStatus.UPDATE if changed_hooks else ChangeStatus.SKIP,
-                path=str(hooks_file),
-                description="Enforcement hooks",
-            ))
+            summary.add_change(
+                Change(
+                    change_type=ChangeType.HOOKS,
+                    client=spec.label,
+                    status=ChangeStatus.UPDATE if changed_hooks else ChangeStatus.SKIP,
+                    path=str(hooks_file),
+                    description="Enforcement hooks",
+                )
+            )
         if spec.lifecycle_path is not None:
             lc_file = spec.lifecycle_path()
             existing = lc_file.read_text(encoding="utf-8") if lc_file.exists() else ""
             needs_update = _MARKER_START not in existing or _MARKER_END not in existing
-            summary.add_change(Change(
-                change_type=ChangeType.LIFECYCLE_BLOCK,
-                client=spec.label,
-                status=ChangeStatus.UPDATE if needs_update else ChangeStatus.SKIP,
-                path=str(lc_file),
-                description="Lifecycle instruction block",
-            ))
+            summary.add_change(
+                Change(
+                    change_type=ChangeType.LIFECYCLE_BLOCK,
+                    client=spec.label,
+                    status=ChangeStatus.UPDATE if needs_update else ChangeStatus.SKIP,
+                    path=str(lc_file),
+                    description="Lifecycle instruction block",
+                )
+            )
         elif spec.manual_lifecycle and spec.manual_note:
             summary.add_manual_step(spec.manual_note)
 
@@ -1289,56 +1349,73 @@ def _build_summary(client: str, worker: bool, install_hooks: bool,
             plist_dir = _home() / "Library" / "LaunchAgents"
             plist_path = plist_dir / "com.slowave.worker.plist"
             plist_content = _LAUNCHD_PLIST.format(bin=slowave_bin)
-            changed = not (plist_path.exists() and plist_path.read_text(encoding="utf-8") == plist_content)
+            changed = not (
+                plist_path.exists() and plist_path.read_text(encoding="utf-8") == plist_content
+            )
             status = ChangeStatus.UPDATE if changed else ChangeStatus.SKIP
-            summary.add_change(Change(
-                change_type=ChangeType.WORKER_SERVICE,
-                client="macOS",
-                status=status,
-                path=str(plist_path),
-                description="launchd service"
-            ))
+            summary.add_change(
+                Change(
+                    change_type=ChangeType.WORKER_SERVICE,
+                    client="macOS",
+                    status=status,
+                    path=str(plist_path),
+                    description="launchd service",
+                )
+            )
         elif SYSTEM == "Linux":
             xdg = os.environ.get("XDG_CONFIG_HOME", str(_home() / ".config"))
             svc_path = Path(xdg) / "systemd" / "user" / "slowave-worker.service"
             svc_content = _SYSTEMD_SERVICE.format(bin=slowave_bin)
-            changed = not (svc_path.exists() and svc_path.read_text(encoding="utf-8") == svc_content)
+            changed = not (
+                svc_path.exists() and svc_path.read_text(encoding="utf-8") == svc_content
+            )
             status = ChangeStatus.UPDATE if changed else ChangeStatus.SKIP
-            summary.add_change(Change(
-                change_type=ChangeType.WORKER_SERVICE,
-                client="Linux",
-                status=status,
-                path=str(svc_path),
-                description="systemd service"
-            ))
+            summary.add_change(
+                Change(
+                    change_type=ChangeType.WORKER_SERVICE,
+                    client="Linux",
+                    status=status,
+                    path=str(svc_path),
+                    description="systemd service",
+                )
+            )
         elif SYSTEM == "Windows":
             # Check if the task already exists with the current binary
             task_exists = False
             try:
                 check = subprocess.run(
-                    ["powershell", "-NonInteractive", "-Command",
-                     f"$t = Get-ScheduledTask -TaskName 'SlowaveWorker' -ErrorAction SilentlyContinue; "
-                     f"if ($t) {{ $t.Actions[0].Execute }}"],
-                    capture_output=True, text=True, check=False,
+                    [
+                        "powershell",
+                        "-NonInteractive",
+                        "-Command",
+                        f"$t = Get-ScheduledTask -TaskName 'SlowaveWorker' -ErrorAction SilentlyContinue; "
+                        f"if ($t) {{ $t.Actions[0].Execute }}",
+                    ],
+                    capture_output=True,
+                    text=True,
+                    check=False,
                 )
                 existing_exe = check.stdout.strip()
                 task_exists = bool(existing_exe and existing_exe.lower() == slowave_bin.lower())
             except FileNotFoundError:
                 pass
             status = ChangeStatus.SKIP if task_exists else ChangeStatus.UPDATE
-            summary.add_change(Change(
-                change_type=ChangeType.WORKER_SERVICE,
-                client="Windows",
-                status=status,
-                path="Task Scheduler",
-                description="SlowaveWorker task"
-            ))
+            summary.add_change(
+                Change(
+                    change_type=ChangeType.WORKER_SERVICE,
+                    client="Windows",
+                    status=status,
+                    path="Task Scheduler",
+                    description="SlowaveWorker task",
+                )
+            )
 
     return summary
 
 
 # Output helpers
 # ---------------------------------------------------------------------------
+
 
 def _ok(msg: str) -> None:
     click.echo(click.style(f"  ✓  {msg}", fg="green"))
@@ -1364,20 +1441,36 @@ def _section(title: str) -> None:
 # `slowave setup` Click command
 # ---------------------------------------------------------------------------
 
+
 @click.command("setup")
 @click.option(
     "--client",
-    type=click.Choice(["claude-code", "claude-desktop", "cline", "cursor", "windsurf", "opencode", "all"], case_sensitive=False),
-    default="all", show_default=True,
+    type=click.Choice(
+        ["claude-code", "claude-desktop", "cline", "cursor", "windsurf", "opencode", "all"],
+        case_sensitive=False,
+    ),
+    default="all",
+    show_default=True,
     help="Which client(s) to configure.",
 )
-@click.option("--worker/--no-worker", default=True, show_default=True,
-              help="Install the background worker as a system service.")
-@click.option("--hooks/--no-hooks", "install_hooks", default=True, show_default=True,
-              help="Inject UserPromptSubmit + Stop hooks (Claude Code only).")
+@click.option(
+    "--worker/--no-worker",
+    default=True,
+    show_default=True,
+    help="Install the background worker as a system service.",
+)
+@click.option(
+    "--hooks/--no-hooks",
+    "install_hooks",
+    default=True,
+    show_default=True,
+    help="Inject UserPromptSubmit + Stop hooks (Claude Code only).",
+)
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing any files.")
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
-def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_json: bool = False) -> None:
+def setup_cmd(
+    client: str, worker: bool, install_hooks: bool, dry_run: bool, as_json: bool = False
+) -> None:
     """One-command post-install wiring for Claude Code, Claude Desktop, Cline, Cursor, Windsurf, and OpenCode.
 
     Configures every detected client to connect to the Slowave HTTP MCP daemon
@@ -1443,7 +1536,9 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
 
         # Skip if the config directory doesn't exist and client marks require_dir_exists
         if spec.require_dir_exists and not mcp_file.parent.exists():
-            _warn(f"{spec.label} config dir not found: {mcp_file.parent}  ({spec.label} installed?)")
+            _warn(
+                f"{spec.label} config dir not found: {mcp_file.parent}  ({spec.label} installed?)"
+            )
             continue
 
         cfg = _read_json(mcp_file)
@@ -1458,7 +1553,9 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
             instructions_path = str(_opencode_instructions_path().resolve())
             cfg, _ = _patch_opencode_instructions(cfg, instructions_path)
         else:
-            cfg, changed = _patch_mcp_servers(cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline")
+            cfg, changed = _patch_mcp_servers(
+                cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline"
+            )
             transport_label = "HTTP"
         if changed:
             if dry_run:
@@ -1505,7 +1602,9 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     if worker:
         if dry_run:
             if SYSTEM == "Darwin":
-                _ok("Would install launchd service → ~/Library/LaunchAgents/com.slowave.daemon.plist")
+                _ok(
+                    "Would install launchd service → ~/Library/LaunchAgents/com.slowave.daemon.plist"
+                )
             elif SYSTEM == "Linux":
                 _ok("Would install systemd service → ~/.config/systemd/user/slowave-daemon.service")
             elif SYSTEM == "Windows":
@@ -1553,7 +1652,9 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     if worker:
         if dry_run:
             if SYSTEM == "Darwin":
-                _ok("Would install launchd service → ~/Library/LaunchAgents/com.slowave.worker.plist")
+                _ok(
+                    "Would install launchd service → ~/Library/LaunchAgents/com.slowave.worker.plist"
+                )
             elif SYSTEM == "Linux":
                 _ok("Would install systemd service → ~/.config/systemd/user/slowave-worker.service")
             elif SYSTEM == "Windows":
@@ -1592,7 +1693,9 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     if worker:
         if dry_run:
             if SYSTEM == "Darwin":
-                _ok("Would install launchd service → ~/Library/LaunchAgents/com.slowave.backup.plist")
+                _ok(
+                    "Would install launchd service → ~/Library/LaunchAgents/com.slowave.backup.plist"
+                )
             elif SYSTEM == "Linux":
                 _ok("Would install systemd timer → ~/.config/systemd/user/slowave-backup.timer")
             elif SYSTEM == "Windows":
@@ -1637,6 +1740,7 @@ def setup_cmd(client: str, worker: bool, install_hooks: bool, dry_run: bool, as_
     click.echo(click.style("Setup complete.", bold=True))
     if not dry_run:
         mark_setup_done()
+
 
 # ---------------------------------------------------------------------------
 # Backup service templates
@@ -1715,8 +1819,10 @@ def _install_backup_linux(slowave_bin: str) -> tuple[str, bool]:
     timer_path = svc_dir / "slowave-backup.timer"
     svc_content = _SYSTEMD_BACKUP_SERVICE.format(bin=slowave_bin)
     timer_content = _SYSTEMD_BACKUP_TIMER
-    svc_changed = (not svc_path.exists() or svc_path.read_text(encoding="utf-8") != svc_content)
-    timer_changed = (not timer_path.exists() or timer_path.read_text(encoding="utf-8") != timer_content)
+    svc_changed = not svc_path.exists() or svc_path.read_text(encoding="utf-8") != svc_content
+    timer_changed = (
+        not timer_path.exists() or timer_path.read_text(encoding="utf-8") != timer_content
+    )
     if not svc_changed and not timer_changed:
         return str(timer_path), False
     svc_dir.mkdir(parents=True, exist_ok=True)
@@ -1726,7 +1832,8 @@ def _install_backup_linux(slowave_bin: str) -> tuple[str, bool]:
         subprocess.run(["systemctl", "--user", "daemon-reload"], capture_output=True, check=False)
         subprocess.run(
             ["systemctl", "--user", "enable", "--now", "slowave-backup.timer"],
-            capture_output=True, check=False,
+            capture_output=True,
+            check=False,
         )
     except FileNotFoundError:
         pass
@@ -1739,15 +1846,24 @@ def _install_backup_windows(slowave_bin: str) -> tuple[str, bool]:
     already_registered = False
     try:
         check = subprocess.run(
-            ["powershell", "-NonInteractive", "-Command",
-             f"$t = Get-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
-             f"if ($t) {{ $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}"],
-            capture_output=True, text=True, check=False,
+            [
+                "powershell",
+                "-NonInteractive",
+                "-Command",
+                f"$t = Get-ScheduledTask -TaskName '{task_name}' -ErrorAction SilentlyContinue; "
+                f"if ($t) {{ $t.Actions[0].Execute + '|' + $t.Actions[0].Arguments }}",
+            ],
+            capture_output=True,
+            text=True,
+            check=False,
         )
         existing = check.stdout.strip()
         if existing:
             existing_exe, _, existing_args = existing.partition("|")
-            if existing_exe.strip().lower() == slowave_bin.lower() and "backup" in existing_args.lower():
+            if (
+                existing_exe.strip().lower() == slowave_bin.lower()
+                and "backup" in existing_args.lower()
+            ):
                 already_registered = True
     except FileNotFoundError:
         pass
@@ -1765,8 +1881,9 @@ def _install_backup_windows(slowave_bin: str) -> tuple[str, bool]:
         f"-Principal $p -Force"
     )
     try:
-        subprocess.run(["powershell", "-NonInteractive", "-Command", ps],
-                       capture_output=True, check=False)
+        subprocess.run(
+            ["powershell", "-NonInteractive", "-Command", ps], capture_output=True, check=False
+        )
     except FileNotFoundError:
         pass
     return task_name, True

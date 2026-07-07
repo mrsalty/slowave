@@ -3,6 +3,7 @@
 Owns all episode-formation logic previously scattered as private methods on
 SlowaveEngine. Extracted so it can be tested and reasoned about independently.
 """
+
 from __future__ import annotations
 
 from typing import Any

@@ -1,6 +1,6 @@
 """App JS for the Slowave dashboard. Edit this file, not app.py."""
 
-_APP_JS = r'''
+_APP_JS = r"""
 const REFRESH_MS=__REFRESH_MS__;
 const ALLOW_ACTIONS=__ALLOW_ACTIONS__;
 
@@ -1192,4 +1192,4 @@ loadStatus();
 renderPulse();
 setInterval(loadStatus,REFRESH_MS);
 setInterval(renderPulse,REFRESH_MS);
-'''
+"""

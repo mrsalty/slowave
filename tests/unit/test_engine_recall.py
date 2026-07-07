@@ -5,6 +5,7 @@ standalone RetrievalService. Uses a deterministic stub encoder (hash-seeded
 random) — same text always produces the same embedding, different texts
 produce unrelated embeddings. No model weights are downloaded.
 """
+
 from __future__ import annotations
 
 import os
@@ -15,10 +16,10 @@ import pytest
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 class _StubEncoder:
     """Deterministic encoder: same text → same unit vector, no model needed."""
@@ -50,6 +51,7 @@ def eng(tmp_path):
 # ---------------------------------------------------------------------------
 # Tests
 # ---------------------------------------------------------------------------
+
 
 def test_recall_raises_without_encoder(tmp_path):
     engine = SlowaveEngine(
@@ -89,12 +91,12 @@ def test_recall_returns_episode_texts(eng):
     # Episodes that exactly duplicate an active schema text are suppressed to avoid
     # sending redundant content to agents; the content is then surfaced via r.schemas.
     # Accept either: episode_texts has entries OR the schema itself is present.
-    assert len(r.schemas) > 0 or len(r.episode_texts) > 0, (
-        "Recalled content must be accessible via schemas or episode_texts after remember()"
-    )
-    assert any(content in s.content_text for s in r.schemas), (
-        "The remembered schema must be surfaced in recall results"
-    )
+    assert (
+        len(r.schemas) > 0 or len(r.episode_texts) > 0
+    ), "Recalled content must be accessible via schemas or episode_texts after remember()"
+    assert any(
+        content in s.content_text for s in r.schemas
+    ), "The remembered schema must be surfaced in recall results"
     assert all("content_text" in ep for ep in r.episode_texts)
     assert all("salience" in ep for ep in r.episode_texts)
 

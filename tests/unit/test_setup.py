@@ -13,6 +13,7 @@ Coverage:
   - _read_json                  missing file returns {}
   - cleanup helpers             _remove_lifecycle_blocks, _remove_mcp_entry
 """
+
 from __future__ import annotations
 
 import json
@@ -21,15 +22,15 @@ from pathlib import Path
 import pytest
 
 from slowave.cli.setup import (
+    _MARKER_START,
     _backup_file,
     _inject_block,
+    _lifecycle_block,
     _patch_claude_code_hooks,
     _patch_mcp_servers,
     _read_json,
     _remove_mcp_servers_from_settings,
     _write_json,
-    _MARKER_START,
-    _lifecycle_block,
 )
 
 HTTP_URL = "http://127.0.0.1:8766/mcp"
@@ -38,6 +39,7 @@ HTTP_URL = "http://127.0.0.1:8766/mcp"
 # ===========================================================================
 # _patch_mcp_servers
 # ===========================================================================
+
 
 class TestPatchMcpServers:
     def test_adds_server_to_empty_config(self):
@@ -52,7 +54,9 @@ class TestPatchMcpServers:
 
     def test_migrates_legacy_stdio_format(self):
         # Old stdio entry should be replaced with HTTP
-        cfg = {"mcpServers": {"slowave": {"type": "stdio", "command": "/usr/local/bin/slowave-mcp"}}}
+        cfg = {
+            "mcpServers": {"slowave": {"type": "stdio", "command": "/usr/local/bin/slowave-mcp"}}
+        }
         cfg2, changed = _patch_mcp_servers(cfg)
         assert changed is True
         assert cfg2["mcpServers"]["slowave"] == {"url": HTTP_URL}
@@ -86,6 +90,7 @@ class TestPatchMcpServers:
 # _remove_mcp_servers_from_settings
 # ===========================================================================
 
+
 class TestRemoveMcpServersFromSettings:
     def test_removes_slowave_entry(self):
         cfg = {"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}}}
@@ -117,6 +122,7 @@ class TestRemoveMcpServersFromSettings:
 # _patch_claude_code_hooks
 # ===========================================================================
 
+
 class TestPatchClaudeCodeHooks:
     def test_adds_hooks_to_empty_config(self):
         cfg, changed = _patch_claude_code_hooks({})
@@ -130,14 +136,26 @@ class TestPatchClaudeCodeHooks:
         assert changed2 is False
 
     def test_preserves_unrelated_hooks(self):
-        existing = {"hooks": {"PreToolUse": [{"matcher": "", "hooks": [{"type": "command", "command": "echo hi"}]}]}}
+        existing = {
+            "hooks": {
+                "PreToolUse": [
+                    {"matcher": "", "hooks": [{"type": "command", "command": "echo hi"}]}
+                ]
+            }
+        }
         cfg2, _ = _patch_claude_code_hooks(existing)
         assert "PreToolUse" in cfg2["hooks"]
 
     def test_replaces_stale_hook_command(self):
         """If hook is present but command text differs (version upgrade), it is replaced."""
         stale_cmd = "echo 'SLOWAVE MANDATORY: old instructions'"
-        cfg = {"hooks": {"UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": stale_cmd}]}]}}
+        cfg = {
+            "hooks": {
+                "UserPromptSubmit": [
+                    {"matcher": "", "hooks": [{"type": "command", "command": stale_cmd}]}
+                ]
+            }
+        }
         cfg2, changed = _patch_claude_code_hooks(cfg)
         assert changed is True
         # Stale command should be gone
@@ -145,14 +163,18 @@ class TestPatchClaudeCodeHooks:
         assert stale_cmd not in cmds
         # Current command should be present
         from slowave.cli.setup import _USER_PROMPT_CMD
+
         assert any(_USER_PROMPT_CMD in c for c in cmds)
 
     def test_idempotent_with_current_hook_command(self):
         """If hook already has the exact current command, no change."""
-        from slowave.cli.setup import _USER_PROMPT_CMD, _STOP_CMD
+        from slowave.cli.setup import _STOP_CMD, _USER_PROMPT_CMD
+
         cfg = {
             "hooks": {
-                "UserPromptSubmit": [{"matcher": "", "hooks": [{"type": "command", "command": _USER_PROMPT_CMD}]}],
+                "UserPromptSubmit": [
+                    {"matcher": "", "hooks": [{"type": "command", "command": _USER_PROMPT_CMD}]}
+                ],
                 "Stop": [{"matcher": "", "hooks": [{"type": "command", "command": _STOP_CMD}]}],
             }
         }
@@ -163,6 +185,7 @@ class TestPatchClaudeCodeHooks:
 # ===========================================================================
 # _inject_block
 # ===========================================================================
+
 
 class TestInjectBlock:
     def test_creates_new_file(self, tmp_path):
@@ -181,7 +204,9 @@ class TestInjectBlock:
 
     def test_updates_stale_v1_block(self, tmp_path):
         target = tmp_path / "CLAUDE.md"
-        old = "<!-- slowave-lifecycle-start v1 -->\nold content\n<!-- slowave-lifecycle-end v1 -->\n"
+        old = (
+            "<!-- slowave-lifecycle-start v1 -->\nold content\n<!-- slowave-lifecycle-end v1 -->\n"
+        )
         target.write_text(old, encoding="utf-8")
         changed = _inject_block(target, _lifecycle_block("claude-code"))
         assert changed is True
@@ -216,6 +241,7 @@ class TestInjectBlock:
 # ===========================================================================
 # _write_json + _backup_file
 # ===========================================================================
+
 
 class TestWriteJsonBackup:
     def test_backup_created_before_overwrite(self, tmp_path):
@@ -284,6 +310,7 @@ class TestInjectBlockBackup:
 # ===========================================================================
 # _read_json
 # ===========================================================================
+
 
 class TestReadJson:
     def test_returns_empty_dict_for_missing_file(self, tmp_path):
@@ -373,7 +400,9 @@ class TestCleanupRemoveMcpConfigs:
         cursor_dir.mkdir()
         cfg_path = cursor_dir / "mcp.json"
         cfg_path.write_text(
-            json.dumps({"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}, "other": {}}}),
+            json.dumps(
+                {"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}, "other": {}}}
+            ),
             encoding="utf-8",
         )
 
@@ -388,7 +417,9 @@ class TestCleanupRemoveMcpConfigs:
         cursor_dir = fake_home / ".cursor"
         cursor_dir.mkdir()
         cfg_path = cursor_dir / "mcp.json"
-        original = json.dumps({"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}}})
+        original = json.dumps(
+            {"mcpServers": {"slowave": {"command": "/usr/local/bin/slowave-mcp"}}}
+        )
         cfg_path.write_text(original, encoding="utf-8")
 
         _cleanup_mod._remove_mcp_configs(dry_run=True)

@@ -30,4 +30,6 @@ def _isolate_slowave_db(monkeypatch: pytest.MonkeyPatch) -> None:
     and pass db_path directly to SlowaveConfig. This fixture prevents any
     test from accidentally mutating the developer's real ~/.slowave/slowave.db.
     """
-    monkeypatch.setenv("SLOWAVE_DB", os.path.join(tempfile.gettempdir(), f"slowave_test_{os.getpid()}.db"))
+    monkeypatch.setenv(
+        "SLOWAVE_DB", os.path.join(tempfile.gettempdir(), f"slowave_test_{os.getpid()}.db")
+    )

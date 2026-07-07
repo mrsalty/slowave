@@ -5,6 +5,7 @@ old one-schema-per-prototype model, schemas now have their own identity,
 embedding, salience/status, normalized evidence links, prototype associations,
 and relations to other schemas.
 """
+
 from __future__ import annotations
 
 import re
@@ -16,7 +17,6 @@ import numpy as np
 
 from slowave.storage.sqlite_db import SQLiteDB
 from slowave.utils.vec import dumps_json, loads_json, pack_f32, unpack_f32
-
 
 VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archived")
 VALID_RELATIONS = ("reinforces", "refines", "contradicts", "supersedes", "related_to", "part_of")
@@ -55,6 +55,7 @@ class GeneralizationConfig:
           salience, causing recently-formed schemas to behave as if they are
           cross-scope stable when they are not.
     """
+
     # Stage 1: requires BOTH >= 25% of active scopes AND >= 2 distinct scopes.
     # With N active scopes the raw count needed is ceil(0.25 * N), not just 2.
     # Example: 12 active scopes -> needs 3 distinct recalls (3/12 = 0.25), not 2.
@@ -204,8 +205,7 @@ class ScopeRegistry:
                 session_count  = session_count + ?,
                 recall_count   = recall_count  + ?
             """,
-            (scope_id, scope_kind, now, now, session_inc, recall_inc,
-             session_inc, recall_inc),
+            (scope_id, scope_kind, now, now, session_inc, recall_inc, session_inc, recall_inc),
         )
         conn.commit()
 
@@ -382,7 +382,9 @@ class SchemaStore:
         if embedding is not None:
             vec = np.asarray(embedding, dtype=np.float32).reshape(-1)
             if vec.size != self.dim:
-                raise ValueError(f"schema embedding dim mismatch: expected {self.dim}, got {vec.size}")
+                raise ValueError(
+                    f"schema embedding dim mismatch: expected {self.dim}, got {vec.size}"
+                )
             emb_blob = pack_f32(vec)
             emb_dim = self.dim
 
@@ -397,15 +399,27 @@ class SchemaStore:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                primary_proto, content_text, dumps_json(facets or {}),
+                primary_proto,
+                content_text,
+                dumps_json(facets or {}),
                 dumps_json({"tags": [str(t) for t in (tags or [])]}),
-                scope_id, status, float(confidence),
-                float(salience), emb_blob, emb_dim, dumps_json({"ids": supporting}),
-                dumps_json({"ids": contradicting}), 1 if needs_review else 0, now, now,
+                scope_id,
+                status,
+                float(confidence),
+                float(salience),
+                emb_blob,
+                emb_dim,
+                dumps_json({"ids": supporting}),
+                dumps_json({"ids": contradicting}),
+                1 if needs_review else 0,
+                now,
+                now,
             ),
         )
-        sid = int(cur.lastrowid)
-        conn.execute("INSERT INTO schemas_fts (rowid, content_text) VALUES (?, ?)", (sid, content_text))
+        sid = int(cur.lastrowid or 0)
+        conn.execute(
+            "INSERT INTO schemas_fts (rowid, content_text) VALUES (?, ?)", (sid, content_text)
+        )
         for pid in proto_ids:
             conn.execute(
                 "INSERT INTO schema_prototype_map (schema_id, prototype_id, weight) VALUES (?, ?, ?) "
@@ -441,10 +455,7 @@ class SchemaStore:
         if not valid_statuses:
             return None
         ph = ",".join(["?"] * len(valid_statuses))
-        sql = (
-            "SELECT id, content_text FROM schemas "
-            f"WHERE status IN ({ph}) "
-        )
+        sql = "SELECT id, content_text FROM schemas " f"WHERE status IN ({ph}) "
         args: list[Any] = list(valid_statuses)
         if scope_id is None:
             sql += "AND scope_id IS NULL "
@@ -492,7 +503,9 @@ class SchemaStore:
         def merge_ids(current_json: str, extra: list[int] | None) -> list[int]:
             payload = loads_json(current_json)
             current = payload.get("ids", []) if isinstance(payload, dict) else []
-            merged = list(dict.fromkeys([int(x) for x in current] + [int(x) for x in (extra or [])]))
+            merged = list(
+                dict.fromkeys([int(x) for x in current] + [int(x) for x in (extra or [])])
+            )
             return merged
 
         supporting = merge_ids(row["supporting_episode_ids"], supporting_episode_ids)
@@ -522,10 +535,14 @@ class SchemaStore:
             WHERE id = ?
             """,
             (
-                float(salience_delta), merged_confidence,
-                dumps_json({"ids": supporting}), dumps_json({"ids": contradicting}),
-                dumps_json(merged_facets), dumps_json({"tags": merged_tags}),
-                int(time.time()), int(schema_id),
+                float(salience_delta),
+                merged_confidence,
+                dumps_json({"ids": supporting}),
+                dumps_json({"ids": contradicting}),
+                dumps_json(merged_facets),
+                dumps_json({"tags": merged_tags}),
+                int(time.time()),
+                int(schema_id),
             ),
         )
         for pid in list(dict.fromkeys(int(p) for p in (prototype_ids or []))):
@@ -582,7 +599,14 @@ class SchemaStore:
             "VALUES (?, ?, ?, ?, ?, ?) "
             "ON CONFLICT(src_schema_id, dst_schema_id, relation) DO UPDATE SET "
             "confidence=excluded.confidence, reason=excluded.reason, created_ts=excluded.created_ts",
-            (int(src_schema_id), int(dst_schema_id), relation, float(confidence), reason, int(time.time())),
+            (
+                int(src_schema_id),
+                int(dst_schema_id),
+                relation,
+                float(confidence),
+                reason,
+                int(time.time()),
+            ),
         )
         conn.commit()
 
@@ -615,7 +639,9 @@ class SchemaStore:
         facets = loads_json(row["facets_json"])
         if not isinstance(facets, dict):
             facets = {}
-        facets["cross_scope_reinforcement_count"] = int(facets.get("cross_scope_reinforcement_count", 0)) + 1
+        facets["cross_scope_reinforcement_count"] = (
+            int(facets.get("cross_scope_reinforcement_count", 0)) + 1
+        )
         conn.execute(
             "UPDATE schemas SET facets_json = ?, last_updated_ts = ? WHERE id = ?",
             (dumps_json(facets), int(time.time()), int(schema_id)),
@@ -833,7 +859,11 @@ class SchemaStore:
         # the kind_bonus in compute_stage can fire even when stage-1 gating
         # blocks cross-kind admission via the recall path.
         distinct_scope_kinds = len(
-            {str(r["scope_kind"]) for r in recall_rows if str(r["scope_id"]) in counted_scopes and r["scope_kind"]}
+            {
+                str(r["scope_kind"])
+                for r in recall_rows
+                if str(r["scope_id"]) in counted_scopes and r["scope_kind"]
+            }
             | {str(r["scope_kind"]) for r in evidence_rows if r["scope_kind"]}
         )
         distinct_sessions = len(
@@ -848,16 +878,17 @@ class SchemaStore:
         reinforcement_count = int(facets.get("cross_scope_reinforcement_count", 0))
         distinct_scopes += reinforcement_count // 2  # integer, conservative
 
-        total_active_scopes, total_active_scope_kinds = \
-            self.scope_registry.active_counts(self._gen_cfg.active_window_days)
+        total_active_scopes, total_active_scope_kinds = self.scope_registry.active_counts(
+            self._gen_cfg.active_window_days
+        )
 
         scope_breadth_pct = (
-            round(distinct_scopes / total_active_scopes, 4)
-            if total_active_scopes > 0 else 0.0
+            round(distinct_scopes / total_active_scopes, 4) if total_active_scopes > 0 else 0.0
         )
         scope_kind_breadth_pct = (
             round(distinct_scope_kinds / total_active_scope_kinds, 4)
-            if total_active_scope_kinds > 0 else 0.0
+            if total_active_scope_kinds > 0
+            else 0.0
         )
 
         new_stage = self._gen_cfg.compute_stage(
@@ -916,7 +947,9 @@ class SchemaStore:
         by_id = {int(r["id"]): r for r in rows}
         return [self._row_to_schema(by_id[i]) for i in ids if i in by_id]
 
-    def get_by_prototypes(self, prototype_ids: Iterable[int], *, include_inactive: bool = False) -> list[Schema]:
+    def get_by_prototypes(
+        self, prototype_ids: Iterable[int], *, include_inactive: bool = False
+    ) -> list[Schema]:
         ids = list(dict.fromkeys(int(i) for i in prototype_ids))
         if not ids:
             return []
@@ -963,7 +996,9 @@ class SchemaStore:
         rows = conn.execute(sql, tuple(args)).fetchall()
         return [self._row_to_schema(r) for r in rows]
 
-    def search_fts(self, query: str, limit: int = 20, *, include_inactive: bool = False) -> list[int]:
+    def search_fts(
+        self, query: str, limit: int = 20, *, include_inactive: bool = False
+    ) -> list[int]:  # type: ignore[valid-type]
         conn = self.db.connect()
         try:
             if include_inactive:
@@ -990,7 +1025,7 @@ class SchemaStore:
         limit: int = 20,
         scope_id: str | None = None,
         include_inactive: bool = False,
-    ) -> list[tuple[int, float]]:
+    ) -> list[tuple[int, float]]:  # type: ignore[valid-type]
         q = np.asarray(query, dtype=np.float32).reshape(-1)
         qn = float(np.linalg.norm(q)) + 1e-12
         conn = self.db.connect()
@@ -1018,7 +1053,7 @@ class SchemaStore:
         episode_ids: Iterable[int],
         *,
         include_inactive: bool = True,
-    ) -> dict[int, list[tuple[int, str, float, int]]]:
+    ) -> dict[int, list[tuple[int, str, float, int]]]:  # type: ignore[valid-type]
         """Reverse index: episode_id -> list of (schema_id, status, confidence, last_updated_ts).
 
         Used by the schemas-as-priors retrieval step: a matched-query schema
@@ -1053,9 +1088,14 @@ class SchemaStore:
             status = str(r["status"])
             if not include_inactive and status not in ("active", "needs_review"):
                 continue
-            out.setdefault(eid, []).append((
-                int(r["id"]), status, float(r["confidence"]), int(r["last_updated_ts"]),
-            ))
+            out.setdefault(eid, []).append(
+                (
+                    int(r["id"]),
+                    status,
+                    float(r["confidence"]),
+                    int(r["last_updated_ts"]),
+                )
+            )
 
         # Legacy JSON path: scan schemas with non-empty supporting_episode_ids.
         # Cheap enough for MVP scale (~thousands of schemas) and avoids a
@@ -1084,7 +1124,7 @@ class SchemaStore:
                         out.setdefault(eid_i, []).append(entry)
         return out
 
-    def evidence_for_schema(self, schema_id: int, *, limit: int = 10) -> list[SchemaEvidence]:
+    def evidence_for_schema(self, schema_id: int, *, limit: int = 10) -> list[SchemaEvidence]:  # type: ignore[valid-type]
         conn = self.db.connect()
         rows = conn.execute(
             "SELECT * FROM schema_evidence WHERE schema_id = ? ORDER BY weight DESC LIMIT ?",
@@ -1185,7 +1225,9 @@ class SchemaStore:
                     "ON CONFLICT(src_schema_id, dst_schema_id, relation) DO UPDATE SET "
                     "confidence=excluded.confidence, reason=excluded.reason, created_ts=excluded.created_ts",
                     (
-                        canonical_id, dupe_id, 1.0,
+                        canonical_id,
+                        dupe_id,
+                        1.0,
                         "exact normalized duplicate archived after merging into canonical schema",
                         now,
                     ),
@@ -1209,7 +1251,10 @@ class SchemaStore:
         ).fetchall()
         active = len(rows)
         unique_keys = {
-            (None if r["scope_id"] is None else str(r["scope_id"]), normalize_schema_text(r["content_text"]))
+            (
+                None if r["scope_id"] is None else str(r["scope_id"]),
+                normalize_schema_text(r["content_text"]),
+            )
             for r in rows
         }
         exact_duplicate_rows = active - len(unique_keys)

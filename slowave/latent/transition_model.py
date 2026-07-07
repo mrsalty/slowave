@@ -18,6 +18,7 @@ class TransitionModelConfig:
     The graph-based model learns transition probabilities P(proto_next|proto_current)
     during consolidation via Hebbian co-occurrence counting.
     """
+
     dim: int
     # Legacy torch params kept for config compatibility but unused
     hidden_dim: int = 128
@@ -38,8 +39,12 @@ class TransitionModel:
     that requires no torch dependency and uses existing graph infrastructure.
     """
 
-    def __init__(self, cfg: TransitionModelConfig, graph: "GraphManager | None" = None,
-                 semantic: "SemanticStore | None" = None):
+    def __init__(
+        self,
+        cfg: TransitionModelConfig,
+        graph: "GraphManager | None" = None,
+        semantic: "SemanticStore | None" = None,
+    ):
         """Initialize graph-based transition model.
 
         Args:
@@ -132,7 +137,7 @@ class TransitionModel:
         rows = conn.execute(
             "SELECT dst_prototype_id, w_transition FROM prototype_edges"
             " WHERE src_prototype_id = ? AND w_transition > 0",
-            (proto_id,)
+            (proto_id,),
         ).fetchall()
 
         if not rows:

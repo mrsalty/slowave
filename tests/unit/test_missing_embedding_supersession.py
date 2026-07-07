@@ -6,6 +6,7 @@ Covers:
   - Engine: remember() must not supersede when candidate_emb is None
     (was defaulting dir_score to DIRECTION_THRESHOLD).
 """
+
 from __future__ import annotations
 
 import os
@@ -19,8 +20,8 @@ from slowave.core.consolidation import Consolidator
 from slowave.core.engine import SlowaveEngine
 from slowave.latent.schema import LatentSchema
 
-
 # ---- Stub encoder / engine factory (same pattern as test_remember_result.py) ----
+
 
 class _StubEncoder:
     """Deterministic encoder seeded by hash(text)."""
@@ -50,6 +51,7 @@ def eng(tmp_path):
 
 
 # ---- Consolidation-path test fixtures ----
+
 
 @pytest.fixture()
 def mock_deps():
@@ -91,6 +93,7 @@ def make_latent_schema(centroid=None, claim="test claim") -> LatentSchema:
 # Consolidation path: _write_latent_schema
 # ---------------------------------------------------------------------------
 
+
 def test_write_latent_schema_falls_back_to_created_on_none_embedding(mock_deps):
     """When _fetch_schema_embedding returns None, return 'created' — not a
     geometric verdict based on a missing (formerly zero) vector."""
@@ -99,8 +102,7 @@ def test_write_latent_schema_falls_back_to_created_on_none_embedding(mock_deps):
 
     # Simulate: _best_related_schema found a related schema (id=7),
     # but _fetch_schema_embedding returns None for it.
-    related = MagicMock(id=7, content_text="old fact", confidence=1.0,
-                        facets={}, scope_id="p:test")
+    related = MagicMock(id=7, content_text="old fact", confidence=1.0, facets={}, scope_id="p:test")
 
     cons = Consolidator(**mock_deps)
 
@@ -125,7 +127,8 @@ def test_write_latent_schema_judge_called_when_embedding_present(mock_deps):
     mock_deps["schemas"].create.return_value = 99
     mock_deps["schemas"].last_create_reinforced_existing_id = None
     mock_deps["geometric_judge"].judge.return_value = MagicMock(
-        verdict="unrelated", time_delta_s=0,
+        verdict="unrelated",
+        time_delta_s=0,
     )
 
     related = MagicMock(id=7, content_text="old fact", confidence=1.0, facets={}, scope_id="p:test")
@@ -148,6 +151,7 @@ def test_write_latent_schema_judge_called_when_embedding_present(mock_deps):
 # ---------------------------------------------------------------------------
 # Engine path: remember() candidate loop
 # ---------------------------------------------------------------------------
+
 
 def test_remember_dir_score_is_zero_when_candidate_emb_none(eng):
     """When candidate_emb is None in remember()'s supersession loop,
