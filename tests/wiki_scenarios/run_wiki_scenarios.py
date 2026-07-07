@@ -5,7 +5,7 @@ Usage:
   python tests/wiki_scenarios/run_wiki_scenarios.py
   python tests/wiki_scenarios/run_wiki_scenarios.py --ablation full --limit 4
   python tests/wiki_scenarios/run_wiki_scenarios.py --ablations full no_salience no_graph
-  python tests/wiki_scenarios/run_wiki_scenarios.py --out-dir results/
+  python tests/wiki_scenarios/run_wiki_scenarios.py --out-dir data/wiki_scenarios/
 """
 from __future__ import annotations
 
@@ -45,7 +45,7 @@ def main() -> None:
                         help="Max scenarios to run (0 = all 15)")
     parser.add_argument("--tau-days", type=float, default=7.0,
                         help="Salience decay half-life in days")
-    parser.add_argument("--out-dir", default="results",
+    parser.add_argument("--out-dir", default="data/wiki_scenarios",
                         help="Output directory for JSON files")
     args = parser.parse_args()
 
