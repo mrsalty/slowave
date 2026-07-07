@@ -288,12 +288,6 @@ def print_report(results: list[ScenarioResult]) -> None:
         print(f"  recall: mean={sum(recalls)/len(recalls)*1000:.1f}ms  "
               f"p50={recalls[len(recalls)//2]*1000:.1f}ms  max={recalls[-1]*1000:.1f}ms")
     print()
-    stale_misses = [r for r in valid if r.stale][:5]
-    if stale_misses:
-        print(" Sample stale misses (anchor pull):")
-        for r in stale_misses:
-            print(f"  [{r.attribute}/{r.drift_pattern}] {r.pre_drift_value}→{r.post_drift_value}")
-            print(f"    Recalled: {r.hypothesis[:100]}")
     print()
     print("=" * 70)
 

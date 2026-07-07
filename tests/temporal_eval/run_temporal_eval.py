@@ -106,7 +106,7 @@ def main():
         all_results[abl] = run_ablation(abl, tau_days=args.tau_days, shared_enc=enc)
     print_report(all_results)
 
-    out = args.out or (f"data/temporal_eval_{datetime.now().strftime('%Y%m%d_%H%M%S')}.json" if args.compare_all else "")
+    out = args.out or (f"data/temporal_eval/{datetime.now().strftime('%Y%m%d_%H%M%S')}.json" if args.compare_all else "")
     if out:
         Path(out).parent.mkdir(parents=True, exist_ok=True)
         payload={"meta":{"created_at":datetime.now().isoformat(),

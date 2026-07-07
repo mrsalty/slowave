@@ -493,46 +493,6 @@ def print_report(results: list[QuestionResult], consolidate: bool) -> None:
               f"p50={all_recall_s[len(all_recall_s)//2]*1000:.1f}ms  "
               f"max={all_recall_s[-1]*1000:.1f}ms")
 
-    # Cost / storage summary — the columns Mem0 publishes and we don't.
-    # Zero in latent / no-LLM mode, real numbers when the LLM is on.
-    print()
-    print(" Cost summary (per question)")
-    valid = [r for r in results if not r.error]
-    if valid:
-        calls = [r.n_llm_calls for r in valid]
-        prompt = [r.llm_prompt_tokens for r in valid]
-        compl = [r.llm_completion_tokens for r in valid]
-        total = [p + c for p, c in zip(prompt, compl)]
-        sizes_mb = [r.db_size_bytes / (1024 * 1024) for r in valid]
-        print(f"  llm_calls:       mean={sum(calls)/len(calls):.1f}   max={max(calls)}   total={sum(calls)}")
-        print(f"  prompt_tokens:   mean={sum(prompt)/len(prompt):.0f}    total={sum(prompt)}")
-        print(f"  completion_tok:  mean={sum(compl)/len(compl):.0f}    total={sum(compl)}")
-        print(f"  total tokens/q:  mean={sum(total)/len(total):.0f}    total={sum(total)}")
-        print(f"  db size:         mean={sum(sizes_mb)/len(sizes_mb):.2f}MB   max={max(sizes_mb):.2f}MB")
-        # Rough cost estimate for two common API points.
-        total_tokens_all = sum(total)
-        n_q = max(1, len(valid))
-        # gpt-4o-mini ~ $0.15/$0.60 per Mtok in/out; assume 80/20 split as a rough average
-        gpt4mini_cost = (sum(prompt) * 0.15 + sum(compl) * 0.60) / 1_000_000
-        haiku_cost = (sum(prompt) * 1.00 + sum(compl) * 5.00) / 1_000_000
-        print(f"  est. cost (gpt-4o-mini):    ${gpt4mini_cost:.4f}   (${gpt4mini_cost/n_q*1000:.2f} / 1K queries)")
-        print(f"  est. cost (claude-haiku):   ${haiku_cost:.4f}   (${haiku_cost/n_q*1000:.2f} / 1K queries)")
-        if sum(calls) == 0:
-            print("  ↳ ZERO LLM CALLS — brain-only mode. All cost numbers are $0.")
-
-    # top misses
-    print()
-    print(" Top misses (first 5 per category with hit=False):")
-    for cat, rs in sorted(cats.items()):
-        misses = [r for r in rs if not r.hit and not r.error][:3]
-        if misses:
-            print(f"  [{cat}]")
-            for r in misses:
-                print(f"    Q: {r.question[:90]}")
-                print(f"    A: {r.expected_answer[:80]}")
-                print(f"    H: {r.hypothesis[:80]}")
-                print(f"    ks={r.keyword_score}")
-
     print()
     print("=" * 70)
 
@@ -779,20 +739,11 @@ def main() -> None:
                 no_multi_scale=args.no_multi_scale,
             )
             elapsed = time.time() - t0
-            status = "HIT" if r.hit else "miss"
+            status = "HIT " if r.hit else "miss"
             err = f" ERROR:{r.error[:60]}" if r.error else ""
-            comp = ""
-            if r.component_scores:
-                comp = (
-                    f" comp[s={r.component_scores.get('schemas', 0):.2f},"
-                    f"e={r.component_scores.get('episodes', 0):.2f},"
-                    f"h={r.component_scores.get('hybrid', 0):.2f}]"
-                )
             print(
                 f"[{i+1:>3}/{len(selected)}] {r.question_type:<30} "
-                f"{status}  ks={r.keyword_score:.2f}  "
-                f"ingest={r.latency_ingest_s:.1f}s recall={r.latency_recall_s*1000:.0f}ms  "
-                f"sch={r.n_schemas} epi={r.n_episodes}{comp}{err}",
+                f"{status}  ks={r.keyword_score:.2f}  ingest={r.latency_ingest_s:.1f}s{err}",
                 flush=True,
             )
             results.append(r)
