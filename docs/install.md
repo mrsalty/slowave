@@ -1,36 +1,49 @@
-# Slowave setup
+# Install & Setup
 
-The complete reference for `slowave setup` — what it does, what it touches, and how to undo it.
+The complete reference for installing, setting up, and uninstalling Slowave — what `slowave setup` does, what files it touches, and how to undo it.
 
----
+## Installation
 
-## The process
+### Global setup
 
-Two steps, one command each:
+Install Slowave and configure every detected client in one go:
 
 ```bash
-# 1. Install
 pipx install slowave
 
-# 2. Setup
-slowave setup
+# or
+
+brew tap mrsalty/slowave https://github.com/mrsalty/slowave
+brew install slowave
 ```
 
-That's it. `slowave setup` detects your clients, wires MCP configs, injects lifecycle instructions, installs the daemon and worker as system services, and starts everything automatically. Run it once and forget it.
-
-Idempotent — safe to re-run. Use `--dry-run` to preview.
-
-Claude Desktop and Cursor need one manual paste after setup. `slowave setup` prints the exact text and destination.
-
-Verify with:
+Then wire everything up:
 
 ```bash
-slowave doctor
+slowave setup --dry-run   # preview what will change
+slowave setup             # apply: MCP configs, lifecycle instructions, hooks, services
+slowave doctor            # verify: daemon health, client detection
 ```
 
----
+`slowave setup` is idempotent and safe to run multiple times. The HTTP MCP daemon and background consolidation worker start automatically as system services.
 
-## What setup does
+Claude Desktop and Cursor require one manual paste after setup because their instruction surfaces cannot be modified programmatically. `slowave setup` prints the exact text and path.
+### Per-client setup
+
+To configure a single client, or to find client-specific details:
+
+| Client | Integration doc |
+|---|---|
+| Claude Code | [integrations/claude-code/README.md](integrations/claude-code/README.md) |
+| Claude Desktop ¹ | [integrations/claude-desktop/README.md](integrations/claude-desktop/README.md) |
+| Cline | [integrations/cline/README.md](integrations/cline/README.md) |
+| Cursor ¹ | [integrations/cursor/README.md](integrations/cursor/README.md) |
+| OpenCode | [integrations/opencode/README.md](integrations/opencode/README.md) |
+| Windsurf | [integrations/windsurf/README.md](integrations/windsurf/README.md) |
+
+¹ requires one manual paste after setup
+
+## What `slowave setup` does
 
 | Action | Clients | Detail |
 |---|---|---|
@@ -279,7 +292,7 @@ This is the exact block `slowave setup` injects into each client's instruction s
 <summary>Click to expand</summary>
 
 ```md
-<!-- slowave-lifecycle-start v3 -->
+<!-- slowave-lifecycle-start v4 -->
 ## MANDATORY — Slowave memory (5-verb cognitive cycle)
 
 You are the reasoning module; Slowave is the memory module. Give it honest signals — what you encoded, what helped, what was noise, the outcome — and trust consolidation to do the rest. Do not respond until step 1 completes. Do not end the task without step 5.
@@ -321,7 +334,7 @@ Call whenever activate/recall returned memories — not only when you used some.
 `slowave_commit(scope="project:<basename(cwd)>", outcome="success|partial|failure")`. Non-negotiable. Scope must match activate; outcome honest (`partial` if anything was incomplete). Skipping = no episodes form; the session lingers until the idle reaper closes it with no outcome.
 
 Anti-patterns: skip activate · `remember` without `scope` · bundle facts in one call · context-dependent phrasing · re-encode facts already surfaced · leave a superseded fact unflagged · reinforce only hits and never penalize noise · default feedback to `useful` · invent memory IDs · report `success` when partial/failed · skip reinforce or commit · use deleted tools (`slowave_context`, `slowave_session_start/end`, `slowave_event`, `slowave_retrieval_feedback`, `slowave_context_feedback`).
-<!-- slowave-lifecycle-end v3 -->
+<!-- slowave-lifecycle-end v4 -->
 ```
 
 </details>
