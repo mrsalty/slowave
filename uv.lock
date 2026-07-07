@@ -1638,7 +1638,7 @@ wheels = [
 
 [[package]]
 name = "slowave"
-version = "0.5.10"
+version = "0.12.1"
 source = { editable = "." }
 dependencies = [
     { name = "click" },
