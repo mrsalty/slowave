@@ -55,9 +55,7 @@ def test_reap_old_open_session():
         open_sessions = conn.execute(
             "SELECT COUNT(*) as cnt FROM sessions WHERE ended_ts IS NULL"
         ).fetchone()
-        assert (
-            open_sessions["cnt"] == 0
-        ), "No sessions should be open after reaping with timeout=0"
+        assert open_sessions["cnt"] == 0, "No sessions should be open after reaping with timeout=0"
         conn.close()
 
 
@@ -105,9 +103,7 @@ def test_preserve_fresh_session():
         open_sessions = conn.execute(
             "SELECT COUNT(*) as cnt FROM sessions WHERE ended_ts IS NULL"
         ).fetchone()
-        assert (
-            open_sessions["cnt"] >= 1
-        ), "Fresh session should still be open after reaping"
+        assert open_sessions["cnt"] >= 1, "Fresh session should still be open after reaping"
         conn.close()
 
 

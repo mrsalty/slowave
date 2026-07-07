@@ -4,6 +4,7 @@ Slowave's memory model is generic. Scope strings encode context such as
 ``project:slowave``, ``domain:cooking``, ``relationship:alex`` or ``household``.
 The format is ``<kind>:<value>`` or just ``<value>`` (kind resolves to ``generic``).
 """
+
 from __future__ import annotations
 
 

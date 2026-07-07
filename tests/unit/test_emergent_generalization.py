@@ -4,10 +4,15 @@ Replicates the Karpathy experiment's central finding (§8.1): storing atomic
 constraints from distinct conceptual categories -> consolidation -> geometrically
 separated prototypes emerge -- without procedural machinery.
 """
+
 from __future__ import annotations
-import os, tempfile
+
+import os
+import tempfile
+
 import numpy as np
 import pytest
+
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 
@@ -45,8 +50,11 @@ class _CategoryStubEncoder:
         t = text.lower()
         ka = {"analyze", "consider", "verify", "think", "assumptions"}
         kb = {"simple", "simplest", "unnecessary", "readability", "cleverness"}
-        base = self._ca if any(k in t for k in ka) else (
-            self._cb if any(k in t for k in kb) else self._ca + 0.5 * self._cb)
+        base = (
+            self._ca
+            if any(k in t for k in ka)
+            else (self._cb if any(k in t for k in kb) else self._ca + 0.5 * self._cb)
+        )
         if base is not self._ca and base is not self._cb:
             base = base / np.linalg.norm(base)
         seed = abs(hash(text)) % (2**31)
@@ -131,7 +139,7 @@ class TestEmergentPrototypeGeneralization:
                     text = str(r["content_text"])
                 for pfx in ("Remember: ", "User: ", "Assistant: "):
                     if text.startswith(pfx):
-                        text = text[len(pfx):]
+                        text = text[len(pfx) :]
                         break
                 text = text.strip().lower()
                 for i, known in enumerate(ALL_RULES):
@@ -153,6 +161,7 @@ class TestEmergentPrototypeGeneralization:
         conn = self.eng.db.connect()
         rows = conn.execute("SELECT centroid, dim FROM semantic_prototypes ORDER BY id").fetchall()
         from slowave.utils.vec import unpack_f32
+
         cents = [unpack_f32(r["centroid"], int(r["dim"])) for r in rows]
         # Deduplicate near-identical centroids from multi-scale duplicates
         distinct = []
@@ -161,7 +170,11 @@ class TestEmergentPrototypeGeneralization:
                 distinct.append(c)
         if len(distinct) < 2:
             pytest.skip("Fewer than 2 distinct centroids")
-        mx = max(_cosine(distinct[i], distinct[j]) for i in range(len(distinct)) for j in range(i + 1, len(distinct)))
+        mx = max(
+            _cosine(distinct[i], distinct[j])
+            for i in range(len(distinct))
+            for j in range(i + 1, len(distinct))
+        )
         # With differentiated CA3 (0.85) / CA1 (0.55) thresholds, fine and
         # coarse prototypes of the same concept may have higher cosine.
         # The key invariant: they are not identical (dedup removed near-duplicates).
@@ -178,7 +191,9 @@ class TestEmergentPrototypeGeneralization:
         self.eng.consolidate_once()
         # Verify no procedural table — dropped in Phase 1 P1
         conn = self.eng.db.connect()
-        r = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='procedural_memories'").fetchone()
+        r = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='procedural_memories'"
+        ).fetchone()
         assert r is None, "procedural_memories table should be dropped"
 
     def test_no_prototypes_before(self) -> None:
@@ -189,7 +204,11 @@ class TestEmergentPrototypeGeneralization:
         enc = _CategoryStubEncoder(_DIM)
         ea = np.stack([enc.encode(r) for r in CATEGORY_A])
         eb = np.stack([enc.encode(r) for r in CATEGORY_B])
-        ia = float(np.mean([_cosine(ea[i], ea[j]) for i in range(len(ea)) for j in range(i + 1, len(ea))]))
-        ib = float(np.mean([_cosine(eb[i], eb[j]) for i in range(len(eb)) for j in range(i + 1, len(eb))]))
+        ia = float(
+            np.mean([_cosine(ea[i], ea[j]) for i in range(len(ea)) for j in range(i + 1, len(ea))])
+        )
+        ib = float(
+            np.mean([_cosine(eb[i], eb[j]) for i in range(len(eb)) for j in range(i + 1, len(eb))])
+        )
         cr = float(np.mean([_cosine(ea[i], eb[j]) for i in range(len(ea)) for j in range(len(eb))]))
         assert ia > cr + 0.1 and ib > cr + 0.1, f"ia={ia:.3f} ib={ib:.3f} cr={cr:.3f}"

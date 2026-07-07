@@ -3,6 +3,7 @@
 Covers the consolidation pipeline before it is extracted into a standalone
 ConsolidationService. Uses a stub encoder so tests run without model weights.
 """
+
 from __future__ import annotations
 
 import os
@@ -13,10 +14,10 @@ import pytest
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 
-
 # ---------------------------------------------------------------------------
 # Shared helpers
 # ---------------------------------------------------------------------------
+
 
 class _StubEncoder:
     def __init__(self, dim: int = 32):
@@ -63,6 +64,7 @@ def _run_session(eng: SlowaveEngine, n_events: int = 4) -> str:
 # ---------------------------------------------------------------------------
 # consolidate_once()
 # ---------------------------------------------------------------------------
+
 
 def test_consolidate_once_on_empty_db_does_not_crash(eng):
     result = eng.consolidate_once()
@@ -140,6 +142,7 @@ def test_consolidate_once_with_memories_creates_schemas(eng):
 # ---------------------------------------------------------------------------
 # decay_schemas()
 # ---------------------------------------------------------------------------
+
 
 def test_decay_schemas_returns_stats_dict(eng):
     result = eng.decay_schemas(idle_days=30.0, dry_run=True)

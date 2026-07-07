@@ -5,9 +5,11 @@ cluster's own texts, penalising theme-defining terms and promoting
 one-off noise. The fix: pass a global background corpus so IDF
 reflects global rarity, not intra-cluster commonality.
 """
+
 from __future__ import annotations
 
 import pytest
+
 from slowave.latent.schema import _build_lexical_signature
 
 

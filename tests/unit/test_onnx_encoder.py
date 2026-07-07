@@ -12,6 +12,7 @@ class TestONNXTextEncoder:
         """Lazy-load encoder on first use."""
         try:
             from slowave.symbolic.onnx_encoder import ONNXTextEncoder
+
             return ONNXTextEncoder()
         except ImportError as e:
             pytest.skip(f"ONNX Runtime not available: {e}")
@@ -59,7 +60,7 @@ class TestONNXTextEncoder:
         """Test that semantically similar texts have high cosine similarity."""
         text1 = "dog"
         text2 = "puppy"  # Semantically similar
-        text3 = "car"    # Dissimilar
+        text3 = "car"  # Dissimilar
 
         emb1 = encoder.encode(text1)
         emb2 = encoder.encode(text2)
@@ -100,7 +101,7 @@ class TestONNXTextEncoder:
             "Hello, world!",
             "What's up?",
             "email@example.com",
-            "\"quoted\" text",
+            '"quoted" text',
             "café résumé naïve",  # Accented characters
         ]
         embeddings = encoder.encode_many(texts)

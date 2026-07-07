@@ -21,6 +21,7 @@ on a prototype reachable through high-weight edges from a strongly
 cosine-matched prototype. This is the only mechanism in the system
 that can solve multi-hop / cue-completion queries.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -154,8 +155,7 @@ class RetrievalPipeline:
         ep_scores, ep_ids = self.episodic.search(query_embedding, self.cfg.episodic_top_k)
         ep_ids = [int(i) for i in ep_ids if int(i) != -1]
         ep_score_by_id: dict[int, float] = {
-            int(i): float(s)
-            for i, s in zip(ep_ids, ep_scores[: len(ep_ids)], strict=False)
+            int(i): float(s) for i, s in zip(ep_ids, ep_scores[: len(ep_ids)], strict=False)
         }
 
         # Stage 9: fine + coarse prototype seeds. Fine (CA3-like) gives
@@ -164,15 +164,16 @@ class RetrievalPipeline:
         # from both later receive a co-occurrence bonus.
         if self.cfg.use_multi_scale:
             p_scores, p_ids = self.semantic.search_by_scale(
-                query_embedding, scale="fine", top_k=self.cfg.semantic_top_k,
+                query_embedding,
+                scale="fine",
+                top_k=self.cfg.semantic_top_k,
             )
         else:
             p_scores, p_ids = self.semantic.search(query_embedding, self.cfg.semantic_top_k)
         p_ids = [int(i) for i in p_ids if int(i) != -1]
         proto_seed = self.semantic.get_many(p_ids)
         seed_activation: dict[int, float] = {
-            int(p): float(s)
-            for p, s in zip(p_ids, p_scores[: len(p_ids)], strict=False)
+            int(p): float(s) for p, s in zip(p_ids, p_scores[: len(p_ids)], strict=False)
         }
 
         # Stage 9 — coarse-scale seed contributes its own prototypes to
@@ -182,7 +183,8 @@ class RetrievalPipeline:
         coarse_episodes: set[int] = set()
         if self.cfg.use_multi_scale:
             c_scores, c_ids = self.semantic.search_by_scale(
-                query_embedding, scale="coarse",
+                query_embedding,
+                scale="coarse",
                 top_k=self.cfg.coarse_semantic_top_k,
             )
             c_ids = [int(i) for i in c_ids if int(i) != -1]
@@ -194,7 +196,8 @@ class RetrievalPipeline:
             # co-occurrence bonus has something to match against.
             if c_ids:
                 harvested = self.semantic.episodes_for_prototypes(
-                    c_ids, per_prototype=self.cfg.episodes_per_prototype,
+                    c_ids,
+                    per_prototype=self.cfg.episodes_per_prototype,
                 )
                 for eps in harvested.values():
                     for eid in eps:
@@ -215,9 +218,13 @@ class RetrievalPipeline:
             and getattr(self.transition_model, "trained_steps", 0) > 0
         ):
             try:
-                pred = self.transition_model.predict(
-                    np.asarray(query_embedding, dtype=np.float32).reshape(1, -1)
-                ).reshape(-1).astype(np.float32)
+                pred = (
+                    self.transition_model.predict(
+                        np.asarray(query_embedding, dtype=np.float32).reshape(1, -1)
+                    )
+                    .reshape(-1)
+                    .astype(np.float32)
+                )
                 pred_norm = float(np.linalg.norm(pred))
             except Exception:
                 pred = None
@@ -228,8 +235,7 @@ class RetrievalPipeline:
                 # prediction that barely moved adds nothing new.
                 q_norm = float(np.linalg.norm(query_embedding) + 1e-12)
                 q_pred_sim = float(
-                    np.asarray(query_embedding, dtype=np.float32).reshape(-1).dot(pred)
-                    / q_norm
+                    np.asarray(query_embedding, dtype=np.float32).reshape(-1).dot(pred) / q_norm
                 )
                 predictive_seed_used = True
                 # Discounted episode cosine via the predicted next-state.
@@ -282,9 +288,7 @@ class RetrievalPipeline:
             # Worst cosine top-k score sets the ceiling: graph-harvested
             # episodes can compete only *below* this score, so they fill
             # gaps rather than displacing real cosine candidates.
-            cosine_floor = (
-                min(ep_score_by_id.values()) if ep_score_by_id else 0.0
-            )
+            cosine_floor = min(ep_score_by_id.values()) if ep_score_by_id else 0.0
             ceiling = float(self.cfg.spread_score_ceiling) * cosine_floor
             harvested = self.semantic.episodes_for_prototypes(
                 spread_activation.keys(),
@@ -354,7 +358,7 @@ class RetrievalPipeline:
                 and self.cfg.multi_scale_co_occurrence_bonus > 0.0
                 and int(m.id) in coarse_episodes
             ):
-                score *= (1.0 + self.cfg.multi_scale_co_occurrence_bonus)
+                score *= 1.0 + self.cfg.multi_scale_co_occurrence_bonus
             return score
 
         episodes_sorted = sorted(episodes, key=_final_score, reverse=True)
@@ -519,8 +523,6 @@ class RetrievalPipeline:
             protos = self.semantic.get_many(activation.keys())
             for p in protos:
                 gate = (1.0 + float(p.support_count)) ** 0.5
-                activation[int(p.id)] = activation.get(int(p.id), 0.0) * (
-                    1.0 + 0.1 * gate
-                )
+                activation[int(p.id)] = activation.get(int(p.id), 0.0) * (1.0 + 0.1 * gate)
 
         return activation

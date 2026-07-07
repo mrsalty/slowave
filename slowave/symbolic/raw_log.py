@@ -70,7 +70,7 @@ class RawLog:
                 "VALUES (?, ?, ?, ?, ?, NULL, NULL)",
                 (str(session_id), int(ts), str(type), str(content), dumps_json(meta)),
             )
-        event_id = int(cur.lastrowid)
+        event_id = int(cur.lastrowid or 0)
         conn.execute(
             "INSERT INTO raw_events_fts (rowid, content) VALUES (?, ?)",
             (event_id, content),

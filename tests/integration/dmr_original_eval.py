@@ -13,6 +13,7 @@ records, each with prior MSC dialogs and one self-instruct QA pair.
 Important: this harness measures keyword presence in retrieved Slowave context.
 It does NOT reproduce the published MemGPT/Zep LLM-judge protocol yet.
 """
+
 from __future__ import annotations
 
 import argparse
@@ -29,7 +30,15 @@ from pathlib import Path
 from typing import Any
 
 logging.basicConfig(level=logging.WARNING)
-for _n in ("sentence_transformers", "transformers", "httpx", "httpcore", "huggingface_hub", "filelock", "tqdm"):
+for _n in (
+    "sentence_transformers",
+    "transformers",
+    "httpx",
+    "httpcore",
+    "huggingface_hub",
+    "filelock",
+    "tqdm",
+):
     logging.getLogger(_n).setLevel(logging.ERROR)
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 os.environ.setdefault("OMP_NUM_THREADS", "1")
@@ -44,19 +53,43 @@ from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
-
 HIT_THRESHOLD = 0.5
 STOP = {
-    "the", "a", "an", "is", "was", "were", "are", "i", "my", "me",
-    "it", "its", "of", "in", "on", "at", "to", "for", "and", "or",
-    "that", "this", "with", "be", "have", "has", "had",
+    "the",
+    "a",
+    "an",
+    "is",
+    "was",
+    "were",
+    "are",
+    "i",
+    "my",
+    "me",
+    "it",
+    "its",
+    "of",
+    "in",
+    "on",
+    "at",
+    "to",
+    "for",
+    "and",
+    "or",
+    "that",
+    "this",
+    "with",
+    "be",
+    "have",
+    "has",
+    "had",
 }
 
 
 def keyword_score(hypothesis: str, answer: str) -> float:
     def tokens(s: str) -> set[str]:
         return {
-            w for w in re.findall(r"[a-z0-9]+", str(s).lower())
+            w
+            for w in re.findall(r"[a-z0-9]+", str(s).lower())
             if w not in STOP and (len(w) > 1 or w.isdigit())
         }
 
@@ -108,15 +141,25 @@ def _extract_qa(record: dict[str, Any]) -> tuple[str, str]:
     return question, answer
 
 
-def run_record(idx: int, record: dict[str, Any], encoder: TextEncoder, *, top_k: int,
-               assignment_threshold: float = 0.65, salience_weight: float = 0.3,
-               no_consolidate: bool = False, no_salience_rerank: bool = False) -> DMROriginalResult:
+def run_record(
+    idx: int,
+    record: dict[str, Any],
+    encoder: TextEncoder,
+    *,
+    top_k: int,
+    assignment_threshold: float = 0.65,
+    salience_weight: float = 0.3,
+    no_consolidate: bool = False,
+    no_salience_rerank: bool = False,
+) -> DMROriginalResult:
     metadata = record.get("metadata") or {}
     q, a = _extract_qa(record)
     # Deterministic seed per record so consolidation sampling is reproducible.
     import hashlib as _hashlib
+
     import numpy as _np
-    _seed = int.from_bytes(_hashlib.sha256(str(idx).encode('utf-8')).digest()[:4], 'big') % (2**31)
+
+    _seed = int.from_bytes(_hashlib.sha256(str(idx).encode("utf-8")).digest()[:4], "big") % (2**31)
     _np.random.seed(_seed)
     with tempfile.NamedTemporaryFile(suffix=".db", delete=False) as f:
         db_path = f.name
@@ -124,7 +167,7 @@ def run_record(idx: int, record: dict[str, Any], encoder: TextEncoder, *, top_k:
         # Apply ablation parameters
         if no_salience_rerank:
             salience_weight = 0.0
-        
+
         cfg = SlowaveConfig(
             db_path=db_path,
             dim=encoder.dim,
@@ -204,7 +247,14 @@ def run_record(idx: int, record: dict[str, Any], encoder: TextEncoder, *, top_k:
                     pass
 
 
-def _save(out_path: Path, results: list[DMROriginalResult], args: argparse.Namespace, *, partial: bool, elapsed_s: float) -> None:
+def _save(
+    out_path: Path,
+    results: list[DMROriginalResult],
+    args: argparse.Namespace,
+    *,
+    partial: bool,
+    elapsed_s: float,
+) -> None:
     hits = sum(r.hit for r in results)
     payload = {
         "meta": {
@@ -236,7 +286,9 @@ def _save(out_path: Path, results: list[DMROriginalResult], args: argparse.Names
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="data/dmr_original/msc_self_instruct.jsonl")
-    parser.add_argument("--out", default="data/dmr_original/runs/slowave_dmr_original_retrieval.json")
+    parser.add_argument(
+        "--out", default="data/dmr_original/runs/slowave_dmr_original_retrieval.json"
+    )
     parser.add_argument("--offset", type=int, default=0)
     parser.add_argument("--limit", type=int, default=0)
     parser.add_argument("--top-k", type=int, default=5)
@@ -253,7 +305,7 @@ def main() -> None:
         dataset_path = REPO_ROOT / dataset_path
     records = [json.loads(line) for line in dataset_path.open()]
     if args.offset:
-        records = records[args.offset:]
+        records = records[args.offset :]
     if args.limit:
         records = records[: args.limit]
     print(f"records={len(records)} dataset={dataset_path}", flush=True)
@@ -271,11 +323,16 @@ def main() -> None:
     start = time.time()
     for local_i, record in enumerate(records):
         idx = args.offset + local_i
-        r = run_record(idx, record, encoder, top_k=args.top_k,
-                      assignment_threshold=args.assignment_threshold,
-                      salience_weight=args.salience_weight if not args.no_salience_rerank else 0.0,
-                      no_consolidate=args.no_consolidate,
-                      no_salience_rerank=args.no_salience_rerank)
+        r = run_record(
+            idx,
+            record,
+            encoder,
+            top_k=args.top_k,
+            assignment_threshold=args.assignment_threshold,
+            salience_weight=args.salience_weight if not args.no_salience_rerank else 0.0,
+            no_consolidate=args.no_consolidate,
+            no_salience_rerank=args.no_salience_rerank,
+        )
         results.append(r)
         if len(results) <= 5 or len(results) % args.save_every == 0:
             hits = sum(x.hit for x in results)

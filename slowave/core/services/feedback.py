@@ -3,12 +3,13 @@
 Previously scattered as methods on SlowaveEngine. Extracted so it can be
 instantiated, tested, and reasoned about independently.
 """
+
 from __future__ import annotations
 
 import dataclasses
 import json
 import time
-from typing import Any
+from typing import Any, Callable
 
 from slowave.core.feedback import FeedbackConfig
 from slowave.core.scope import scope_kind as _scope_kind
@@ -29,7 +30,9 @@ class FeedbackService:
     ):
         self.db = db
         self.schemas = schemas
-        self._parse_procedure_ids = lambda ids: []  # removed Phase 1 P1
+        self._parse_procedure_ids: Callable[[list[str]], list[str]] = (
+            lambda ids: []
+        )  # removed Phase 1 P1
         self.cfg = cfg
 
     # ---- public API --------------------------------------------------------
@@ -78,6 +81,7 @@ class FeedbackService:
             memory_ids = response.get("memory_ids", []) + response.get("procedure_ids", [])
             if self.cfg.persist_response_json:
                 import json
+
                 response_json_text = json.dumps(response)[: self.cfg.max_response_json_chars]
 
         conn.execute(
@@ -91,26 +95,50 @@ class FeedbackService:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                str(retrieval_id), retrieval_type, session_id, scope_id, scope_kind,
-                application, query, goal, task_type,
-                dumps_json(situation or {}), dumps_json(requirements or []),
-                mode, int(limit), len(memory_ids),
-                dumps_json(topics or []), dumps_json(entities or []),
-                dumps_json(cue_terms or []), dumps_json(suppressed or {}),
-                dumps_json(memory_ids), response_json_text, now,
+                str(retrieval_id),
+                retrieval_type,
+                session_id,
+                scope_id,
+                scope_kind,
+                application,
+                query,
+                goal,
+                task_type,
+                dumps_json(situation or {}),
+                dumps_json(requirements or []),
+                mode,
+                int(limit),
+                len(memory_ids),
+                dumps_json(topics or []),
+                dumps_json(entities or []),
+                dumps_json(cue_terms or []),
+                dumps_json(suppressed or {}),
+                dumps_json(memory_ids),
+                response_json_text,
+                now,
             ),
         )
 
         items: list[tuple[str, str, dict[str, Any]]] = []
         if response:
             for schema_item in response.get("schemas", []):
-                items.append(("schema", schema_item.get("id") or schema_item.get("memory_id"), schema_item))
+                items.append(
+                    ("schema", schema_item.get("id") or schema_item.get("memory_id"), schema_item)
+                )
             for ep_item in response.get("episodes", []):
                 items.append(("episode", ep_item.get("id") or ep_item.get("memory_id"), ep_item))
             for event_item in response.get("raw_events", []):
-                items.append(("raw_event", event_item.get("id") or event_item.get("memory_id"), event_item))
+                items.append(
+                    ("raw_event", event_item.get("id") or event_item.get("memory_id"), event_item)
+                )
             for proc_item in response.get("procedures", []):
-                items.append(("procedural_memory", proc_item.get("id") or proc_item.get("memory_id"), proc_item))
+                items.append(
+                    (
+                        "procedural_memory",
+                        proc_item.get("id") or proc_item.get("memory_id"),
+                        proc_item,
+                    )
+                )
 
         if items:
             for rank, (memory_type, memory_id, item) in enumerate(items):
@@ -124,12 +152,17 @@ class FeedbackService:
                         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                         """,
                         (
-                            str(retrieval_id), str(memory_id), retrieval_type,
-                            memory_type, rank,
+                            str(retrieval_id),
+                            str(memory_id),
+                            retrieval_type,
+                            memory_type,
+                            rank,
                             item.get("activation") or item.get("score"),
                             item.get("reason"),
                             str(item.get("content", ""))[: self.cfg.max_memory_content_chars],
-                            item.get("status"), item.get("salience"), item.get("confidence"),
+                            item.get("status"),
+                            item.get("salience"),
+                            item.get("confidence"),
                             1,  # admitted=1: item was selected into context
                             now,
                         ),
@@ -137,7 +170,7 @@ class FeedbackService:
 
         # Phase 1: persist filtered items (admitted=0) so the full candidate pool
         # is queryable. These are items the working-memory gate evaluated but dropped.
-        for f_item in (filtered_items or []):
+        for f_item in filtered_items or []:
             f_memory_id = f_item.get("memory_id")
             if not f_memory_id:
                 continue
@@ -152,12 +185,17 @@ class FeedbackService:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    str(retrieval_id), str(f_memory_id), retrieval_type,
-                    f_item.get("memory_type", "schema"), -1,  # rank=-1 signals filtered
+                    str(retrieval_id),
+                    str(f_memory_id),
+                    retrieval_type,
+                    f_item.get("memory_type", "schema"),
+                    -1,  # rank=-1 signals filtered
                     f_item.get("activation"),
                     f_item.get("reason"),
                     str(f_item.get("content", ""))[: self.cfg.max_memory_content_chars],
-                    f_item.get("status"), f_item.get("salience"), f_item.get("confidence"),
+                    f_item.get("status"),
+                    f_item.get("salience"),
+                    f_item.get("confidence"),
                     0,  # admitted=0: item was filtered by working-memory gate
                     now,
                 ),
@@ -255,9 +293,18 @@ class FeedbackService:
         preserving backward compatibility.
         """
         if not self.cfg.enabled:
-            return {"retrieval_id": retrieval_id, "feedback": feedback, "outcome": outcome, "enabled": False}
+            return {
+                "retrieval_id": retrieval_id,
+                "feedback": feedback,
+                "outcome": outcome,
+                "enabled": False,
+            }
 
-        from slowave.core.feedback import feedback_signal_for, normalize_feedback_label, normalize_outcome_label
+        from slowave.core.feedback import (
+            feedback_signal_for,
+            normalize_feedback_label,
+            normalize_outcome_label,
+        )
 
         try:
             fb_label = normalize_feedback_label(feedback)
@@ -314,14 +361,21 @@ class FeedbackService:
         stale_ids = _parse_schema_ids(stale_memory_ids)
         wrong_ids = _parse_schema_ids(wrong_memory_ids)
 
-        applied: dict[str, list] = {"reinforced": [], "penalized": [], "marked_review": [], "procedures": []}
+        applied: dict[str, list] = {
+            "reinforced": [],
+            "penalized": [],
+            "marked_review": [],
+            "procedures": [],
+        }
 
         if self.cfg.apply_learning:
             if self.cfg.apply_positive_learning and fb_label in ("useful", "partially_useful"):
                 for schema_id in used_ids:
                     try:
                         if fb_label == "useful":
-                            self.schemas.reinforce(schema_id, amount=useful_signal.salience_delta * source_weight)
+                            self.schemas.reinforce(
+                                schema_id, amount=useful_signal.salience_delta * source_weight
+                            )
                         else:
                             self.schemas.adjust_feedback_state(
                                 schema_id,
@@ -407,11 +461,27 @@ class FeedbackService:
                 ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
-                    str(retrieval_id), retrieval_type, session_id,
-                    scope_id, _scope_kind(scope_id),
-                    None, None, goal, task_type,
-                    dumps_json(situation or {}), dumps_json(requirements or []),
-                    "unknown", 0, 0, "[]", "[]", "[]", "{}", "[]", None, now,
+                    str(retrieval_id),
+                    retrieval_type,
+                    session_id,
+                    scope_id,
+                    _scope_kind(scope_id),
+                    None,
+                    None,
+                    goal,
+                    task_type,
+                    dumps_json(situation or {}),
+                    dumps_json(requirements or []),
+                    "unknown",
+                    0,
+                    0,
+                    "[]",
+                    "[]",
+                    "[]",
+                    "{}",
+                    "[]",
+                    None,
+                    now,
                 ),
             )
         conn.execute(
@@ -428,17 +498,30 @@ class FeedbackService:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                str(retrieval_id), retrieval_type, session_id,
-                scope_id, _scope_kind(scope_id),
-                goal, task_type,
-                dumps_json(situation or {}), dumps_json(requirements or []),
-                fb_label, outcome,
-                dumps_json(dataclasses.asdict(signal)), signal.outcome_reward,
-                dumps_json(used_memory_ids or []), dumps_json(irrelevant_memory_ids or []),
-                dumps_json(stale_memory_ids or []), dumps_json(wrong_memory_ids or []),
-                dumps_json(used_procedure_ids or []), dumps_json(irrelevant_procedure_ids or []),
-                dumps_json(stale_procedure_ids or []), dumps_json(wrong_procedure_ids or []),
-                missing_context, notes, now,
+                str(retrieval_id),
+                retrieval_type,
+                session_id,
+                scope_id,
+                _scope_kind(scope_id),
+                goal,
+                task_type,
+                dumps_json(situation or {}),
+                dumps_json(requirements or []),
+                fb_label,
+                outcome,
+                dumps_json(dataclasses.asdict(signal)),
+                signal.outcome_reward,
+                dumps_json(used_memory_ids or []),
+                dumps_json(irrelevant_memory_ids or []),
+                dumps_json(stale_memory_ids or []),
+                dumps_json(wrong_memory_ids or []),
+                dumps_json(used_procedure_ids or []),
+                dumps_json(irrelevant_procedure_ids or []),
+                dumps_json(stale_procedure_ids or []),
+                dumps_json(wrong_procedure_ids or []),
+                missing_context,
+                notes,
+                now,
             ),
         )
         conn.commit()

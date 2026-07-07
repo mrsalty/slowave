@@ -3,6 +3,7 @@
 Previously implemented as engine.consolidate_once(). Extracted so it can be
 tested and reasoned about independently of the full engine.
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -30,7 +31,6 @@ class ConsolidationService:
         consolidator: Consolidator | None,
         schemas: SchemaStore,
         ingest: IngestService,
-
         encoder: Any = None,
     ):
         self.db = db
@@ -39,7 +39,9 @@ class ConsolidationService:
         self.schemas = schemas
         self._ingest = ingest
 
-    def consolidate_once(self, *, triggered_by: str = "worker", decay_idle_days: float = 30.0) -> dict[str, Any]:
+    def consolidate_once(
+        self, *, triggered_by: str = "worker", decay_idle_days: float = 30.0
+    ) -> dict[str, Any]:
         """Run one replay + latent consolidation pass, then decay unused schemas.
 
         Returns a stats dict with keys ``replay``, ``consolidation``, and ``decay``.
@@ -67,12 +69,12 @@ class ConsolidationService:
                 cs = self.consolidator.consolidate(prototype_ids=protos)
                 consolidation = dataclasses.asdict(cs)
             decay = self.schemas.decay_unused(idle_days=decay_idle_days, dry_run=False)
-            
+
             result = {
                 "replay": replay_stats,
                 "consolidation": consolidation,
                 "decay": decay,
-                "procedures": {}  # removed Phase 1 P1
+                "procedures": {},  # removed Phase 1 P1
             }
         except Exception as e:
             error_text = str(e)

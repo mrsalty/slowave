@@ -3,11 +3,12 @@
 Uses synthetic numpy embeddings (no sentence-transformers download). Verifies the latent substrate + schema tables
 are wired correctly even without external services.
 """
+
 from __future__ import annotations
 
 import os
-from pathlib import Path
 import tempfile
+from pathlib import Path
 
 import numpy as np
 import pytest
@@ -16,21 +17,23 @@ from click.testing import CliRunner
 from slowave.cli.main import cli
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
-from slowave.latent.types import Event
 from slowave.latent.synthetic import SyntheticConfig, generate_synthetic_events
+from slowave.latent.types import Event
 
 
 def test_imports() -> None:
     # Touched all the main modules.
     import slowave  # noqa
     import slowave.cli.main  # noqa
-    import slowave.core.engine  # noqa
     import slowave.core.consolidation  # noqa
+    import slowave.core.engine  # noqa
     import slowave.latent.episodic_store  # noqa
     import slowave.latent.replay_engine  # noqa
 
 
-def test_cli_uses_default_db_from_env_without_db_arg(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+def test_cli_uses_default_db_from_env_without_db_arg(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
     """CLI commands should not require --db for normal local usage."""
     db_path = tmp_path / "nested" / "slowave.db"
     monkeypatch.setenv("SLOWAVE_DB", str(db_path))
@@ -54,7 +57,7 @@ def test_engine_latent_only_synthetic() -> None:
             db_path=tmp.name,
             dim=64,
             disable_encoder=True,
-                    )
+        )
         eng = SlowaveEngine(cfg)
 
         # Generate synthetic events and feed them directly into the latent store.
@@ -69,8 +72,10 @@ def test_engine_latent_only_synthetic() -> None:
                 nn_sim = -1.0
             s = eng.salience.compute_novelty_salience(nn_similarity=nn_sim)
             eng.episodic.add(
-                event_id=ev.event_id, ts=ev.timestamp,
-                embedding=ev.embedding, salience=s,
+                event_id=ev.event_id,
+                ts=ev.timestamp,
+                embedding=ev.embedding,
+                salience=s,
                 metadata={"type": ev.type, "entities": ev.entities, **ev.metadata},
             )
 
@@ -80,7 +85,9 @@ def test_engine_latent_only_synthetic() -> None:
         assert "transition_loss" in replay_stats
 
         # Query: nearest to a perturbed embedding of an existing event.
-        q = events[-1].embedding + 0.05 * np.random.default_rng(42).normal(size=(64,)).astype(np.float32)
+        q = events[-1].embedding + 0.05 * np.random.default_rng(42).normal(size=(64,)).astype(
+            np.float32
+        )
         q = q / (np.linalg.norm(q) + 1e-12)
         retrieved = eng.retrieval.retrieve(q)
         assert len(retrieved.episodic) > 0
@@ -108,7 +115,7 @@ def test_engine_symbolic_no_llm() -> None:
             db_path=tmp.name,
             dim=64,
             disable_encoder=True,
-                    )
+        )
         eng = SlowaveEngine(cfg)
 
         sid = eng.session_start(agent="test", scope="project:smoke")
@@ -117,8 +124,10 @@ def test_engine_symbolic_no_llm() -> None:
             emb = rng.normal(size=(64,)).astype(np.float32)
             emb = emb / (np.linalg.norm(emb) + 1e-12)
             eng.raw_log.append(
-                session_id=sid, type="user_message",
-                content=f"test message {i}", embedding=emb,
+                session_id=sid,
+                type="user_message",
+                content=f"test message {i}",
+                embedding=emb,
             )
         result = eng.session_end(sid, consolidate=True)
         # Multi-scale strategy: 9 two-turn micro episodes + 1 macro episode.

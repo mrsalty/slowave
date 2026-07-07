@@ -14,6 +14,7 @@ Decision tree under test (engine.py remember()):
       dir_score < DIRECTION_THRESHOLD → CROSS-SCOPE REINFORCE + evidence
       dir_score >= DIRECTION_THRESHOLD → skip (cross-scope value divergence is valid)
 """
+
 from __future__ import annotations
 
 import os
@@ -31,7 +32,6 @@ from slowave.core.supersession_manifold import (
     DIRECTION_THRESHOLD,
     SAME_SCOPE_COS_THRESHOLD,
 )
-
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -148,7 +148,9 @@ class TestSameScopeGeometry:
         _remember(eng, "new", scope="project:test")
 
         old_schema = eng.schemas.get(old_id)
-        assert old_schema.status == "active", f"Restatement must not supersede (was {old_schema.status})"
+        assert (
+            old_schema.status == "active"
+        ), f"Restatement must not supersede (was {old_schema.status})"
         assert old_schema.salience > old_salience_before, "Restatement should bump salience"
         eng.close()
 
@@ -175,9 +177,9 @@ class TestSameScopeGeometry:
         old_id = _remember(eng, "old", scope="project:test")
         _remember(eng, "new", scope="project:test")
 
-        assert eng.schemas.get(old_id).status == "active", (
-            "cos < EXTENDED_SAME_SCOPE_COS_THRESHOLD must not trigger any action"
-        )
+        assert (
+            eng.schemas.get(old_id).status == "active"
+        ), "cos < EXTENDED_SAME_SCOPE_COS_THRESHOLD must not trigger any action"
         eng.close()
 
     def test_extended_range_high_dir_score_supersedes(self, tmp_db: str) -> None:
@@ -189,9 +191,9 @@ class TestSameScopeGeometry:
         old_id = _remember(eng, "old", scope="project:test")
         _remember(eng, "new", scope="project:test")
 
-        assert eng.schemas.get(old_id).status == "superseded", (
-            "cos in extended range + high dir_score should supersede (Gap 3)"
-        )
+        assert (
+            eng.schemas.get(old_id).status == "superseded"
+        ), "cos in extended range + high dir_score should supersede (Gap 3)"
         eng.close()
 
     def test_extended_range_low_dir_score_no_action(self, tmp_db: str) -> None:
@@ -206,7 +208,9 @@ class TestSameScopeGeometry:
 
         old_schema = eng.schemas.get(old_id)
         assert old_schema.status == "active", "Low dir_score in extended range must not supersede"
-        assert old_schema.salience == salience_before, "Low dir_score in extended range must not reinforce"
+        assert (
+            old_schema.salience == salience_before
+        ), "Low dir_score in extended range must not reinforce"
         eng.close()
 
     def test_cosine_below_cross_scope_threshold_no_action(self, tmp_db: str) -> None:
@@ -307,7 +311,9 @@ class TestCrossScopeGeometry:
 
         schema_a = eng.schemas.get(id_a)
         assert schema_a.status == "active", "Cross-scope value divergence must not supersede"
-        assert schema_a.salience == salience_before, "Cross-scope value divergence must not reinforce"
+        assert (
+            schema_a.salience == salience_before
+        ), "Cross-scope value divergence must not reinforce"
         eng.close()
 
     def test_cross_scope_cosine_below_threshold_no_action(self, tmp_db: str) -> None:
@@ -321,9 +327,9 @@ class TestCrossScopeGeometry:
 
         _remember(eng, "content_b", scope="project:beta")
 
-        assert eng.schemas.get(id_a).salience == salience_before, (
-            "Low cosine cross-scope must trigger no action"
-        )
+        assert (
+            eng.schemas.get(id_a).salience == salience_before
+        ), "Low cosine cross-scope must trigger no action"
         eng.close()
 
 

@@ -9,6 +9,7 @@ Tests verify:
 """
 
 import time
+
 from slowave.mcp.session_resolver import SessionResolver
 
 
@@ -114,6 +115,7 @@ def test_scope_rebinding():
 def test_thread_isolation():
     """Two threads with the same scope are isolated — no collision."""
     import threading
+
     resolver = SessionResolver()
     results = {}
 

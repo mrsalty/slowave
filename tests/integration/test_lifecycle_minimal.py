@@ -7,6 +7,7 @@ Validates Step 6 acceptance criteria:
 - >= 1 episode formed
 - session_resolver cleared after commit
 """
+
 from __future__ import annotations
 
 import os
@@ -47,7 +48,9 @@ class TestLifecycleMinimal:
             # ---- remember (resolves implicit session) -----------------------
             resolved = session_resolver.resolve(scope)
             assert resolved == sid, "resolver must return the bound session"
-            eng.remember(content="test fact for lifecycle", type="fact", scope=scope, session_id=resolved)
+            eng.remember(
+                content="test fact for lifecycle", type="fact", scope=scope, session_id=resolved
+            )
 
             # ---- synthetic events (normally fired via _bg_log_event) -------
             eng.event_append(session_id=sid, type="context_query", content="test task query")

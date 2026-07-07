@@ -9,6 +9,7 @@ Covers:
   - builder produces expected geometry for a trivial case
   - temporal anchor plumbing: dataclasses.replace on RetrievalConfig works
 """
+
 from __future__ import annotations
 
 import dataclasses
@@ -26,10 +27,10 @@ from slowave.latent.schema import (
     _tokenize,
 )
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 def _unit(v: np.ndarray) -> np.ndarray:
     return (v / (np.linalg.norm(v) + 1e-12)).astype(np.float32)
@@ -62,6 +63,7 @@ def _make_schema(
 # ---------------------------------------------------------------------------
 # GeometricContradictionJudge
 # ---------------------------------------------------------------------------
+
 
 class TestGeometricContradictionJudge:
     def setup_method(self):
@@ -122,7 +124,7 @@ class TestGeometricContradictionJudge:
         c2 = _unit(np.array([0.8, 0.6, 0.0, 0.0, 0.0]))  # cos ~0.80
         axis_a = np.array([[1.0, 0.0, 0.0, 0.0, 0.0]], dtype=np.float32)
         axis_b = np.array([[0.0, 0.0, 0.0, 1.0, 0.0]], dtype=np.float32)
-        old = _make_schema(c,  facet_axes=axis_a, support_count=2, mean_ts=1_000_000)
+        old = _make_schema(c, facet_axes=axis_a, support_count=2, mean_ts=1_000_000)
         new = _make_schema(c2, facet_axes=axis_b, support_count=5, mean_ts=2_000_000)
         result = self.judge.judge(old=old, new=new)
         assert result.verdict == "contradicts"
@@ -160,8 +162,10 @@ class TestGeometricContradictionJudge:
 # LatentSchemaBuilder
 # ---------------------------------------------------------------------------
 
+
 class _ET:
     """Minimal EpisodeText-like stub."""
+
     def __init__(self, text: str, source_content: str | None = None):
         self.content_text = text
         self.source_content = source_content  # mirrors EpisodeText.source_content
@@ -224,7 +228,7 @@ class TestLatentSchemaBuilder:
     def test_central_member_is_closest_to_centroid(self):
         """The central member is the one geometrically closest to the centroid."""
         e0 = _unit(np.array([1.0, 0.5, 0.0, 0.0]))
-        e1 = _unit(np.array([1.0, 1.0, 0.0, 0.0]))   # closest to centroid
+        e1 = _unit(np.array([1.0, 1.0, 0.0, 0.0]))  # closest to centroid
         e2 = _unit(np.array([0.5, 1.0, 1.0, 0.0]))
         centroid = _unit(np.array([1.0, 1.0, 0.0, 0.0]))
         schema = self.builder.build(
@@ -241,16 +245,19 @@ class TestLatentSchemaBuilder:
 # Temporal anchor plumbing
 # ---------------------------------------------------------------------------
 
+
 class TestTemporalAnchorPlumbing:
     """RetrievalConfig.temporal_anchor_ts field and dataclasses.replace work."""
 
     def test_retrieval_config_has_temporal_anchor_ts_field(self):
         from slowave.latent.retrieval import RetrievalConfig
+
         cfg = RetrievalConfig()
         assert cfg.temporal_anchor_ts is None
 
     def test_dataclasses_replace_works_with_temporal_anchor_ts(self):
         from slowave.latent.retrieval import RetrievalConfig
+
         cfg = RetrievalConfig()
         now = int(time.time())
         past = now - 30 * 86400
@@ -288,7 +295,7 @@ class TestTemporalAnchorPlumbing:
 
     def test_temporal_probe_dead_zone_atemporal_returns_now(self):
         """Dead-zone gate: atemporal queries must return now_ts unchanged."""
-        from slowave.latent.temporal import TemporalProbe, _TEMPORAL_PROBES
+        from slowave.latent.temporal import _TEMPORAL_PROBES, TemporalProbe
 
         dim = 32
         now_ts = 1_700_000_000
@@ -309,14 +316,14 @@ class TestTemporalAnchorPlumbing:
 
     def test_temporal_probe_dead_zone_temporal_shifts_anchor(self):
         """Dead-zone gate: genuinely temporal queries shift the anchor past."""
-        from slowave.latent.temporal import TemporalProbe, _TEMPORAL_PROBES
+        from slowave.latent.temporal import _TEMPORAL_PROBES, TemporalProbe
 
         dim = 32
         now_ts = 1_700_000_000
         # Only "last month" probe (index 5) → dim 0; everything else → zeros.
         # query → dim 0; margin = 1.0 - 0.0 = 1.0 >> 0.12 → gate does NOT fire.
         last_month_phrase = _TEMPORAL_PROBES[5][0]
-        last_month_disp   = _TEMPORAL_PROBES[5][1]
+        last_month_disp = _TEMPORAL_PROBES[5][1]
 
         def enc(text: str) -> np.ndarray:
             v = np.zeros(dim, dtype=np.float32)
@@ -333,22 +340,25 @@ class TestTemporalAnchorPlumbing:
 
     def test_temporal_probe_dead_zone_boundary(self):
         """Dead-zone gate: margin just below threshold → now; just above → shifts."""
-        from slowave.latent.temporal import TemporalProbe, _TEMPORAL_PROBES
+        from slowave.latent.temporal import _TEMPORAL_PROBES, TemporalProbe
 
         dim = 32
         now_ts = 1_700_000_000
         threshold = 0.12
-        now_phrase  = _TEMPORAL_PROBES[0][0]
+        now_phrase = _TEMPORAL_PROBES[0][0]
         past_phrase = _TEMPORAL_PROBES[1][0]
 
         def make_enc(past_sim: float):
             def enc(text: str) -> np.ndarray:
                 v = np.zeros(dim, dtype=np.float32)
                 if text == now_phrase:
-                    v[0] = 0.5; v[1] = float(np.sqrt(max(0.0, 1 - 0.25)))
+                    v[0] = 0.5
+                    v[1] = float(np.sqrt(max(0.0, 1 - 0.25)))
                 elif text == past_phrase:
-                    v[0] = past_sim; v[2] = float(np.sqrt(max(0.0, 1 - past_sim**2)))
+                    v[0] = past_sim
+                    v[2] = float(np.sqrt(max(0.0, 1 - past_sim**2)))
                 return v
+
             return enc
 
         query = np.zeros(dim, dtype=np.float32)
@@ -365,6 +375,7 @@ class TestTemporalAnchorPlumbing:
 # Lexical signature helpers
 # ---------------------------------------------------------------------------
 
+
 class TestLexicalSignature:
     def test_tokenize_basic(self):
         tokens = _tokenize("Slowave uses FAISS for local memory")
@@ -373,9 +384,9 @@ class TestLexicalSignature:
         assert "local" in tokens
         assert "memory" in tokens
         # stopwords and short words removed
-        assert "for" not in tokens   # stopword
-        assert "a" not in tokens     # too short
-        assert "uses" in tokens      # 4 chars, not a stopword - kept
+        assert "for" not in tokens  # stopword
+        assert "a" not in tokens  # too short
+        assert "uses" in tokens  # 4 chars, not a stopword - kept
 
     def test_tokenize_drops_short_and_stopwords(self):
         tokens = _tokenize("a an the in it")
