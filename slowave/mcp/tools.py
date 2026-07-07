@@ -18,6 +18,7 @@ from typing import Any, Callable
 from mcp.server.fastmcp import FastMCP
 
 from slowave.mcp import session_resolver
+from slowave.mcp.cold_start_files import COLD_START_FILES
 import slowave.ops as ops
 
 log = logging.getLogger(__name__)
@@ -125,7 +126,8 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         Returns:
             retrieval_id: pass to slowave_reinforce.
             session_id: informational; used automatically by remember/commit.
-            rendered: human-readable memory brief.
+            rendered: formatted list of retrieved memory items (empty on cold start).
+            cold_start_hints: cold-start instructions (only present when cold_start=True).
             schemas: [{id, text, activation, reason, source_kind}, ...].
         """
         try:
@@ -148,35 +150,34 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 agent="mcp",
             )
             session_resolver.bind(scope, result["session_id"])
-            # MCP-specific: add cold-start hint text and fire a synthetic event.
+            # MCP-specific: add cold-start hints and fire a synthetic event.
             if result["cold_start"]:
-                scope_id = scope.strip() if scope else None
-                scope_label = scope_id or "global (no scope set — consider passing scope='project:<name>')"
-                hint = (
-                    f"[cold start] No memories found for scope '{scope_label}'.\n"
-                    "Recommended on cold start:\n"
-                    "  1. Check for these files (in order, stop at first found): "
-                    "CLAUDE.md, README.md, AGENTS.md. Read the first one that exists.\n"
-                    "  2. For each fact in that document, ask: would this be useful in any future "
-                    "interaction within this scope? Can it be inferred as durable and critical — "
-                    "something a future session could not assume without it? "
-                    "If yes to both, call slowave_remember() — one call per fact, not one call per group. "
-                    "Exhaust the document before moving on.\n"
-                    "  3. If neither file exists, apply the same questions to what is visible "
-                    "from the current request.\n"
-                    "  4. Then respond to the user."
-                )
-                result["rendered"] = f"{result['rendered']}\n\n{hint}".lstrip("\n")
+                scope_label = (scope.strip() if scope else None) or "global (no scope set — consider passing scope='project:<name>')"
+                files_list = ", ".join(COLD_START_FILES)
                 result["suggested_actions"] = ["remember_project_facts"]
                 result["cold_start_hints"] = (
-                    "Memory is empty for this scope. "
-                    "Consider reading CLAUDE.md, README.md, or AGENTS.md (whichever exists first). "
-                    "For each fact ask: would this be useful in any future interaction within this scope? "
-                    "Can it be inferred as durable and critical — something a future session could not assume without it? "
-                    "If yes to both, call slowave_remember() — one call per fact, not one call per group. "
-                    "Exhaust the document before moving on. "
-                    "If neither file exists, apply the same questions to what is visible from the current request. "
-                    "Then respond to the user."
+                    f"[cold start] No memories found for scope '{scope_label}'.\n"
+                    f"\n"
+                    f"*** GATE — do NOT respond to the user until step 3 is satisfied. ***\n"
+                    f"\n"
+                    f"1. Process EACH file below in order — ALL of them, not just the first.\n"
+                    f"   For each file:\n"
+                    f"   a. Check if it exists at root level or in docs/\n"
+                    f"   b. If it exists, read it with the Read tool — even if its content is already\n"
+                    f"      visible in context (e.g. CLAUDE.md). Visibility does NOT count as processed.\n"
+                    f"   c. Call slowave_remember(content, type, scope) for every durable fact\n"
+                    f"      — ONE call per fact. Skip facts already surfaced this session via activate/recall.\n"
+                    f"   Files: {files_list}\n"
+                    f"\n"
+                    f"2. SELF-VERIFY (answer silently before responding):\n"
+                    f"   - Did I iterate through every file on the list, not just the first one found?\n"
+                    f"   - Did I call slowave_remember for every durable fact from every existing file?\n"
+                    f"   If EITHER answer is NO, return to step 1 — the gate is NOT satisfied.\n"
+                    f"\n"
+                    f"3. Only now: respond to the user.\n"
+                    f"\n"
+                    f"FAILURE MODE: responding before step 3 is reached = session was not properly primed.\n"
+                    f"Report outcome as 'partial' in slowave_commit."
                 )
             asyncio.create_task(
                 _bg_log_event(eng, result["session_id"], "context_query", query)
