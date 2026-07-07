@@ -315,34 +315,6 @@ def print_report(results,consolidate):
         vals=[r.component_scores.get(comp) for r in results if comp in r.component_scores]
         vals=[v for v in vals if isinstance(v,float)]
         if vals: print('  %-10s avg=%.3f  hits=%d/%d'%(comp,sum(vals)/len(vals),sum(1 for v in vals if v>=HIT_THRESHOLD),len(vals)))
-    by_conv={}
-    for r in results: by_conv.setdefault(r.conv_id,[]).append(r)
-    print()
-    for cid,rs in sorted(by_conv.items()):
-        hits=sum(1 for r in rs if r.hit); errs=sum(1 for r in rs if r.error)
-        print('  %-10s  %3dq  %3dhits  %5.1f%%  errors=%d'%(cid,len(rs),hits,100*hits/max(1,len(rs)),errs))
-    # Cost / storage block — the columns Mem0 publishes and we don't.
-    print()
-    print(' Cost summary (per conversation; LLM totals are conversation-level)')
-    valid=[r for r in results if not r.error]
-    if valid:
-        # Conversation-level numbers: pick one representative per conv_id.
-        per_conv_rep=[next(iter(rs)) for rs in by_conv.values()]
-        calls=[r.n_llm_calls*len([x for x in by_conv[r.conv_id]]) for r in per_conv_rep]
-        prompt=[r.llm_prompt_tokens*len([x for x in by_conv[r.conv_id]]) for r in per_conv_rep]
-        compl=[r.llm_completion_tokens*len([x for x in by_conv[r.conv_id]]) for r in per_conv_rep]
-        total=[p+c for p,c in zip(prompt,compl)]
-        sizes_mb=[r.db_size_bytes/(1024*1024) for r in per_conv_rep]
-        n_convs=max(1,len(per_conv_rep))
-        print('  llm_calls/conv:  mean=%.1f   max=%d   total=%d'%(sum(calls)/n_convs,max(calls),sum(calls)))
-        print('  tokens/conv:     mean=%.0f    total=%d'%(sum(total)/n_convs,sum(total)))
-        print('  db size/conv:    mean=%.2fMB   max=%.2fMB'%(sum(sizes_mb)/n_convs,max(sizes_mb)))
-        gpt4mini_cost=(sum(prompt)*0.15+sum(compl)*0.60)/1_000_000
-        haiku_cost=(sum(prompt)*1.00+sum(compl)*5.00)/1_000_000
-        print('  est. cost (gpt-4o-mini):    $%.4f'%gpt4mini_cost)
-        print('  est. cost (claude-haiku):   $%.4f'%haiku_cost)
-        if sum(calls)==0:
-            print('  -> ZERO LLM CALLS - brain-only mode. All cost numbers are $0.')
     print(); print('='*72)
 
 def _save(path,results,args,elapsed,partial):
