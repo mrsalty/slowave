@@ -136,7 +136,7 @@ def run_scenario(
     shared_encoder: TextEncoder,
     top_k: int = 10,
     tau_seconds: float = 86400.0,
-    salience_weight: float = 0.3,
+    salience_weight: float = 0.5,
     surprise_weight: float = 0.3,
 ) -> ScenarioResult:
     sid = scenario["scenario_id"]
@@ -452,7 +452,7 @@ def main() -> None:
     parser.add_argument("--assignment-threshold", type=float, default=0.85)
     parser.add_argument("--top-k", type=int, default=10)
     parser.add_argument("--tau-seconds", type=float, default=86400.0)
-    parser.add_argument("--salience-weight", type=float, default=0.3)
+    parser.add_argument("--salience-weight", type=float, default=0.5)
     parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument("--out", default="")
     args = parser.parse_args()

@@ -187,7 +187,7 @@ def run_question(
     replay_only: bool = False,
     no_multi_scale: bool = False,
     tau_seconds: float = 86400.0,
-    salience_weight: float = 0.3,
+    salience_weight: float = 0.5,
     surprise_weight: float = 0.3,
 ) -> QuestionResult:
     qid = str(question["question_id"])
@@ -812,7 +812,7 @@ def main() -> None:
         action="store_true",
         help="Ablation: disable salience-weighted episode reranking (salience_weight=0).",
     )
-    parser.add_argument("--salience-weight", type=float, default=0.3)
+    parser.add_argument("--salience-weight", type=float, default=0.5)
     parser.add_argument("--tau-seconds", type=float, default=86400.0)
     parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument(

@@ -96,7 +96,7 @@ def run_one(name, graph_cfg):
                     use_multi_scale=True,
                 ),
                 retrieval=RetrievalConfig(
-                    salience_weight=0.3, neighbor_top_k=6, use_multi_scale=True, use_transition=True
+                    salience_weight=0.5, neighbor_top_k=6, use_multi_scale=True, use_transition=True
                 ),
                 graph=graph_cfg,
                 disable_encoder=False,
