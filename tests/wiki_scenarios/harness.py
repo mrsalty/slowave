@@ -13,6 +13,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from slowave.core.engine import RecallResult
+from slowave.latent.types import QueryDiagnostics
 from slowave.symbolic.encoder import TextEncoder
 from tests.temporal_eval.harness import ScenarioResult, TemporalHarness, keyword_hit
 from tests.wiki_scenarios.corpus import paragraphs_for
@@ -20,6 +21,16 @@ from tests.wiki_scenarios.corpus import paragraphs_for
 
 class WikiHarness(TemporalHarness):
     """TemporalHarness extended with Wikipedia page ingestion."""
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        self.last_query_diagnostics: QueryDiagnostics | None = None
+
+    def query(self, text: str, *, top_k: int = 5) -> RecallResult:
+        self.eng.refresh_indices()
+        result = self.eng.recall(text, top_k=top_k, diagnose=True)
+        self.last_query_diagnostics = result.query_diagnostics
+        return result
 
     def ingest_page(self, title: str, *, consolidate: bool = False) -> int:
         """Load a Wikipedia page as a single scoped session.
