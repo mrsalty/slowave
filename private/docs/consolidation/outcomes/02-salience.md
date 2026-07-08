@@ -30,9 +30,9 @@ Elbow at 0.5: +1.0pp overall, +8pp adversarial vs 0.3, only -1.4pp single-sessio
 - All 4 eval script defaults updated to match
 
 ### Final benchmark (full 10-conv LoCoMo, sw=0.5)
-- Overall: **79.5%** (+0.8pp vs prior 78.7%)
-- Adversarial: **89.0%**
-- Single-session: 74.1% | Temporal: 61.4% | Multi-session: 86.4%
+- Overall: **79.7%** (+1.0pp vs prior 78.7%) — confirmed by independent full suite run
+- Adversarial: **89.0%** | Multi-session: 86.4% | Single-session: 74.1% | Temporal: 61.4%
+- Temporal eval (internal, 15 scenarios): **86.7%** (+6.7pp vs prior 80.0%) — likely correlated with salience_weight increase but only 15 scenarios
 
 ## Open Questions for Next Iteration
 - `surprise_weight=0.3` is still the default — no sweep done yet (transition model cold-start at eval time means surprise is likely ~0 for most episodes)

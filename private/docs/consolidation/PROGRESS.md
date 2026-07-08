@@ -21,8 +21,8 @@ For completed work notes: `outcomes/NN-module.md`.
 | 7 | Context | ✅ generated | — | — | not started | — |
 | 8 | VSA | ✅ generated | — | — | deferred (not wired) | — |
 
-**Current benchmarks (2026-07-08):**
-- LoCoMo: 79.5% | LongMemEval: 87.8% | DMR: 95.6% | Temporal: 80.0% | StaleMemory: 45.2%
+**Current benchmarks (2026-07-08, post-salience-tuning full run):**
+- LoCoMo: 79.7% | LongMemEval: 87.8% | DMR: 95.8% | Temporal: 86.7% | StaleMemory: 45.2% | Wiki: 83.3%
 
 ---
 
