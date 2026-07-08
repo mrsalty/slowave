@@ -718,8 +718,11 @@ class SlowaveEngine:
         evidence: bool = False,
         scope: str | None = None,
         mode: str = "default",
+        diagnose: bool = False,
     ) -> RecallResult:
-        return self._retrieval.recall(query, top_k=top_k, evidence=evidence, scope=scope, mode=mode)
+        return self._retrieval.recall(
+            query, top_k=top_k, evidence=evidence, scope=scope, mode=mode, diagnose=diagnose
+        )
 
     def context(self, *, scope: str | None = None, limit: int = 10) -> list[Schema]:
         return self._retrieval.context(scope=scope, limit=limit)
