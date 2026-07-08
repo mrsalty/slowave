@@ -3,6 +3,7 @@
 
 Answers the 7 diagnostic questions from plans/03-graph.md.
 """
+
 from __future__ import annotations
 
 import json
@@ -16,11 +17,19 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 logging.basicConfig(level=logging.WARNING)
-for _n in ("sentence_transformers","transformers","httpx","httpcore","huggingface_hub","filelock","tqdm"):
+for _n in (
+    "sentence_transformers",
+    "transformers",
+    "httpx",
+    "httpcore",
+    "huggingface_hub",
+    "filelock",
+    "tqdm",
+):
     logging.getLogger(_n).setLevel(logging.ERROR)
-os.environ.setdefault("KMP_DUPLICATE_LIB_OK","TRUE")
-os.environ.setdefault("OMP_NUM_THREADS","1")
-os.environ.setdefault("TOKENIZERS_PARALLELISM","false")
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
 
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
@@ -38,8 +47,12 @@ shared_encoder = TextEncoder(EncoderConfig())
 
 LIMIT = 3
 print(f"Running Phase 4 diagnostics on {LIMIT} LoCoMo conversations...")
-print(f"Default GraphConfig: λ₁={GraphConfig().lambda_similarity}, λ₂={GraphConfig().lambda_transition}, λ₃={GraphConfig().lambda_coactivation}")
-print(f"accumulate_decay={GraphConfig().accumulate_decay}, homeostatic_target={GraphConfig().homeostatic_target}, prune_ratio={GraphConfig().prune_ratio}")
+print(
+    f"Default GraphConfig: λ₁={GraphConfig().lambda_similarity}, λ₂={GraphConfig().lambda_transition}, λ₃={GraphConfig().lambda_coactivation}"
+)
+print(
+    f"accumulate_decay={GraphConfig().accumulate_decay}, homeostatic_target={GraphConfig().homeostatic_target}, prune_ratio={GraphConfig().prune_ratio}"
+)
 print()
 
 all_diags = []
@@ -51,12 +64,19 @@ for si, sample in enumerate(dataset[:LIMIT]):
         db_path = f.name
     try:
         cfg = SlowaveConfig(
-            db_path=db_path, dim=shared_encoder.dim, encoder=EncoderConfig(),
-            salience=SalienceConfig(tau_seconds=86400*30),
-            replay=ReplayConfig(assignment_threshold=0.85, sample_size=2048,
-                max_prototypes_per_replay=128, use_multi_scale=True),
-            retrieval=RetrievalConfig(salience_weight=0.5, neighbor_top_k=6,
-                use_multi_scale=True, use_transition=True),
+            db_path=db_path,
+            dim=shared_encoder.dim,
+            encoder=EncoderConfig(),
+            salience=SalienceConfig(tau_seconds=86400 * 30),
+            replay=ReplayConfig(
+                assignment_threshold=0.85,
+                sample_size=2048,
+                max_prototypes_per_replay=128,
+                use_multi_scale=True,
+            ),
+            retrieval=RetrievalConfig(
+                salience_weight=0.5, neighbor_top_k=6, use_multi_scale=True, use_transition=True
+            ),
             graph=GraphConfig(),
             disable_encoder=False,
         )
@@ -81,14 +101,23 @@ for si, sample in enumerate(dataset[:LIMIT]):
                 if cap:
                     txt = txt + " [image: " + cap + "]"
                 speaker = str(turn.get("speaker", ""))
-                role = "user_message" if speaker == conv.get("speaker_a","A") else "assistant_message"
-                eng.raw_log.append(session_id=sid, ts=sts or int(time.time()),
-                    type=role, content=txt, embedding=shared_encoder.encode(txt))
+                role = (
+                    "user_message" if speaker == conv.get("speaker_a", "A") else "assistant_message"
+                )
+                eng.raw_log.append(
+                    session_id=sid,
+                    ts=sts or int(time.time()),
+                    type=role,
+                    content=txt,
+                    embedding=shared_encoder.encode(txt),
+                )
             eng.session_end(sid, consolidate=False)
             if sts:
                 c = eng.db.connect()
-                c.execute("UPDATE episodic_memories SET ts=?,last_salience_ts=? WHERE event_id LIKE ? OR event_id LIKE ?",
-                    (sts, sts, f"micro_{sid}_%", f"macro_{sid}"))
+                c.execute(
+                    "UPDATE episodic_memories SET ts=?,last_salience_ts=? WHERE event_id LIKE ? OR event_id LIKE ?",
+                    (sts, sts, f"micro_{sid}_%", f"macro_{sid}"),
+                )
                 c.commit()
         eng.consolidate_once(triggered_by="diagnose")
         eng.replay_engine.self_supervise()
@@ -114,13 +143,23 @@ edge_counts = [d["edge_count"] for d in all_diags]
 sim_dom_pcts = [d["similarity_dominance_pct"] for d in all_diags]
 
 print(f"\nTotal conversations: {len(all_diags)}")
-print(f"Edge counts: min={min(edge_counts)}, max={max(edge_counts)}, mean={np.mean(edge_counts):.0f}")
+print(
+    f"Edge counts: min={min(edge_counts)}, max={max(edge_counts)}, mean={np.mean(edge_counts):.0f}"
+)
 
 # Component fractions aggregation
-sim_means = [d["component_fractions"]["similarity"]["mean"] for d in all_diags if d["component_fractions"]]
-sim_medians = [d["component_fractions"]["similarity"]["median"] for d in all_diags if d["component_fractions"]]
-trans_means = [d["component_fractions"]["transition"]["mean"] for d in all_diags if d["component_fractions"]]
-coact_means = [d["component_fractions"]["coactivation"]["mean"] for d in all_diags if d["component_fractions"]]
+sim_means = [
+    d["component_fractions"]["similarity"]["mean"] for d in all_diags if d["component_fractions"]
+]
+sim_medians = [
+    d["component_fractions"]["similarity"]["median"] for d in all_diags if d["component_fractions"]
+]
+trans_means = [
+    d["component_fractions"]["transition"]["mean"] for d in all_diags if d["component_fractions"]
+]
+coact_means = [
+    d["component_fractions"]["coactivation"]["mean"] for d in all_diags if d["component_fractions"]
+]
 
 print(f"\n--- Q1: Edge weight decomposition ---")
 print(f"Similarity fraction: mean={np.mean(sim_means):.3f}, median={np.mean(sim_medians):.3f}")
@@ -142,7 +181,9 @@ print(f"\n--- Q7: Degree distribution ---")
 for d in all_diags:
     dd = d["degree_distribution"]
     if dd:
-        print(f"  {d['conv_id']}: {dd['n_sources']} sources, mean={dd['mean']:.1f}, median={dd['median']:.1f}, max={dd['max']}, p95={dd['p95']:.1f}")
+        print(
+            f"  {d['conv_id']}: {dd['n_sources']} sources, mean={dd['mean']:.1f}, median={dd['median']:.1f}, max={dd['max']}, p95={dd['p95']:.1f}"
+        )
 
 # GO/NO-GO decision
 print()
