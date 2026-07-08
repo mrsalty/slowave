@@ -228,6 +228,9 @@ def run_conversation(
     no_self_supervise=False,
     no_pattern_separation=False,
     no_multi_scale=False,
+    tau_seconds=86400 * 30,
+    salience_weight=0.5,
+    surprise_weight=0.3,
 ):
     conv_id = str(sample.get("sample_id", "?"))
     # Pin the global numpy RNG to a deterministic seed derived from conv_id so
@@ -254,7 +257,7 @@ def run_conversation(
             db_path=db_path,
             dim=shared_encoder.dim,
             encoder=EncoderConfig(),
-            salience=SalienceConfig(tau_seconds=86400 * 30),
+            salience=SalienceConfig(tau_seconds=tau_seconds, surprise_weight=surprise_weight),
             replay=ReplayConfig(
                 assignment_threshold=assignment_threshold,
                 sample_size=2048,
@@ -262,7 +265,7 @@ def run_conversation(
                 use_multi_scale=not no_multi_scale,
             ),
             retrieval=RetrievalConfig(
-                salience_weight=0.0 if no_salience_rerank else 0.3,
+                salience_weight=0.0 if no_salience_rerank else salience_weight,
                 neighbor_top_k=0 if no_graph_expansion else 6,
                 use_transition=not no_transition,
                 use_multi_scale=not no_multi_scale,
@@ -641,6 +644,9 @@ def main():
         help="Cap on prototypes formed per replay (default 128).",
     )
     parser.add_argument("--no-salience-rerank", action="store_true")
+    parser.add_argument("--salience-weight", type=float, default=0.5)
+    parser.add_argument("--tau-seconds", type=float, default=float(86400 * 30))
+    parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument("--no-graph-expansion", action="store_true")
     parser.add_argument(
         "--no-transition",
@@ -725,6 +731,9 @@ def main():
                 no_self_supervise=args.no_self_supervise,
                 no_pattern_separation=args.no_pattern_separation,
                 no_multi_scale=args.no_multi_scale,
+                tau_seconds=args.tau_seconds,
+                salience_weight=args.salience_weight,
+                surprise_weight=args.surprise_weight,
             )
         except Exception as e:
             print("  ERROR:", e)

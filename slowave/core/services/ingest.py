@@ -189,4 +189,4 @@ class IngestService:
                 surprise = max(0.0, min(1.0, 1.0 - float(pred.dot(embedding))))
             except Exception:
                 surprise = 0.0
-        return max(0.01, novelty + 0.3 * surprise), surprise
+        return max(0.01, novelty + self.salience.cfg.surprise_weight * surprise), surprise
