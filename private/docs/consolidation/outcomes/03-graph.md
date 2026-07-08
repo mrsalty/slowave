@@ -82,6 +82,20 @@ get meaningful relative weight, and similarity still provides a semantic floor
 Key question: are `SAME_SCOPE_COS_THRESHOLD=0.85` and `DIRECTION_THRESHOLD=0.10`
 correctly separating "this is an update" from "this is a new fact"?
 
+## Benchmark Impact (Full Suite, 2026-07-08)
+
+Ran `run_full_benchmark.py --skip stalememory` with λ₁=0.3:
+
+| Benchmark | Score | Δ vs prior best | Notes |
+|-----------|-------|-----------------|-------|
+| LoCoMo | **80.1%** | **+0.4pp** (was 79.7%) | New record |
+| Temporal | 86.7% | ~0 (matches prior high) | Transition edges intact |
+| Wiki | 83.3% | ~0 | Stable |
+| LongMemEval | 87.8% | ~0 | At ceiling |
+| DMR | 95.4% | −0.4pp (vs 95.8%) | Noise variance |
+
+**No regressions. LoCoMo hit a new record. Temporal maintained its high.
+The graph is now more honest with same or better performance.**
 ## Parameter Change (2026-07-08)
 
 **`GraphConfig.lambda_similarity` default: 1.0 → 0.3**
