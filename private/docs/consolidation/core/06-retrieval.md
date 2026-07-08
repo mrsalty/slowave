@@ -53,7 +53,7 @@ Coarse seeds are max-merged into the seed activation set, and their member episo
 
 ### Phase 2b: Predictive Completion (Stage 3)
 
-The transition model learns to predict ( \\mathbf{e}_{t+1} ) from ( \\mathbf{e}_t ) using prototype-level transition counts accumulated during consolidation. This is the mechanism that answers "what comes after X?" — a query whose answer lives *downstream* in a learned sequence, not in the query's own embedding neighborhood. Cosine-direct alone cannot solve this: the answer embedding may have near-zero dot product with the query embedding, but the transition model has seen the A→B sequence before and can steer retrieval toward B.
+The transition model learns to predict \( \mathbf{e}_{t+1} \) from \( \mathbf{e}_t \) using prototype-level transition counts accumulated during consolidation. This is the mechanism that answers "what comes after X?" — a query whose answer lives *downstream* in a learned sequence, not in the query's own embedding neighborhood. Cosine-direct alone cannot solve this: the answer embedding may have near-zero dot product with the query embedding, but the transition model has seen the A→B sequence before and can steer retrieval toward B.
 
 When `use_transition = True` and the transition model has completed at least one training step (`trained_steps > 0`), a forward prediction \( \hat{\mathbf{q}} = \text{TransitionModel.predict}(\mathbf{q}) \) is computed. If \( \|\hat{\mathbf{q}}\|_2 \geq \text{transition\_min\_norm} \) (default `10^{-2}`), it acts as a second cosine seed:
 
@@ -61,7 +61,7 @@ When `use_transition = True` and the transition model has completed at least one
 s_i^{\text{pred}} = w_{\text{trans}} \cdot \langle \hat{\mathbf{q}}, \mathbf{e}_i \rangle, \quad w_{\text{trans}} = \text{transition\_score\_weight} \;(0.7)
 \]
 
-Predicted scores are max-merged with cosine-direct scores so a strong literal match is never demoted by a weaker prediction. The predicted embedding also seeds prototype activation (same discount factor ( w_{\\text{trans}} )), so the graph spreading front is informed by both the query and its predicted continuation.
+Predicted scores are max-merged with cosine-direct scores so a strong literal match is never demoted by a weaker prediction. The predicted embedding also seeds prototype activation (same discount factor \( w_{\text{trans}} \)), so the graph spreading front is informed by both the query and its predicted continuation.
 
 A **reserved-slot mechanism** reserves up to `transition_reserved_slots` (default `1`) head positions for predictive-seed candidates that would otherwise be displaced by cosine-direct episodes — but only when the prediction direction is *meaningfully different* from the query: \( \langle \mathbf{q}, \hat{\mathbf{q}} \rangle \leq \text{transition\_reserve\_max\_qsim} \) (default `0.85`).
 
@@ -69,11 +69,13 @@ A **reserved-slot mechanism** reserves up to `transition_reserved_slots` (defaul
 
 When `use_spreading = True`, activation propagates from seed prototypes over the graph.
 
-**Initialization**: seed prototypes receive activation proportional to their cosine match:
+**Initialization**: seed prototypes receive activation **normalized** to the best-matching prototype. This creates a relative activation scale in `[0, 1]` where the top cosine match gets `a_0 = 1` and negative matches are zeroed out:
 
 \[
 a_0(p) = \frac{\max(0, \langle \mathbf{q}, \mathbf{c}_p \rangle)}{\max_j \langle \mathbf{q}, \mathbf{c}_j \rangle}
 \]
+
+**Why normalize by the max**: absolute cosine scores are embedding-model-dependent — a query against an unfamiliar domain might produce `max_j <q, cj> = 0.3`, while a dense-domain query could hit 0.8. Normalization makes seed activation **query-adaptive**: the best prototype always starts at activation 1.0 regardless of the raw similarity ceiling, so spreading dynamics are calibrated to what is actually reachable for this query rather than a fixed global threshold. Prototypes with negative cosine match (`<q, cp> < 0`) are clamped to 0 — they carry opposing semantic signal and should not seed spreading.
 
 **Propagation** (for `spread_steps` iterations):
 

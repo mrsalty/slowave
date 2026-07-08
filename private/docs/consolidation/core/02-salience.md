@@ -90,13 +90,15 @@ Applied immediately after \( s_0 \), before storing:
 s_0 \leftarrow \max(s_0 \cdot 0.8,\; 0.05)
 \]
 
+**Logical concept**: Macro-episodes span entire sessions — they contain broad context but lack the atomic precision of single-event micro-episodes. The 20% haircut reduces their pull on replay sampling so that replay slots go preferentially to fine-grained events, while the floor of 0.05 ensures they are never fully excluded. This creates a deliberate granularity bias: micro-events are more likely to be replayed and consolidated.
+
 **Remember-event boost** (applied if any event in the chunk has type `remember:*`):
 
 \[
 s_0 \leftarrow \min(1.5,\; s_0 + 0.6)
 \]
 
-**Logical concept**: Macro-episodes are whole-session traces — useful for context but less atomic than micro-episodes, so they start with a lower pull on replay. The remember-boost ensures explicitly encoded memories compete well from the start.
+**Logical concept**: The remember-boost (+0.6, capped at 1.5) ensures explicitly encoded memories compete well from the start. A user's deliberate `remember` act signals high encoding strength — the system should respect that signal by giving the memory immediate retrieval and replay priority, equivalent to a memory that has been repeatedly reinforced.
 
 ### Phase 3: Exponential Decay (Lazy)
 
@@ -118,7 +120,7 @@ Where:
 P(i) = \frac{\max(s_{\min}, s_i)}{\sum_j \max(s_{\min}, s_j)}
 \]
 
-Episodes are sampled without replacement. Ties are broken by the random draw.
+**Logical concept**: higher-salience episodes are more likely to be selected for replay — this is the primary mechanism by which salience controls consolidation throughput. Using `max(s_min, s_i)` in both numerator and denominator guarantees that even floor-salience episodes retain non-zero probability (no episode is permanently invisible). Sampling without replacement prevents a single high-salience episode from consuming the entire replay batch. Ties are broken by the random draw.
 
 ### Phase 5: Recall Reinforcement
 
@@ -154,6 +156,8 @@ s_{\text{schema}} = 0.5 + \text{confidence}
 
 Where `confidence` is the cosine similarity between the episode cluster centroid and the schema text embedding (range ≈ 0–1). Schema salience starts in `[0.5, 1.5]`.
 
+**Logical concept**: The offset `0.5` gives new schemas an initial advantage over raw episodes (which start near `0.01`–`0.1`), reflecting the principle that consolidated knowledge should be more retrievable than unprocessed experience. The `confidence` term ties schema strength to the geometric quality of the cluster: tight, well-separated clusters (high centroid-text similarity) produce higher-confidence schemas that enter retrieval with stronger initial pull. Weak or noisy clusters start closer to the floor and must earn salience through positive feedback signals.
+
 ### Phase 8: Schema Salience via Feedback
 
 \[
@@ -161,6 +165,8 @@ s \leftarrow \text{clamp}(s + \delta_f,\; 0.01,\; 20.0)
 \]
 
 Where \( \delta_f \) is the feedback signal label's delta (see Configuration). The ceiling `20.0` is enforced at the SQL level.
+
+**Logical concept**: Schema salience is use-driven — positive feedback (`useful`, `partially_useful`) increases salience, negative signals (`irrelevant`, `stale`, `wrong`) decrease it. The asymmetric magnitudes (e.g., `+0.10` for useful vs `-0.30` for wrong) make correction faster than reward, so a schema that is confidently wrong is suppressed quickly. The floor (`0.01`) ensures even heavily penalized schemas are never fully erased — future evidence could rehabilitate them. The ceiling (`20.0`) prevents unbounded growth that would drown out cosine similarity in retrieval ranking.
 
 ### Phase 9: Schema Salience Normalization for Retrieval
 
