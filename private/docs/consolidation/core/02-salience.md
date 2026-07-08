@@ -233,7 +233,7 @@ s_{\text{norm}} = \frac{2}{1 + e^{-s/2}} - 1 \;\in [0, 1)
 | Metric | What It Measures | How to Instrument |
 |--------|-----------------|-------------------|
 | Spearman ρ(episodic `salience`, `recalled_count`) | Whether salience predicts recall frequency — should be > 0.5 | `SELECT salience, recalled_count FROM episodic_memories` |
-| Episodic salience distribution at t=0 / t=1h / t=7d / t=30d | Whether τ=3600s is calibrated to actual session cadence | Histogram of `salience` binned by age `(now − last_salience_ts)` |
+| Episodic salience distribution at t=0 / t=1d / t=7d / t=30d | Whether τ=604800s (7d) is calibrated to actual session cadence | Histogram of `salience` binned by age `(now − last_salience_ts)` |
 | Fraction of episodes at floor (`salience ≤ min_salience + ε`) | Floor saturation — how many memories are effectively dead | `SELECT COUNT(*) WHERE salience <= 0.015` |
 | `surprise > 0` fraction during ingest | Whether `TransitionModel` is trained and contributing | Log `surprise` field in episode metadata; compute non-zero fraction |
 | Schema salience histogram | Whether feedback is differentiating schemas — bimodal expected | `SELECT salience FROM schemas ORDER BY salience` |
@@ -257,7 +257,7 @@ s_{\text{norm}} = \frac{2}{1 + e^{-s/2}} - 1 \;\in [0, 1)
 | Symptom | Likely Cause | Diagnostic Signal |
 |---------|-------------|-------------------|
 | A small set of episodes dominate every replay batch | Salience runaway: frequently recalled episodes accumulate reinforcement faster than they decay | Gini coefficient of salience distribution; episodes with `recalled_count > 20` |
-| Memories from yesterday unavailable today | `tau_seconds=3600` too short — one hour half-life means yesterday's session is ≈99% decayed | Salience histogram binned by age; check `now − last_salience_ts > 86400` fraction |
+| Memories from a month ago unavailable | `tau_seconds` too short for use case — default 604800 (7d) means memories older than ~month are at floor | Salience histogram binned by age; check `now − last_salience_ts > 2592000` fraction |
 | `surprise` always 0 | `TransitionModel` cold-start — no predictions until the model has been trained on at least one batch | `surprise` fraction in ingest metadata |
 | `tau_seconds` too short for use case | Default 7d covers typical daily use; if sessions span months, consider increasing | Salience histogram binned by age — all memories near floor = tau too short |
 | Schema salience not differentiating retrieval | Feedback signals are sparse or all `partially_useful` — deltas too small to create meaningful spread | Schema salience histogram; compare salience of `useful` vs `stale` labelled schemas |

@@ -42,29 +42,32 @@ Full session log: `outcomes/01-retrieval.md`
 
 ---
 
-## What Was Done: Salience doc rewrite (2026-07-08)
+## What Was Done: Salience (2026-07-08)
 
-`core/02-salience.md` fully rewritten from the generated stub. Key changes vs prior version:
+Full session log: `outcomes/02-salience.md`
 
-**Gaps filled:**
-- Added predictive-surprise term: `s₀ = max(0.01, novelty + 0.3 * surprise)` — surprise was completely missing
-- Added remember-event boost (`min(1.5, s + 0.6)`) and macro-episode haircut (`max(s * 0.8, 0.05)`)
-- Documented schema salience as a second parallel track (creation, feedback deltas, sigmoid normalization)
-- Fixed recall reinforcement: actual amount is `RetrievalConfig.salience_weight` (0.3), not `SalienceConfig.recall_reinforcement` (0.2) — the latter is dead code
-- Documented lazy decay (replay-triggered, not continuous)
-- Added all missing template sections: Data Flow, Implementation Files, Diagnostic Hooks, Parameter Sensitivity, Known Failure Modes, Relationships
+**Cleanup (no benchmark impact):**
+- Removed dead `SalienceConfig.recall_reinforcement` / `reinforce_on_recall()` — never called
+- Added `surprise_weight: float = 0.3` (was hardcoded constant in ingest)
+- `tau_seconds` default 3600 → 604800 (7 days, brain-aligned hippocampal tier)
+- All 4 eval scripts made injectable: `--tau-seconds`, `--salience-weight`, `--surprise-weight`
 
-**Open questions / plan candidates:**
-- `SalienceConfig.recall_reinforcement` is dead code — remove it or wire it up?
-- `tau_seconds=3600` half-life is 41 min — likely too aggressive for daily-use patterns
-- `0.3 * surprise` coefficient is hardcoded — should it be a config param?
-- Does Spearman ρ(salience, recalled_count) > 0.5 on real data?
+**Ablation + grid search:**
+- `salience_weight=0` vs `0.3`: +2pp overall, **+11pp adversarial**, StaleMemory unchanged
+- Grid 0.0→1.0: elbow at **0.5** (+1pp overall, +8pp adversarial vs 0.3, only -1.4pp single-session)
 
-## Next Session: Pick Up at Salience (Module 2) — Plan Phase
+**Parameter change:** `RetrievalConfig.salience_weight` default **0.3 → 0.5**
+
+**Residual open questions (deferred):**
+- `surprise_weight=0.3` not swept (transition model likely cold at eval time)
+- Per-benchmark tau not swept (locomo=30d, others=1d — hardcoded, not optimized)
+
+---
+
+## Next Session: Pick Up at Graph (Module 3)
 
 **Starting point:**
-1. Review `core/02-salience.md` open questions above
-2. Decide which to address in the plan (dead code cleanup vs calibration vs config exposure)
-3. Write `plans/02-salience.md`
-4. Run diagnostics: `spearman_rho(salience, recalled_count)` across benchmark episodes
-5. Check salience distribution at t=0, t=1h, t=7d — verify decay calibration
+1. Read `core/04-graph.md` — audit alignment with implementation
+2. Rewrite following template (same process as retrieval + salience)
+3. Key diagnostic question: are edge weights reflecting actual semantic/temporal relationships, or is similarity dominating everything?
+4. Ablation: `use_spreading=True` vs `False` on full LoCoMo (retrieval plan had this but on wiki only)

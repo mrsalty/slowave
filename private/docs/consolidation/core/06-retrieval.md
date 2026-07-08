@@ -168,7 +168,7 @@ Only cosine-direct episodes in the top slice receive recall reinforcement (+`sal
 | `episodic_top_k` | `int` | `10` | Cosine-direct episodes to fetch |
 | `semantic_top_k` | `int` | `6` | Cosine-direct prototypes to fetch |
 | `neighbor_top_k` | `int` | `6` | Neighbors per prototype in propagation |
-| `salience_weight` \( \alpha_s \) | `float` | `0.3` | Salience contribution to final score |
+| `salience_weight` \( \alpha_s \) | `float` | `0.5` | Salience contribution to final score |
 | `use_spreading` | `bool` | `True` | Enable spreading activation |
 | `spread_steps` | `int` | `2` | Propagation iterations |
 | `spread_decay` \( \alpha \) | `float` | `0.6` | Activation retention per step |
