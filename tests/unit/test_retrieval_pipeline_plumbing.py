@@ -88,9 +88,7 @@ class _Harness:
             db_path=self._db_path,
             dim=_DIM,
             encoder=EncoderConfig(),
-            salience=SalienceConfig(
-                tau_seconds=self._tau_s, recall_reinforcement=0.3, consolidation_penalty=0.5
-            ),
+            salience=SalienceConfig(tau_seconds=self._tau_s, consolidation_penalty=0.5),
             replay=ReplayConfig(
                 assignment_threshold=0.85, sample_size=2048, max_prototypes_per_replay=128
             ),
