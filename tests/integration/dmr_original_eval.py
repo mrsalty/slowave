@@ -51,6 +51,7 @@ from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
+from slowave.latent.salience import SalienceConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
 HIT_THRESHOLD = 0.5
@@ -151,6 +152,8 @@ def run_record(
     salience_weight: float = 0.3,
     no_consolidate: bool = False,
     no_salience_rerank: bool = False,
+    tau_seconds: float = 86400.0,
+    surprise_weight: float = 0.3,
 ) -> DMROriginalResult:
     metadata = record.get("metadata") or {}
     q, a = _extract_qa(record)
@@ -172,6 +175,7 @@ def run_record(
             db_path=db_path,
             dim=encoder.dim,
             encoder=EncoderConfig(),
+            salience=SalienceConfig(tau_seconds=tau_seconds, surprise_weight=surprise_weight),
             replay=ReplayConfig(
                 assignment_threshold=assignment_threshold,
                 sample_size=256,
@@ -296,6 +300,8 @@ def main() -> None:
     # Ablation flags
     parser.add_argument("--assignment-threshold", type=float, default=0.65)
     parser.add_argument("--salience-weight", type=float, default=0.3)
+    parser.add_argument("--tau-seconds", type=float, default=86400.0)
+    parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument("--no-consolidate", action="store_true")
     parser.add_argument("--no-salience-rerank", action="store_true")
     args = parser.parse_args()
@@ -332,6 +338,8 @@ def main() -> None:
             salience_weight=args.salience_weight if not args.no_salience_rerank else 0.0,
             no_consolidate=args.no_consolidate,
             no_salience_rerank=args.no_salience_rerank,
+            tau_seconds=args.tau_seconds,
+            surprise_weight=args.surprise_weight,
         )
         results.append(r)
         if len(results) <= 5 or len(results) % args.save_every == 0:

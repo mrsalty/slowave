@@ -135,6 +135,9 @@ def run_scenario(
     assignment_threshold: float,
     shared_encoder: TextEncoder,
     top_k: int = 10,
+    tau_seconds: float = 86400.0,
+    salience_weight: float = 0.3,
+    surprise_weight: float = 0.3,
 ) -> ScenarioResult:
     sid = scenario["scenario_id"]
     attribute = scenario["attribute"]
@@ -161,7 +164,7 @@ def run_scenario(
             db_path=db_path,
             dim=shared_encoder.dim,
             encoder=EncoderConfig(),
-            salience=SalienceConfig(tau_seconds=86400.0),
+            salience=SalienceConfig(tau_seconds=tau_seconds, surprise_weight=surprise_weight),
             replay=ReplayConfig(
                 assignment_threshold=assignment_threshold,
                 sample_size=256,
@@ -169,7 +172,7 @@ def run_scenario(
                 use_multi_scale=True,
             ),
             retrieval=RetrievalConfig(
-                salience_weight=0.3,
+                salience_weight=salience_weight,
                 neighbor_top_k=6,
                 use_multi_scale=True,
             ),
@@ -448,6 +451,9 @@ def main() -> None:
     parser.add_argument("--no-consolidate", action="store_true")
     parser.add_argument("--assignment-threshold", type=float, default=0.85)
     parser.add_argument("--top-k", type=int, default=10)
+    parser.add_argument("--tau-seconds", type=float, default=86400.0)
+    parser.add_argument("--salience-weight", type=float, default=0.3)
+    parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument("--out", default="")
     args = parser.parse_args()
 
@@ -511,6 +517,9 @@ def main() -> None:
                 assignment_threshold=args.assignment_threshold,
                 shared_encoder=shared_enc,
                 top_k=args.top_k,
+                tau_seconds=args.tau_seconds,
+                salience_weight=args.salience_weight,
+                surprise_weight=args.surprise_weight,
             )
             status = "HIT " if r.detected else ("STALE" if r.stale else "NOAN")
             err = f" ERROR:{r.error[:50]}" if r.error else ""
