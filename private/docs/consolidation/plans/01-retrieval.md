@@ -1,13 +1,34 @@
 # Retrieval — Measurement & Improvement Plan
 
 **Based on:** `iteration-strategy.md` (Layer 1 Diagnostics + Layer 2 Ablations) + `06-retrieval.md` code audit
-**Status:** PLAN — not implemented
+**Status:** IMPLEMENTED (spread-projection architecture) + PARTIALLY MEASURED
+
+---
+
+## Architecture Decision: Spread-Projection (2026-07-08)
+
+**Problem identified by instrumentation:** `graph_only_saves = 0` across all 18 wiki scenarios. Root cause: `spread_episode_weight=0.15` (graph-space score) was architecturally incommensurable with cosine-direct scores `[0.56, 0.85]`. Graph episodes could never compete regardless of graph quality.
+
+**Root cause is deeper than a tuning issue:** The pre-trained embedding space and the prototype graph were learned by separate processes with no shared scale calibration. The brain avoids this because similarity and association are encoded by the same synaptic weights learned jointly from the same experiences. Arbitrary weights like `spread_episode_weight` are band-aids, not solutions.
+
+**Implemented fix — spread-projection FAISS:**
+Instead of harvesting episodes by prototype membership and scoring them with an arbitrary weight, project the spread activation back into embedding space:
+```
+q_spread = normalize( Σ a(P) * centroid(P) )
+```
+Then run a second FAISS search on `q_spread` in the same cosine scale as the direct query. The result is directly comparable to cosine-direct scores — no separate scale, no ceiling, no arbitrary weight. `spread_score_weight=0.85` applies a principled slight discount (direct recall fires stronger than associative spreading).
+
+**Brain analog:** CA3 recurrent completion produces an activation pattern that projects through Schaffer collaterals back into the CA1 representation space, where it competes with direct EC input on equal footing.
+
+**Verified by `test_spreading_path_completion`:** 4 micro-benchmark tests confirm the full chain wires correctly: graph path A→B→C, 2-hop vs 1-hop boundary, and no-spreading baseline.
+
+**What was deprecated:** `spread_episode_weight`, `spread_score_ceiling` are superseded and no longer used in the retrieval path. `episodes_per_prototype` is retained for the multi-scale coarse-episode lookup.
 
 ---
 
 ## 0. Scope: What This Plan Covers
 
-The retrieval pipeline path:
+The retrieval pipeline path (current implementation):
 
 ```
 query_embedding
@@ -15,7 +36,7 @@ query_embedding
   → multi-scale (coarse+fine seeds)                          [use_multi_scale]
   → predictive completion (transition model → 2nd seed)      [use_transition]
   → spreading activation (graph propagation)                 [use_spreading]
-  → episode harvest (score ceiling + diversity cap)
+  → spread-projection FAISS (q_spread second search)         [use_spreading]
   → merge + temporal boost + salience re-rank
   → reinforcement (cosine-direct only)
 ```

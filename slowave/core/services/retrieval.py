@@ -24,7 +24,7 @@ from slowave.latent.retrieval import RetrievalConfig, RetrievalPipeline
 from slowave.latent.semantic_store import SemanticStore
 from slowave.latent.temporal import TemporalProbe
 from slowave.latent.transition_model import TransitionModel
-from slowave.latent.types import RetrievedMemorySet
+from slowave.latent.types import EpisodeDiagnostic, QueryDiagnostics, RetrievedMemorySet
 from slowave.storage.sqlite_db import SQLiteDB
 from slowave.symbolic.encoder import TextEncoder
 from slowave.symbolic.episode_text import EpisodeTextStore
@@ -43,6 +43,8 @@ class RecallResult:
     schema_activations: dict[int, float] = field(
         default_factory=dict
     )  # schema_id -> cosine/activation score
+    episode_diagnostics: list[EpisodeDiagnostic] = field(default_factory=list)
+    query_diagnostics: QueryDiagnostics | None = None
 
 
 def _prefix_date(text: str, ts: int) -> str:
@@ -130,6 +132,7 @@ class RetrievalService:
         evidence: bool = False,
         mode: str = "default",
         scope: str | None = None,
+        diagnose: bool = False,
     ) -> RecallResult:
         if self.encoder is None:
             raise RuntimeError("recall requires an encoder; cfg.disable_encoder=True")
@@ -153,7 +156,7 @@ class RetrievalService:
                     transition_model=self.transition_model,
                 )
 
-        retrieved: RetrievedMemorySet = retrieval_pipeline.retrieve(q)
+        retrieved: RetrievedMemorySet = retrieval_pipeline.retrieve(q, diagnose=diagnose)
 
         scope_id = normalize_scope(scope=scope) if scope else None
 
@@ -402,7 +405,9 @@ class RetrievalService:
             episode_texts=episode_dicts,
             raw_events=raw_events_out,
             expanded_neighbors=retrieved.expanded_neighbors,
-            schema_activations=schema_scores,  # Cosine similarity scores for activation display
+            schema_activations=schema_scores,
+            episode_diagnostics=retrieved.episode_diagnostics,
+            query_diagnostics=retrieved.query_diagnostics,
         )
 
     def context(self, *, scope: str | None = None, limit: int = 10) -> list[Schema]:
