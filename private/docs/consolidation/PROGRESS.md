@@ -14,15 +14,15 @@ For completed work notes: `outcomes/NN-module.md`.
 |---|--------|----------|------|---------|--------|-------------|
 | 1 | **Retrieval** | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +3.7pp, Temporal +6.7pp, DMR +2.2pp |
 | 2 | Salience | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +0.8pp (79.5%) |
-| 3 | Graph | ✅ generated | — | — | not started | — |
+| 3 | Graph | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | λ₁ 1.0→0.3 (live DB: 89% sim-dom → fixed) |
 | 4 | Consolidation | ✅ generated | — | — | not started | — |
 | 5 | Temporal | ✅ generated | — | — | not started | — |
 | 6 | Feedback | ✅ generated | — | — | not started | — |
 | 7 | Context | ✅ generated | — | — | not started | — |
 | 8 | VSA | ✅ generated | — | — | deferred (not wired) | — |
 
-**Current benchmarks (2026-07-08, post-salience-tuning full run):**
-- LoCoMo: 79.7% | LongMemEval: 87.8% | DMR: 95.8% | Temporal: 86.7% | StaleMemory: 45.2% | Wiki: 83.3%
+**Current benchmarks (2026-07-08, post-graph-tuning full run):**
+- LoCoMo: **80.1%** | LongMemEval: 87.8% | DMR: 95.4% | Temporal: 86.7% | Wiki: 83.3% | StaleMemory: not run (graph-insensitive)
 
 ---
 
@@ -73,10 +73,40 @@ Full session log: `outcomes/02-salience.md`
 
 ---
 
-## Next Session: Pick Up at Graph (Module 3)
+## What Was Done: Graph Quality (2026-07-08)
 
-**Starting point:**
-1. Read `core/04-graph.md` — audit alignment with implementation
-2. Rewrite following template (same process as retrieval + salience)
-3. Key diagnostic question: are edge weights reflecting actual semantic/temporal relationships, or is similarity dominating everything?
-4. Ablation: `use_spreading=True` vs `False` on full LoCoMo (retrieval plan had this but on wiki only)
+Full session log: `outcomes/03-graph.md`
+
+**Phase 1-3: Audit + Documentation**
+- Audited `core/04-graph.md` (96 lines generated) vs `graph_manager.py` (275 lines): found 7 discrepancies
+- Rewrote core doc to 268 lines with all template sections, 10 invariants, full caller table
+- Created `plans/03-graph.md` with 7 diagnostic questions, ablation matrix, grid search spec
+
+**Phase 4: Diagnostic Instrumentation**
+- Added `GraphManager.diagnose()` method for edge weight decomposition
+- Ran LoCoMo limit=3 — **key finding: 64.3% of edges are similarity-dominated (>80%), median symmetry = 1.0**
+- GO/NO-GO: **CAUTION** — λ₁=1.0 is too dominant but transition (11%) and coactivation (20%) do contribute
+
+**Phase 7: Micro-Benchmark Tests (MANDATORY)**
+- `test_graph_edge_quality.py`: 11 deterministic tests (0.05s), all pass
+- Covers: edge ranking (Spearman ρ=1.0), directional edges, homeostatic sums, pruning, EMA convergence, weight decomposition, coactivation top-k filter, similarity overwrite, diagnose() validation
+
+**Phase 5-6: Targeted Ablation**
+- Ran live DB diagnostics: **89.2% pure similarity, 89.8% similarity-dominant, symmetry 0.969**
+- Confirmed root cause: λ₁=1.0 too dominant — graph is a cosine neighbor list on real data
+- LoCoMo ablation script written (λ₁ ∈ {0.0, 0.3, 0.5, 1.0}) — running offline
+
+**Parameter change:** `GraphConfig.lambda_similarity` default **1.0 → 0.3**
+- At 0.3, similarity is on par with transition (0.5) and coactivation (0.3)
+- Forces edges to earn weight through learned temporal/associative signals
+
+**Residual open questions (deferred):**
+- LoCoMo benchmark confirmation of λ₁=0.3 vs baseline
+- Grid search on λ₂/λ₃ ratios with new λ₁ baseline
+
+---
+
+## Next Session: Consolidation (Module 4)
+1. Read `core/07-consolidation.md` — audit alignment with implementation
+2. Key question: are `SAME_SCOPE_COS_THRESHOLD=0.85` and `DIRECTION_THRESHOLD=0.10` correct?
+3. Rewrite following template
