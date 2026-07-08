@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/mrsalty/slowave/compare/slowave-v0.13.0...slowave-v0.13.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* **graph:** quality deep-dive ([5f7154d](https://github.com/mrsalty/slowave/commit/5f7154d728866013c3668a9db6ad62dab37fdd6e))
+
 ## [0.13.0](https://github.com/mrsalty/slowave/compare/slowave-v0.12.1...slowave-v0.13.0) (2026-07-07)
 
 
