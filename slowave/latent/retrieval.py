@@ -1,25 +1,25 @@
 """Retrieval pipeline.
 
-Two modes are supported:
+Three complementary retrieval mechanisms, all operating in the same
+embedding space:
 
-* **cosine-only** (legacy) — FAISS top-k on episodic embeddings, optionally
-  re-ranked by salience. This is the path the system shipped with up to
-  May 2026; ablation studies show all brain-inspired components contribute
-  zero under this mode because the graph and the transition model never
-  affect what evidence is selected.
+* **cosine-direct** — FAISS top-k on episodic embeddings: literal cue
+  match.
 
-* **spreading activation** (new, default on) — the query is used to seed
-  an activation pattern over the prototype graph, the activation is
-  propagated for ``spread_steps`` iterations along ``prototype_edges``
-  weights, and episodes are harvested from the activated prototypes. The
-  cosine-direct episodes are merged with the graph-harvested ones, so
-  this strictly generalises the legacy path.
+* **spread-projection** (default on) — spreading activation propagates
+  over the prototype graph for ``spread_steps`` iterations; the final
+  activation pattern is projected back into embedding space as a weighted
+  centroid of activated prototype centroids (``q_spread``); a second FAISS
+  search on ``q_spread`` retrieves associatively-linked episodes in the
+  same cosine scale as the direct query. No separate score scale or
+  arbitrary weight is needed. This resolves the score-scale mismatch
+  between graph-space activation and embedding-space cosine similarity.
+  Brain analog: CA3 recurrent completion projects through Schaffer
+  collaterals back into the CA1 representation space, where it competes
+  with direct EC input on equal footing.
 
-The point of spreading activation is **pattern completion**: an episode
-that cosine-matches the query weakly can still be retrieved if it lives
-on a prototype reachable through high-weight edges from a strongly
-cosine-matched prototype. This is the only mechanism in the system
-that can solve multi-hop / cue-completion queries.
+* **predictive completion** (Stage 3) — a learned transition model
+  predicts the next-state embedding and seeds a third cosine search.
 """
 
 from __future__ import annotations
@@ -33,7 +33,7 @@ from slowave.latent.graph_manager import GraphManager
 from slowave.latent.semantic_store import SemanticStore
 from slowave.latent.temporal import TemporalContext
 from slowave.latent.transition_model import TransitionModel
-from slowave.latent.types import RetrievedMemorySet
+from slowave.latent.types import EpisodeDiagnostic, QueryDiagnostics, RetrievedMemorySet
 
 
 @dataclass(frozen=True)
@@ -49,24 +49,22 @@ class RetrievalConfig:
     spread_steps: int = 2
     spread_decay: float = 0.6
     spread_activation_floor: float = 1e-3
-    episodes_per_prototype: int = 6
-    # Score awarded to a fully-activated graph-harvested episode. This is
-    # deliberately low — graph episodes should fill gaps below cosine
-    # candidates, not compete with them on equal footing. Pattern
-    # completion still works because PC-style queries have NO strong
-    # cosine match, so graph-harvested episodes don't have anything to
-    # compete with; LoCoMo-style queries have many moderate cosine
-    # matches and graph noise must not displace them.
-    spread_episode_weight: float = 0.15
-    # Hard ceiling on the harvest score expressed as a fraction of the
-    # worst cosine-top-k score, so graph candidates can never out-rank
-    # a real cosine candidate by themselves. Salience can still re-rank
-    # within each tier.
-    spread_score_ceiling: float = 0.9
+    episodes_per_prototype: int = 6  # used for coarse-scale episode lookup (multi-scale)
+    # Superseded by spread-projection: score scale is now resolved by expressing
+    # spreading results in embedding space via q_spread FAISS search.
+    spread_episode_weight: float = 0.15  # unused in new path
+    spread_score_ceiling: float = 0.9  # unused in new path
     salience_gate: bool = True
-    # Diversity cap on graph-harvested episodes only — cosine-direct
-    # episodes are exempt. 0 disables the cap entirely.
+    # Diversity cap on spread-projection episodes — cosine-direct exempt.
     diversity_per_prototype: int = 2
+
+    # Spread-projection FAISS: after spreading activation, activated prototype
+    # centroids are reduced to a weighted centroid q_spread in embedding space.
+    # A second FAISS search on q_spread retrieves associated episodes in the
+    # same cosine scale as the direct query. spread_score_weight applies a slight
+    # discount — direct recall fires stronger than associative spreading.
+    spread_episodic_top_k: int = 10
+    spread_score_weight: float = 0.85
 
     # Temporal context (Stage 7): every episode/prototype carries an
     # intrinsic temporal coordinate (multi-scale sinusoidal embedding).
@@ -150,13 +148,18 @@ class RetrievalPipeline:
         # Cheap to instantiate; held once per pipeline.
         self._temporal = TemporalContext()
 
-    def retrieve(self, query_embedding: np.ndarray) -> RetrievedMemorySet:
+    def retrieve(
+        self, query_embedding: np.ndarray, *, diagnose: bool = False
+    ) -> RetrievedMemorySet:
         # 1) Cosine seed for episodes and prototypes (legacy behaviour).
         ep_scores, ep_ids = self.episodic.search(query_embedding, self.cfg.episodic_top_k)
         ep_ids = [int(i) for i in ep_ids if int(i) != -1]
         ep_score_by_id: dict[int, float] = {
             int(i): float(s) for i, s in zip(ep_ids, ep_scores[: len(ep_ids)], strict=False)
         }
+        # Snapshot pure cosine-FAISS IDs before predictive scores are merged in.
+        _diag_cosine_ids: set[int] = set(ep_score_by_id.keys()) if diagnose else set()
+        _diag_depth: list[int] = []
 
         # Stage 9: fine + coarse prototype seeds. Fine (CA3-like) gives
         # narrow precise matches; coarse (CA1-like) gives broader topic
@@ -265,7 +268,10 @@ class RetrievalPipeline:
         # 2) Spreading activation over the prototype graph (new).
         spread_activation: dict[int, float] = {}
         if self.cfg.use_spreading and seed_activation:
-            spread_activation = self._spread(seed_activation)
+            spread_activation = self._spread(
+                seed_activation,
+                _depth_out=_diag_depth if diagnose else None,
+            )
 
         # 3) Backwards-compatible neighbour expansion field.
         expanded: dict[int, list[tuple[int, float]]] = {}
@@ -273,48 +279,38 @@ class RetrievalPipeline:
             for p in proto_seed:
                 expanded[p.id] = self.graph.neighbors(p.id, top_k=self.cfg.neighbor_top_k)
 
-        # 4) Harvest episodes from activated prototypes and merge with the
-        #    cosine-direct episodes.
+        # 4) Spread-projection FAISS.
         #
-        # Graph-harvested episodes are given a uniform base score
-        # ``spread_episode_weight * activation`` and never overwrite a
-        # cosine-direct score (which is per-episode and typically
-        # stronger). The salience reinforcement step that follows is
-        # restricted to cosine-direct episodes, so the graph never feeds
-        # itself.
-        merged_score: dict[int, float] = dict(ep_score_by_id)
+        # Project spread activation into embedding space:
+        #   q_spread = normalize( Σ a(P) * centroid(P) )
+        # then run a second FAISS search on q_spread in the same cosine
+        # scale as the direct query.  No arbitrary score scale needed —
+        # the result is directly comparable to cosine-direct scores.
+        # Reinforcement is still restricted to cosine_episodes_set so the
+        # graph never feeds itself.
         cosine_episodes_set: set[int] = set(ep_score_by_id.keys())
+        spread_proj_ids: set[int] = set()
         if spread_activation:
-            # Worst cosine top-k score sets the ceiling: graph-harvested
-            # episodes can compete only *below* this score, so they fill
-            # gaps rather than displacing real cosine candidates.
-            cosine_floor = min(ep_score_by_id.values()) if ep_score_by_id else 0.0
-            ceiling = float(self.cfg.spread_score_ceiling) * cosine_floor
-            harvested = self.semantic.episodes_for_prototypes(
-                spread_activation.keys(),
-                per_prototype=self.cfg.episodes_per_prototype,
-            )
-            harvested_ids = {eid for ids in harvested.values() for eid in ids}
-            harvested_ids -= cosine_episodes_set
-            sal_by_id: dict[int, float] = {}
-            if harvested_ids:
-                for m in self.episodic.get_many(list(harvested_ids)):
-                    sal_by_id[int(m.id)] = float(m.salience)
-            for proto_id, episode_ids in harvested.items():
-                act = spread_activation.get(proto_id, 0.0)
-                if act <= self.cfg.spread_activation_floor:
-                    continue
-                base = float(self.cfg.spread_episode_weight) * min(1.0, act)
-                # Cap at the cosine-floor-based ceiling so graph
-                # candidates can never out-rank a real cosine candidate.
-                base = min(base, ceiling) if ceiling > 0.0 else base
-                for eid in episode_ids:
-                    if eid in cosine_episodes_set:
-                        continue  # already scored by cosine — never downgrade
-                    sal = sal_by_id.get(int(eid), 0.0)
-                    weight = base * (0.5 + 0.5 * sal)
-                    prev = merged_score.get(eid, -1e9)
-                    merged_score[eid] = max(prev, weight)
+            q_spread = self._spread_projection(spread_activation)
+            if q_spread is not None:
+                sp_scores, sp_ids = self.episodic.search(q_spread, self.cfg.spread_episodic_top_k)
+                w_sp = float(self.cfg.spread_score_weight)
+                for sp_id, sp_s in zip(sp_ids, sp_scores[: len(sp_ids)], strict=False):
+                    sp_id_i = int(sp_id)
+                    if sp_id_i == -1:
+                        continue
+                    discounted = w_sp * float(sp_s)
+                    # Only include episodes with positive spread-projection evidence.
+                    # Episodes with zero or negative inner product with q_spread have
+                    # no associative link and must not be silently promoted.
+                    if discounted <= 0.0:
+                        continue
+                    if discounted > ep_score_by_id.get(sp_id_i, -1e9):
+                        ep_score_by_id[sp_id_i] = discounted
+                    if sp_id_i not in cosine_episodes_set:
+                        spread_proj_ids.add(sp_id_i)
+
+        merged_score: dict[int, float] = dict(ep_score_by_id)
 
         # 5) Materialise + final re-rank by:
         #      merged cosine/spread score
@@ -365,13 +361,10 @@ class RetrievalPipeline:
 
         # 6) Diversity cap: rebalance the head so a single prototype with
         #    many near-duplicate episodes cannot saturate the top slots.
-        #    Two important guards:
-        #      (a) cosine-direct episodes are never demoted — they
-        #          earned their slot on real similarity; only the graph-
-        #          harvested cluster duplicates get pushed down.
-        #      (b) the cap only kicks in for graph-harvested episodes,
-        #          so when retrieval is effectively cosine-only the
-        #          legacy ranking is preserved.
+        #    Two guards:
+        #      (a) cosine-direct episodes are never demoted.
+        #      (b) the cap only applies to spread-projection episodes so
+        #          cosine-only retrieval is unaffected.
         if self.cfg.diversity_per_prototype > 0 and len(episodes_sorted) > 1 and spread_activation:
             proto_lookup: dict[int, int | None] = {}
             for m in episodes_sorted:
@@ -459,15 +452,114 @@ class RetrievalPipeline:
             reinforcement=self.cfg.salience_weight,
         )
 
+        # Diagnostic collection (only when diagnose=True; zero overhead otherwise).
+        ep_diags: list[EpisodeDiagnostic] = []
+        q_diag: QueryDiagnostics | None = None
+        if diagnose:
+            final_head_ids = {int(m.id) for m in episodes_sorted[:cap]}
+            predictive_only_ids = {tid for tid in predictive_top_ids if tid not in _diag_cosine_ids}
+            for m in episodes_sorted:
+                eid = int(m.id)
+                if eid in _diag_cosine_ids:
+                    src = "cosine_direct"
+                    c_score = float(ep_score_by_id.get(eid, 0.0))
+                    g_act = 0.0
+                elif eid in predictive_only_ids:
+                    src = "predictive"
+                    c_score = 0.0
+                    g_act = 0.0
+                else:
+                    src = "graph_harvest"
+                    c_score = 0.0
+                    # Store the discounted spread-projection FAISS score.
+                    g_act = float(ep_score_by_id.get(eid, 0.0))
+                pid = self.semantic.prototype_for_episode(eid)
+                t_bonus = float(self.cfg.temporal_weight) * temporal_bonus_by_id.get(eid, 0.0)
+                s_bonus = float(self.cfg.salience_weight) * float(m.salience)
+                ep_diags.append(
+                    EpisodeDiagnostic(
+                        episode_id=eid,
+                        source=src,
+                        prototype_id=int(pid) if pid is not None else None,
+                        cosine_score=c_score,
+                        graph_activation=g_act,
+                        temporal_bonus=t_bonus,
+                        salience_bonus=s_bonus,
+                        is_dual_scale=self.cfg.use_multi_scale and eid in coarse_episodes,
+                        final_score=_final_score(m),
+                        is_in_final_head=eid in final_head_ids,
+                    )
+                )
+            cosine_scores = sorted(
+                ep_score_by_id[eid] for eid in _diag_cosine_ids if eid in ep_score_by_id
+            )
+            dual_in_head = sum(1 for d in ep_diags if d.is_in_final_head and d.is_dual_scale)
+            graph_only_in_head = sum(
+                1 for d in ep_diags if d.is_in_final_head and d.source == "graph_harvest"
+            )
+            q_diag = QueryDiagnostics(
+                seed_prototypes_n=len(seed_activation),
+                activated_after_spread_n=len(spread_activation),
+                activation_depth=_diag_depth,
+                cosine_direct_n=len(_diag_cosine_ids),
+                graph_harvest_n=len(spread_proj_ids),
+                graph_only_saves=graph_only_in_head,
+                cosine_score_min=cosine_scores[0] if cosine_scores else 0.0,
+                cosine_score_p50=float(np.median(cosine_scores)) if cosine_scores else 0.0,
+                cosine_score_max=cosine_scores[-1] if cosine_scores else 0.0,
+                dual_scale_episodes_pct=dual_in_head / max(1, len(final_head_ids)),
+                q_pred_sim=q_pred_sim,
+                predictive_seed_used=predictive_seed_used,
+            )
+
         return RetrievedMemorySet(
             query_embedding=np.asarray(query_embedding, dtype=np.float32),
             episodic=episodes_sorted,
             prototypes=proto_seed,
             expanded_neighbors=expanded,
+            episode_diagnostics=ep_diags,
+            query_diagnostics=q_diag,
         )
 
     # ------------------------------------------------------------------
-    def _spread(self, seed: dict[int, float]) -> dict[int, float]:
+    def _spread_projection(self, spread_activation: dict[int, float]) -> np.ndarray | None:
+        """Project spread activation back into embedding space.
+
+        Computes the activation-weighted centroid of activated prototype
+        centroids and returns it as a unit vector in embedding space:
+
+            q_spread = normalize( Σ a(P) * centroid(P) )
+
+        This vector can be used as a second FAISS query in the same cosine
+        space as the direct query — no separate score scale needed.
+
+        Returns None if the result is degenerate (no prototypes, zero total
+        activation, or near-zero norm).
+        """
+        protos = self.semantic.get_many(list(spread_activation.keys()))
+        if not protos:
+            return None
+        total_act = sum(spread_activation.get(int(p.id), 0.0) for p in protos)
+        if total_act < 1e-12:
+            return None
+        dim = protos[0].centroid.shape[0]
+        q = np.zeros(dim, dtype=np.float32)
+        for p in protos:
+            a = spread_activation.get(int(p.id), 0.0)
+            if a > 0.0:
+                q += (a / total_act) * np.asarray(p.centroid, dtype=np.float32)
+        norm = float(np.linalg.norm(q))
+        if norm < 1e-8:
+            return None
+        return (q / norm).astype(np.float32)
+
+    # ------------------------------------------------------------------
+    def _spread(
+        self,
+        seed: dict[int, float],
+        *,
+        _depth_out: list[int] | None = None,
+    ) -> dict[int, float]:
         """Iterative activation propagation over the prototype graph.
 
         Update rule per step:
@@ -516,6 +608,8 @@ class RetrievalPipeline:
                     new_act[dst] = new_act.get(dst, 0.0) + contrib
 
             activation = {p: v for p, v in new_act.items() if v >= floor}
+            if _depth_out is not None:
+                _depth_out.append(len(activation))
             if not activation:
                 break
 

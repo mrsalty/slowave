@@ -44,11 +44,13 @@ class TemporalHarness:
         consolidate: bool = True,
         tau_days: float = 7.0,
         ablation: str = "full",
+        retrieval_cfg_override: RetrievalConfig | None = None,
     ):
         self.shared_encoder = shared_encoder
         self.consolidate = consolidate
         self.tau_seconds = tau_days * DAY
         self.ablation = ablation
+        self._retrieval_cfg_override = retrieval_cfg_override
         self._tmp = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
         self._tmp.close()
         self.db_path = self._tmp.name
@@ -59,6 +61,14 @@ class TemporalHarness:
     def _build_engine(self):
         no_sal = self.ablation == "no_salience"
         no_gr = self.ablation == "no_graph"
+        if self._retrieval_cfg_override is not None:
+            retrieval_cfg = self._retrieval_cfg_override
+        else:
+            retrieval_cfg = RetrievalConfig(
+                salience_weight=0.0 if no_sal else 0.4,
+                neighbor_top_k=0 if no_gr else 6,
+                use_spreading=not no_gr,
+            )
         cfg = SlowaveConfig(
             db_path=self.db_path,
             dim=self.shared_encoder.dim,
@@ -69,11 +79,7 @@ class TemporalHarness:
             replay=ReplayConfig(
                 assignment_threshold=0.85, sample_size=2048, max_prototypes_per_replay=128
             ),
-            retrieval=RetrievalConfig(
-                salience_weight=0.0 if no_sal else 0.4,
-                neighbor_top_k=0 if no_gr else 6,
-                use_spreading=not no_gr,
-            ),
+            retrieval=retrieval_cfg,
             disable_encoder=False,
         )
         self._eng = SlowaveEngine(cfg, shared_encoder=self.shared_encoder)
