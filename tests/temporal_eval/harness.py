@@ -73,9 +73,7 @@ class TemporalHarness:
             db_path=self.db_path,
             dim=self.shared_encoder.dim,
             encoder=EncoderConfig(),
-            salience=SalienceConfig(
-                tau_seconds=self.tau_seconds, recall_reinforcement=0.3, consolidation_penalty=0.5
-            ),
+            salience=SalienceConfig(tau_seconds=self.tau_seconds, consolidation_penalty=0.5),
             replay=ReplayConfig(
                 assignment_threshold=0.85, sample_size=2048, max_prototypes_per_replay=128
             ),
