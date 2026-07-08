@@ -6,10 +6,13 @@ no scope parsing.  Pattern: same as tests/temporal_eval/scenarios/*.
 
 from __future__ import annotations
 
+import dataclasses
 import sys
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+
+from slowave.latent.retrieval import RetrievalConfig
 
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
@@ -152,6 +155,7 @@ def run_scenario(
     shared_enc: TextEncoder,
     ablation: str = "full",
     tau_days: float = 7.0,
+    retrieval_cfg_override: RetrievalConfig | None = None,
 ) -> ScenarioResult:
     """Run one scenario in a fresh harness, return ScenarioResult."""
     h = WikiHarness(
@@ -159,10 +163,13 @@ def run_scenario(
         consolidate=scenario.requires_consolidation,
         tau_days=tau_days,
         ablation=ablation,
+        retrieval_cfg_override=retrieval_cfg_override,
     )
     detail: dict[str, Any] = {}
     try:
         hyp = _dispatch(scenario, h, detail)
+        if h.last_query_diagnostics is not None:
+            detail["query_diagnostics"] = dataclasses.asdict(h.last_query_diagnostics)
     finally:
         h.close()
     hit = keyword_hit(hyp, scenario.expected_keyword)
