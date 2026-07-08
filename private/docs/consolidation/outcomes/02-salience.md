@@ -34,6 +34,11 @@ Elbow at 0.5: +1.0pp overall, +8pp adversarial vs 0.3, only -1.4pp single-sessio
 - Adversarial: **89.0%** | Multi-session: 86.4% | Single-session: 74.1% | Temporal: 61.4%
 - Temporal eval (internal, 15 scenarios): **86.7%** (+6.7pp vs prior 80.0%) — likely correlated with salience_weight increase but only 15 scenarios
 
+### Micro-benchmark (2026-07-08)
+- `test_salience_calibration.py` written: 27 deterministic tests (0.04s)
+- Verifies: decay curve, novelty, consolidation penalty, lifecycle, sampling, floor invariants
+- All pass as part of `uv run pytest tests/unit/`
+
 ## Open Questions for Next Iteration
 - `surprise_weight=0.3` is still the default — no sweep done yet (transition model cold-start at eval time means surprise is likely ~0 for most episodes)
 - Tau per-benchmark still hardcoded (locomo=30d, others=1d) — not swept

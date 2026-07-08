@@ -112,11 +112,11 @@ where \( \mathcal{A} \) is the set of activated prototypes after salience-gate m
 \mathcal{S} = \{ (i, s_i) \mid i \in \text{FAISS.search}(\mathbf{q}_{\text{spread}}, k_{\text{sp}}),\; s_i = w_{\text{sp}} \cdot \langle \mathbf{q}_{\text{spread}}, \mathbf{e}_i \rangle,\; s_i > 0 \}
 \]
 
-Where \( k_{\text{sp}} = \text{spread\_episodic\_top\_k} \) (default: `10`) and \( w_{\text{sp}} = \text{spread\_score\_weight} \) (default: `0.85`). Episodes with discounted score \( \leq 0 \) are excluded — a zero inner product with `q_spread` carries no positive associative evidence.
+Where \( k_{\text{sp}} = \text{spread\_episodic\_top\_k} \) (default: `10`) and \( w_{\text{sp}} = \text{spread\_score\_weight} \) (default: `0.90`). Episodes with discounted score \( \leq 0 \) are excluded — a zero inner product with `q_spread` carries no positive associative evidence.
 
 Scores from \( \mathcal{S} \) are **max-merged** with cosine-direct scores: an episode already in \( \mathcal{C} \) retains its higher cosine-direct score if it exceeds the spread score.
 
-**Why this resolves the score-scale problem**: the old approach scored graph-harvested episodes at `spread_episode_weight=0.15`, placing them on an incommensurable scale relative to cosine-direct scores of `0.56+`. By projecting spread activation back into embedding space, both retrieval channels produce cosine scores in `[−1, 1]`. The `0.85` discount is principled — direct recall fires stronger than associative spreading — rather than arbitrary.
+**Why this resolves the score-scale problem**: the old approach scored graph-harvested episodes at `spread_episode_weight=0.15`, placing them on an incommensurable scale relative to cosine-direct scores of `0.56+`. By projecting spread activation back into embedding space, both retrieval channels produce cosine scores in `[−1, 1]`. The `0.90` discount is principled — direct recall fires stronger than associative spreading — rather than arbitrary.
 
 **Brain analog**: CA3 recurrent pattern completion projects through Schaffer collaterals into the CA1 representation space, where it competes with direct EC input on equal footing. `q_spread` is that projection.
 
@@ -175,7 +175,7 @@ Only cosine-direct episodes in the top slice receive recall reinforcement (+`sal
 | `spread_activation_floor` | `float` | `10^{-3}` | Pruning threshold |
 | `episodes_per_prototype` | `int` | `6` | Coarse-scale episode lookup for multi-scale co-occurrence tracking |
 | `spread_episodic_top_k` | `int` | `10` | Episodes retrieved via `q_spread` FAISS search |
-| `spread_score_weight` \( w_{\text{sp}} \) | `float` | `0.85` | Discount for spread-projection scores (direct > associative) |
+| `spread_score_weight` \( w_{\text{sp}} \) | `float` | `0.90` | Discount for spread-projection scores (direct > associative) |
 | `salience_gate` | `bool` | `True` | Enable support-count modulation of spread activation |
 | `diversity_per_prototype` | `int` | `2` | Max spread-projection episodes per prototype |
 | ~~`spread_episode_weight`~~ | `float` | `0.15` | **Superseded** — arbitrary cross-scale weight, no longer used |
@@ -197,7 +197,7 @@ Only cosine-direct episodes in the top slice receive recall reinforcement (+`sal
 
 ## Key Invariants
 
-1. All episode scores are in the same `[−1, 1]` cosine space — cosine-direct, spread-projection, and predictive-completion scores are directly comparable. Spread-projection applies a `0.85` discount (direct recall fires stronger than associative spreading).
+1. All episode scores are in the same `[−1, 1]` cosine space — cosine-direct, spread-projection, and predictive-completion scores are directly comparable. Spread-projection applies a `0.90` discount (direct recall fires stronger than associative spreading).
 2. Spreading + projection solves pattern completion: the activation-weighted centroid `q_spread` pulls the FAISS query toward associated prototype neighborhoods, surfacing episodes that direct cosine misses. Confirmed by `test_spreading_path_completion`: 2-hop path A→B→C retrieves eps_c via spread, 1-hop does not.
 3. Only cosine-direct episodes receive reinforcement — prevents spread-projection from accumulating salience independently of direct relevance.
 4. Temporal boost is additive, not multiplicative — it nudges ranking rather than dominating.

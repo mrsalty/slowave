@@ -32,13 +32,18 @@ Full session log: `outcomes/01-retrieval.md`
 
 **Root problem found:** `spread_episode_weight=0.15` placed graph episodes on an incommensurable score scale vs cosine-direct (0.56+). Graph contributed nothing.
 
-**Fix implemented:** Spread-projection FAISS — `q_spread = normalize(Σ a(P)*centroid(P))`, second FAISS search in same cosine space, `spread_score_weight=0.85`. Eliminated the score-scale mismatch.
+**Fix implemented:** Spread-projection FAISS — `q_spread = normalize(Σ a(P)*centroid(P))`, second FAISS search in same cosine space, `spread_score_weight=0.90`. Eliminated the score-scale mismatch.
 
 **Evidence:**
 - `test_spreading_path_completion.py` — graph path A→B→C wired correctly
 - `test_retrieval_pipeline_plumbing.py` — spreading and temporal components show differential
 - `graph_only_saves > 0` for 10/18 wiki scenarios (was 0/18)
 - Benchmark improvements confirmed above
+### spread_score_weight grid search (2026-07-08)
+- Swept 9 values [0.50-0.95] on LoCoMo limit=3 (214s)
+- **0.90 optimal** (+0.8pp vs 0.85): single +1.3pp, multi +1.0pp, advers +0.9pp
+- Default changed **0.85 to 0.90** in RetrievalConfig, locomo_eval.py, 06-retrieval.md
+
 
 ---
 
@@ -57,6 +62,10 @@ Full session log: `outcomes/02-salience.md`
 - Grid 0.0→1.0: elbow at **0.5** (+1pp overall, +8pp adversarial vs 0.3, only -1.4pp single-session)
 
 **Parameter change:** `RetrievalConfig.salience_weight` default **0.3 → 0.5**
+
+### Micro-benchmark (2026-07-08)
+- `test_salience_calibration.py` written: 27 deterministic tests (0.04s)
+- Covers decay, novelty, penalty, lifecycle, sampling, floor invariants
 
 **Residual open questions (deferred):**
 - `surprise_weight=0.3` not swept (transition model likely cold at eval time)
