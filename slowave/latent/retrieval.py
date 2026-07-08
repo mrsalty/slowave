@@ -42,7 +42,7 @@ class RetrievalConfig:
     episodic_top_k: int = 10
     semantic_top_k: int = 6
     neighbor_top_k: int = 6
-    salience_weight: float = 0.3
+    salience_weight: float = 0.5
 
     # Spreading-activation knobs (Stage 1)
     use_spreading: bool = True

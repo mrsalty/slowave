@@ -229,7 +229,7 @@ def run_conversation(
     no_pattern_separation=False,
     no_multi_scale=False,
     tau_seconds=86400 * 30,
-    salience_weight=0.3,
+    salience_weight=0.5,
     surprise_weight=0.3,
 ):
     conv_id = str(sample.get("sample_id", "?"))
@@ -644,7 +644,7 @@ def main():
         help="Cap on prototypes formed per replay (default 128).",
     )
     parser.add_argument("--no-salience-rerank", action="store_true")
-    parser.add_argument("--salience-weight", type=float, default=0.3)
+    parser.add_argument("--salience-weight", type=float, default=0.5)
     parser.add_argument("--tau-seconds", type=float, default=float(86400 * 30))
     parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument("--no-graph-expansion", action="store_true")
