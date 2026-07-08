@@ -14,7 +14,13 @@ class GraphConfig:
     top_k_coactivation: int = 6
     prune_below: float = 0.05
     # w_ij = l1*similarity(s_i,s_j) + l2*P(s_j|s_i) + l3*coactivation
-    lambda_similarity: float = 1.0
+    # λ₁ reduced from 1.0 → 0.3 (2026-07-08, graph quality deep-dive):
+    # At 1.0, 89% of edges were pure cosine (live DB), median similarity
+    # fraction = 1.0, symmetry = 1.0 — the graph was a noisy neighbor list.
+    # At 0.3, similarity is on par with transition (0.5) and coactivation
+    # (0.3), forcing edges to earn weight through learned temporal/associative
+    # signals rather than embedding proximity alone.
+    lambda_similarity: float = 0.3
     lambda_transition: float = 0.5
     lambda_coactivation: float = 0.3
     # EMA decay factor for transition/coactivation accumulation across
@@ -273,3 +279,125 @@ class GraphManager:
         conn = self.db.connect()
         row = conn.execute("SELECT COUNT(*) AS n FROM prototype_edges").fetchone()
         return int(row["n"])
+
+    def diagnose(self) -> dict:
+        """Return edge quality diagnostics for go/no-go decisions.
+
+        Computes per-edge weight decomposition (similarity/transition/
+        coactivation fractions), symmetry index, degree distribution,
+        and similarity-dominance percentage. Used by Phase 4 of the
+        graph quality deep-dive.
+        """
+        conn = self.db.connect()
+        rows = conn.execute("""SELECT src_prototype_id, dst_prototype_id,
+                      w_similarity, w_transition, w_coactivation, weight
+               FROM prototype_edges""").fetchall()
+
+        if not rows:
+            return {
+                "edge_count": 0,
+                "similarity_dominance_pct": None,
+                "median_symmetry": None,
+                "degree_distribution": None,
+                "component_fractions": None,
+            }
+
+        l1 = float(self.cfg.lambda_similarity)
+        l2 = float(self.cfg.lambda_transition)
+        l3 = float(self.cfg.lambda_coactivation)
+
+        sim_fracs: list[float] = []
+        trans_fracs: list[float] = []
+        coact_fracs: list[float] = []
+        weights: list[float] = []
+        sim_dom_count = 0
+
+        for r in rows:
+            ws = float(r["w_similarity"])
+            wt = float(r["w_transition"])
+            wc = float(r["w_coactivation"])
+            w = float(r["weight"])
+            weights.append(w)
+
+            sim_contrib = l1 * ws
+            trans_contrib = l2 * wt
+            coact_contrib = l3 * wc
+            total_contrib = sim_contrib + trans_contrib + coact_contrib
+
+            if total_contrib > 1e-12:
+                sim_fracs.append(sim_contrib / total_contrib)
+                trans_fracs.append(trans_contrib / total_contrib)
+                coact_fracs.append(coact_contrib / total_contrib)
+                if sim_contrib / total_contrib > 0.8:
+                    sim_dom_count += 1
+            else:
+                sim_fracs.append(0.0)
+                trans_fracs.append(0.0)
+                coact_fracs.append(0.0)
+
+        import numpy as np
+
+        # Symmetry index: for each reciprocal pair, compute 1 - |w_pq - w_qp| / (w_pq + w_qp)
+        # Group by unordered pair
+        pair_weights: dict[tuple[int, int], list[float]] = {}
+        for r in rows:
+            src = int(r["src_prototype_id"])
+            dst = int(r["dst_prototype_id"])
+            pair_key = (min(src, dst), max(src, dst))
+            pair_weights.setdefault(pair_key, []).append(float(r["weight"]))
+
+        symmetries: list[float] = []
+        for (_a, _b), ws_list in pair_weights.items():
+            if len(ws_list) == 2:
+                w_pq, w_qp = ws_list[0], ws_list[1]
+                denom = w_pq + w_qp
+                if denom > 1e-12:
+                    symmetries.append(1.0 - abs(w_pq - w_qp) / denom)
+                else:
+                    symmetries.append(1.0)
+
+        # Degree distribution
+        degrees: dict[int, int] = {}
+        for r in rows:
+            src = int(r["src_prototype_id"])
+            degrees[src] = degrees.get(src, 0) + 1
+        deg_values = list(degrees.values()) if degrees else [0]
+
+        return {
+            "edge_count": len(rows),
+            "component_fractions": {
+                "similarity": {
+                    "mean": float(np.mean(sim_fracs)) if sim_fracs else 0.0,
+                    "median": float(np.median(sim_fracs)) if sim_fracs else 0.0,
+                    "p90": float(np.percentile(sim_fracs, 90)) if sim_fracs else 0.0,
+                },
+                "transition": {
+                    "mean": float(np.mean(trans_fracs)) if trans_fracs else 0.0,
+                    "median": float(np.median(trans_fracs)) if trans_fracs else 0.0,
+                    "p90": float(np.percentile(trans_fracs, 90)) if trans_fracs else 0.0,
+                },
+                "coactivation": {
+                    "mean": float(np.mean(coact_fracs)) if coact_fracs else 0.0,
+                    "median": float(np.median(coact_fracs)) if coact_fracs else 0.0,
+                    "p90": float(np.percentile(coact_fracs, 90)) if coact_fracs else 0.0,
+                },
+            },
+            "similarity_dominance_pct": (100.0 * sim_dom_count / len(rows) if rows else 0.0),
+            "symmetry": {
+                "n_pairs": len(symmetries),
+                "mean": float(np.mean(symmetries)) if symmetries else None,
+                "median": float(np.median(symmetries)) if symmetries else None,
+            },
+            "degree_distribution": {
+                "n_sources": len(degrees),
+                "mean": float(np.mean(deg_values)),
+                "median": float(np.median(deg_values)),
+                "max": int(max(deg_values)),
+                "p95": float(np.percentile(deg_values, 95)),
+            },
+            "weight_stats": {
+                "mean": float(np.mean(weights)) if weights else 0.0,
+                "median": float(np.median(weights)) if weights else 0.0,
+                "max": float(max(weights)) if weights else 0.0,
+            },
+        }

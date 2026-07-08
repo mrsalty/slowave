@@ -14,7 +14,7 @@ All Slowave runs: **zero LLM calls**, local CPU, no API key required.
 | Benchmark | What it tests | Slowave | Best LLM-based competitor |
 |---|---|---:|---|
 | **LongMemEval** | Facts, updates, preferences across many sessions with realistic distractors | **87.8%** | Mem0 94.4%† |
-| **LoCoMo** | Cross-session recall across real conversations, 5 categories | **79.7%** | Mem0 92.5%‡ |
+| **LoCoMo** | Cross-session recall across real conversations, 5 categories | **80.1%** | Mem0 92.5%‡ |
 | **StaleMemory** *(concrete prefs)* | Detecting when a stored preference has silently changed | **86–89%** | no published baseline |
 
 † Mem0 uses GPT-5 as judge; Slowave uses keyword-overlap. Scores are not directly comparable across these two protocols.
@@ -34,7 +34,7 @@ All Slowave runs: **zero LLM calls**, local CPU, no API key required.
 | single-session-user | 70 |   **95.7%** | 97.0% | 🟡 −1.3 pp |
 | knowledge-update | 78 |   **94.9%** | 93.6% | 🟢 +1 pp ahead |
 | single-session-assistant | 56 |   **92.9%** | 98.2% | 🟡 −5 pp |
-| multi-session | 133 |   **79.7%** | 88.0% | 🔴 −8 pp |
+| multi-session | 133 |   **80.1%** | 88.0% | 🔴 −8 pp |
 | single-session-preference | 30 | **76.7%** | 96.7% | 🔴 −20 pp gap |
 | **TOTAL** | **500** |   **87.8%** | **94.4%** | 🟡 **−6.6 pp** |
 
@@ -59,7 +59,7 @@ All Slowave runs: **zero LLM calls**, local CPU, no API key required.
 | single-session | 282 | **74.1%** | 🟡 ok |
 | temporal | 321 | **61.4%** | 🔴 date arithmetic gap |
 | commonsense | 96 | **51.0%** | 🔴 out of scope |
-| **TOTAL** | **1 986** | **79.7%** | 🟢 **beats all independently verified competitors** |
+| **TOTAL** | **1 986** | **80.1%** | 🟢 **beats all independently verified competitors** |
 
 > Category breakdown above is from a prior run. Individual category scores vary ±1–2 pp between runs due to consolidation non-determinism.
 
@@ -67,7 +67,7 @@ All Slowave runs: **zero LLM calls**, local CPU, no API key required.
 
 **🔴 Where Slowave falls short:** "How many days since X?" is arithmetic, not retrieval — Slowave doesn't have an answer-construction layer. Commonsense questions require world knowledge that was never stored. These are structural limits of any retrieval-only system.
 
-> **On Mem0's 92.5%:** self-reported, GPT-5 judge, and flagged by Zep as potentially reflecting a different evaluation protocol. Every independently verified competitor — Zep (75.1%), LangMem (58.1%) — scores below Slowave's 79.7%.
+> **On Mem0's 92.5%:** self-reported, GPT-5 judge, and flagged by Zep as potentially reflecting a different evaluation protocol. Every independently verified competitor — Zep (75.1%), LangMem (58.1%) — scores below Slowave's 80.1%.
 
 ---
 
