@@ -186,6 +186,9 @@ def run_question(
     no_temporal: bool = False,
     replay_only: bool = False,
     no_multi_scale: bool = False,
+    tau_seconds: float = 86400.0,
+    salience_weight: float = 0.3,
+    surprise_weight: float = 0.3,
 ) -> QuestionResult:
     qid = str(question["question_id"])
     qtype = str(question["question_type"])
@@ -209,7 +212,7 @@ def run_question(
             db_path=db_path,
             dim=shared_encoder.dim,
             encoder=EncoderConfig(),
-            salience=SalienceConfig(tau_seconds=86400.0),
+            salience=SalienceConfig(tau_seconds=tau_seconds, surprise_weight=surprise_weight),
             replay=ReplayConfig(
                 assignment_threshold=assignment_threshold,
                 sample_size=256,
@@ -217,7 +220,7 @@ def run_question(
                 use_multi_scale=not no_multi_scale,
             ),
             retrieval=RetrievalConfig(
-                salience_weight=0.0 if no_salience_rerank else 0.3,
+                salience_weight=0.0 if no_salience_rerank else salience_weight,
                 neighbor_top_k=0 if no_graph_expansion else 6,
                 use_multi_scale=not no_multi_scale,
                 use_temporal=not no_temporal,
@@ -809,6 +812,9 @@ def main() -> None:
         action="store_true",
         help="Ablation: disable salience-weighted episode reranking (salience_weight=0).",
     )
+    parser.add_argument("--salience-weight", type=float, default=0.3)
+    parser.add_argument("--tau-seconds", type=float, default=86400.0)
+    parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument(
         "--no-graph-expansion",
         action="store_true",
@@ -891,6 +897,9 @@ def main() -> None:
                 no_temporal=args.no_temporal,
                 replay_only=args.replay_only,
                 no_multi_scale=args.no_multi_scale,
+                tau_seconds=args.tau_seconds,
+                salience_weight=args.salience_weight,
+                surprise_weight=args.surprise_weight,
             )
             elapsed = time.time() - t0
             status = "HIT" if r.hit else "miss"
