@@ -210,3 +210,16 @@ def test_consolidate_skips_pure_remember_episodes(eng):
         f"Pure-remember episodes must not create new schemas; "
         f"{before} before → {eng.schemas.count()} after"
     )
+
+
+def test_explicit_remember_prototype_does_not_crash_link_step(eng):
+    """_link_schemas_via_prototype_centroid must not raise even when
+    embeddings don't cluster tightly enough to produce a relation."""
+    eng.remember(content="SessionReaper idle timeout defaults to 3600 seconds", type="fact")
+    eng.remember(content="HTTP daemon disables idle timeout by setting it to zero", type="fact")
+
+    before = eng.schemas.count()
+    eng.consolidate_once()  # must not raise
+
+    # Schema count must not grow — relation-linking never creates schemas
+    assert eng.schemas.count() == before
