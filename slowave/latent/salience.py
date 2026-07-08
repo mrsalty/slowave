@@ -9,10 +9,10 @@ import numpy as np
 @dataclass(frozen=True)
 class SalienceConfig:
     # Exponential decay: s <- s * exp(-dt / tau)
-    tau_seconds: float = 3600.0
+    tau_seconds: float = 604800.0  # 7 days; half-life ≈ 4.8 days
     min_salience: float = 0.01
     novelty_weight: float = 1.0
-    recall_reinforcement: float = 0.2
+    surprise_weight: float = 0.3
     consolidation_penalty: float = 0.5
 
 
@@ -42,9 +42,6 @@ class SalienceEngine:
         sim = float(nn_similarity)
         novelty = (1.0 - sim) / 2.0
         return max(self.cfg.min_salience, self.cfg.novelty_weight * novelty)
-
-    def reinforce_on_recall(self, salience: float) -> float:
-        return float(salience) + float(self.cfg.recall_reinforcement)
 
     def penalize_after_consolidation(self, salience: float) -> float:
         s = float(salience) * float(self.cfg.consolidation_penalty)
