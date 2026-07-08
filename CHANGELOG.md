@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/mrsalty/slowave/compare/slowave-v0.13.0...slowave-v0.13.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* graph consolidation ([0add850](https://github.com/mrsalty/slowave/commit/0add8508ace3d05a9639437e40fe640a372d69c6))
+
 ## [0.13.0](https://github.com/mrsalty/slowave/compare/slowave-v0.12.1...slowave-v0.13.0) (2026-07-07)
 
 
