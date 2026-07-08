@@ -1,0 +1,14 @@
+# Files and directories excluded from the public remote.
+# Format: same as .gitignore — one path per line, # comments, blank lines ignored.
+# The push-public.sh script reads this file to build its exclusion pathspec.
+
+# The push script itself (private tooling)
+scripts/push-public.sh
+
+# This file — don't leak what's being hidden
+.publicignore
+
+private/
+data/
+results/
+

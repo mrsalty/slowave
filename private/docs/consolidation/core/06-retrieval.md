@@ -200,3 +200,19 @@ Only cosine-direct episodes in the top slice receive recall reinforcement (+`sal
 7. Predictive completion respects a hard similarity gate: predictions too similar to the query (cos > 0.85) don't trigger reserved slots — it's not pattern completion if you're predicting what you already see.
 8. Graph-harvested episodes inherit the score ceiling from the worst cosine-direct episode, ensuring "cosine-direct > graph" hierarchy regardless of edge quality.
 9. Diversity cap exempts cosine-direct episodes — they are never displaced by diversity enforcement.
+---
+
+## Implementation Files
+
+| File | What It Implements |
+|------|-------------------|
+| `slowave/latent/retrieval.py` | `RetrievalPipeline` — cosine-direct FAISS search, spreading activation over prototype graph, episode harvesting with score ceiling + diversity cap, predictive-seed promotion, temporal boost, salience re-rank, multi-scale co-occurrence bonus, recall reinforcement |
+| `slowave/latent/retrieval.py` | `RetrievalConfig` — all 25 config parameters as a frozen dataclass |
+| `slowave/core/services/retrieval.py` | `RetrievalService` — wraps `RetrievalPipeline` with schema mapping (episodes → schemas), working-memory gating, MMR dedup, budget trimming, cue-based blending |
+| `slowave/core/services/retrieval.py` | `RecallResult` — structured result: schemas + episode texts + raw events + schema activations |
+| `slowave/latent/temporal.py` | `TemporalContext` — multi-scale sinusoidal temporal embeddings used in Phase 5 temporal boost |
+| `slowave/latent/transition_model.py` | `TransitionModel` — prototype-level transition counts, `predict()` for Phase 2b predictive completion |
+| `slowave/latent/graph_manager.py` | `GraphManager` — prototype edge storage with fused weights (similarity + transition + coactivation), `neighbors()` for spreading |
+| `slowave/latent/episodic_store.py` | `EpisodicStore` — FAISS-backed episodic embedding storage, `search()` for cosine-direct, `get_many()` for materialization |
+| `slowave/latent/semantic_store.py` | `SemanticStore` — prototype centroid storage, `search()` / `search_by_scale()` for fine/coarse prototype seeds, `episodes_for_prototypes()` for harvest |
+| `slowave/latent/types.py` | `RetrievedMemorySet` — retrieval result: episodic memories + prototypes + expanded neighbors |
