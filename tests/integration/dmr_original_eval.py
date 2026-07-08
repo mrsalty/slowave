@@ -149,7 +149,7 @@ def run_record(
     *,
     top_k: int,
     assignment_threshold: float = 0.65,
-    salience_weight: float = 0.3,
+    salience_weight: float = 0.5,
     no_consolidate: bool = False,
     no_salience_rerank: bool = False,
     tau_seconds: float = 86400.0,
@@ -299,7 +299,7 @@ def main() -> None:
     parser.add_argument("--save-every", type=int, default=25)
     # Ablation flags
     parser.add_argument("--assignment-threshold", type=float, default=0.65)
-    parser.add_argument("--salience-weight", type=float, default=0.3)
+    parser.add_argument("--salience-weight", type=float, default=0.5)
     parser.add_argument("--tau-seconds", type=float, default=86400.0)
     parser.add_argument("--surprise-weight", type=float, default=0.3)
     parser.add_argument("--no-consolidate", action="store_true")
