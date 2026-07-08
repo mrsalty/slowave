@@ -43,7 +43,7 @@ Where \( k_s = \text{semantic\_top\_k} \) (default: `6`).
 
 ### Phase 2a: Multi-Scale Prototype Seeds (Stage 9)
 
-When `use_multi_scale = True`, a second coarse-scale (CA1-like) search runs in parallel on prototypes assigned with a lower similarity threshold. Coarse prototypes capture broader topics; fine prototypes capture narrow patterns:
+When `use_multi_scale = True`, a second coarse-scale (CA1-like) search runs in parallel on prototypes assigned with a lower similarity threshold. Think of this as two hippocampal pathways firing at different granularities: fine (CA3) for pattern completion — narrow, precise matches — and coarse (CA1) for pattern generalization — broad topical overlap. A fact that surfaces at both scales is confirmed by two independent retrieval pathways. An episode that only matches at one scale might be a lucky embedding alignment; dual-scale evidence raises confidence.
 
 \[
 \mathcal{P}_{\text{coarse}} = \{ (j, s_j) \mid j \in \text{SemanticStore.search\_by\_scale}(\mathbf{q}, \text{coarse}, k_c) \}
@@ -53,13 +53,15 @@ Coarse seeds are max-merged into the seed activation set, and their member episo
 
 ### Phase 2b: Predictive Completion (Stage 3)
 
-When `use_transition = True` and the transition model is trained, a forward prediction \( \hat{\mathbf{q}} = \text{TransitionModel.predict}(\mathbf{q}) \) is computed. If \( \|\hat{\mathbf{q}}\|_2 \geq \text{transition\_min\_norm} \) (default `10^{-2}`), it acts as a second cosine seed:
+The transition model learns to predict \\( \\mathbf{e}_{t+1} \\) from \\( \\mathbf{e}_t \\) using prototype-level transition counts accumulated during consolidation. This is the mechanism that answers "what comes after X?" — a query whose answer lives *downstream* in a learned sequence, not in the query's own embedding neighborhood. Cosine-direct alone cannot solve this: the answer embedding may have near-zero dot product with the query embedding, but the transition model has seen the A→B sequence before and can steer retrieval toward B.
+
+When `use_transition = True` and the transition model has completed at least one training step (`trained_steps > 0`), a forward prediction \( \hat{\mathbf{q}} = \text{TransitionModel.predict}(\mathbf{q}) \) is computed. If \( \|\hat{\mathbf{q}}\|_2 \geq \text{transition\_min\_norm} \) (default `10^{-2}`), it acts as a second cosine seed:
 
 \[
 s_i^{\text{pred}} = w_{\text{trans}} \cdot \langle \hat{\mathbf{q}}, \mathbf{e}_i \rangle, \quad w_{\text{trans}} = \text{transition\_score\_weight} \;(0.7)
 \]
 
-Predicted scores are max-merged with cosine-direct scores: a strong literal match is never demoted by a weaker prediction.
+Predicted scores are max-merged with cosine-direct scores so a strong literal match is never demoted by a weaker prediction. The predicted embedding also seeds prototype activation (same discount factor \\( w_{\\text{trans}} \\)), so the graph spreading front is informed by both the query and its predicted continuation.
 
 A **reserved-slot mechanism** reserves up to `transition_reserved_slots` (default `1`) head positions for predictive-seed candidates that would otherwise be displaced by cosine-direct episodes — but only when the prediction direction is *meaningfully different* from the query: \( \langle \mathbf{q}, \hat{\mathbf{q}} \rangle \leq \text{transition\_reserve\_max\_qsim} \) (default `0.85`).
 
@@ -94,7 +96,7 @@ This update rule is structurally identical to **personalized PageRank** (random 
 a_{\text{final}}(p) = a(p) \cdot (1 + 0.1 \cdot \sqrt{1 + \text{support\_count}(p)})
 \]
 
-This is a **Hebbian prior**: prototypes with more evidence (higher support count from replay/consolidation) are modestly easier to activate. The √ dampens returns — a prototype with 10,000 episodes is only ~3.2× more activatable than one with 1 episode. The constant 0.1 keeps this a soft prior, never a hard filter.
+This is a **Hebbian prior**: prototypes with more evidence (higher support count from replay/consolidation) are modestly easier to activate. The √ dampens returns — a prototype with 10,000 episodes (~11.0× multiplier) is about 9.6× more activatable than one with 1 episode (~1.14×), not 10,000×. The constant 0.1 keeps this a soft prior: even massive evidence produces only an order-of-magnitude boost, never a hard filter.
 
 ### Phase 4: Episode Harvesting and Predictive Promotion
 
@@ -114,9 +116,9 @@ s_{\text{harvest}}(e) \leq \gamma_{\text{ceiling}} \cdot \min_{e' \in \mathcal{C
 
 Where \( \gamma_{\text{ceiling}} = \text{spread\_score\_ceiling} \) (default: `0.9`).
 
-**Diversity cap**: at most `diversity_per_prototype` (default: `2`) episodes per prototype from graph harvest. Cosine-direct episodes are **exempt** — they always retain full representation. The cap prevents a single highly-activated prototype from flooding the head.
+**Diversity cap**: at most `diversity_per_prototype` (default: `2`) episodes per prototype from graph harvest. Cosine-direct episodes are **exempt** — they always retain full representation. Without this cap, spreading activation can converge on a single high-connectivity prototype and saturate all head slots with its near-duplicate member episodes, starving other relevant prototypes of representation. The cap forces the head to cover multiple distinct prototype neighborhoods.
 
-**Predictive-seed promotion**: episodes shared by both cosine-direct and predictive seeds are promoted to the head when the predictive head is otherwise empty, up to `transition_reserved_slots` positions.
+**Predictive-seed promotion**: after diversity cap, the pipeline checks whether predictive-seed candidates were lost in merging. Candidates already in the head (by id or by prototype) are skipped — a near-duplicate episode from the same prototype as an existing head entry adds no information. Surviving candidates are inserted just after the top cosine match, up to `transition_reserved_slots` positions. This ensures the head carries both literal cue matches and learned sequential continuations.
 
 ### Phase 5: Temporal Boost (Stage 7)
 
