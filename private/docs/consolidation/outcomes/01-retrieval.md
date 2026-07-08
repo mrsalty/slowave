@@ -102,3 +102,23 @@ Key engineering discoveries during test construction:
 1. **C-1/C-2/C-3 completion misses:** Graph finds the right neighborhood but not the specific prototype holding the indirect fact. Needs graph quality work (module 3) — the domain→fact prototype edge doesn't form from a single consolidation pass.
 2. **Wiki C-1 false regression:** Old system accidentally hit Thermacrete via weak schema score; new system correctly surfaces militarily-relevant content for a military query. Expected behavior.
 3. **Retrieval stress tests are plumbing, not performance:** They verify wiring but don't measure real-world quality improvement. Next step for real measurement: scenarios where ground truth is an episode unreachable via cosine alone (not yet designed).
+
+---
+
+## Post-hoc: `spread_score_weight` Grid Search (2026-07-08)
+
+Swept 9 values `[0.50, 0.60, 0.65, 0.70, 0.75, 0.80, 0.85, 0.90, 0.95]` on LoCoMo (limit=3, 214s total).
+
+**Result: `0.90` is optimal (+0.8pp overall vs 0.85 baseline).**
+
+| sw | overall | single | temporal | common | multi | advers |
+|----|---------|--------|----------|--------|-------|--------|
+| 0.85 | 80.1 | 78.4 | 56.7 | 61.9 | 88.5 | 88.4 |
+| **0.90** | **80.9** | **79.7** | 56.7 | 61.9 | **89.5** | **89.3** |
+
+- **temporal & common**: flat across all values — spread-projection irrelevant for these categories
+- **single-session**: +1.3pp at 0.90 vs 0.85 (less discount → single-session graph edges get more weight)
+- **multi-session**: +1.0pp at 0.90 vs 0.85 (cross-session spreading benefits from less discount)
+- **adversarial**: +0.9pp at 0.90
+
+**Default changed: `0.85 → 0.90`** in `RetrievalConfig`, `locomo_eval.py`, and `06-retrieval.md`.

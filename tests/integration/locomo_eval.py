@@ -231,6 +231,7 @@ def run_conversation(
     tau_seconds=86400 * 30,
     salience_weight=0.5,
     surprise_weight=0.3,
+    spread_score_weight=0.90,
 ):
     conv_id = str(sample.get("sample_id", "?"))
     # Pin the global numpy RNG to a deterministic seed derived from conv_id so
@@ -269,6 +270,7 @@ def run_conversation(
                 neighbor_top_k=0 if no_graph_expansion else 6,
                 use_transition=not no_transition,
                 use_multi_scale=not no_multi_scale,
+                spread_score_weight=spread_score_weight,
             ),
             disable_encoder=False,
         )
@@ -647,6 +649,7 @@ def main():
     parser.add_argument("--salience-weight", type=float, default=0.5)
     parser.add_argument("--tau-seconds", type=float, default=float(86400 * 30))
     parser.add_argument("--surprise-weight", type=float, default=0.3)
+    parser.add_argument("--spread-score-weight", type=float, default=0.90)
     parser.add_argument("--no-graph-expansion", action="store_true")
     parser.add_argument(
         "--no-transition",
@@ -734,6 +737,7 @@ def main():
                 tau_seconds=args.tau_seconds,
                 salience_weight=args.salience_weight,
                 surprise_weight=args.surprise_weight,
+                spread_score_weight=args.spread_score_weight,
             )
         except Exception as e:
             print("  ERROR:", e)
