@@ -120,6 +120,7 @@ def save_results(all_results: dict[str, list[ScenarioResult]], out_dir: Path) ->
                 "hit": r.hit,
                 "hypothesis": r.hypothesis,
                 "detail": r.detail,
+                "query_diagnostics": r.detail.get("query_diagnostics"),
             }
             for r in results
         ]
