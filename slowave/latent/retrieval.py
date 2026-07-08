@@ -64,7 +64,7 @@ class RetrievalConfig:
     # same cosine scale as the direct query. spread_score_weight applies a slight
     # discount — direct recall fires stronger than associative spreading.
     spread_episodic_top_k: int = 10
-    spread_score_weight: float = 0.85
+    spread_score_weight: float = 0.90
 
     # Temporal context (Stage 7): every episode/prototype carries an
     # intrinsic temporal coordinate (multi-scale sinusoidal embedding).
