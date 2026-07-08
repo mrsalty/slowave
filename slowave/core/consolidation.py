@@ -131,7 +131,14 @@ class Consolidator:
             # produces composite near-duplicates (adjacent remembers merged
             # into one macro-episode concatenate two unrelated claims, which
             # defeats both text dedupe and the geometric near-dup guard).
+            # Still link related schemas via the prototype centroid so the
+            # schema graph is populated even in pure-remember sessions.
             if self._episodes_all_explicit_remember(sample_ids):
+                try:
+                    proto = self.semantic.get(pid)
+                    self._link_schemas_via_prototype_centroid(pid, proto.centroid)
+                except Exception:
+                    pass
                 skipped += 1
                 continue
 
@@ -463,6 +470,39 @@ class Consolidator:
             tuple(event_ids),
         ).fetchone()
         return int(row["n"] or 0) == 0
+
+    def _link_schemas_via_prototype_centroid(self, prototype_id: int, centroid: np.ndarray) -> None:
+        """Link the two schemas closest to this prototype's centroid with a
+        reinforces relation.
+
+        Called when all episodes are explicit-remember so no new schema should
+        be created, but the prototype cluster still signals that the two nearest
+        schemas are semantically related. Populates schema_relations without
+        touching schema counts.
+        """
+        top = self.schemas.search_embedding(centroid, limit=3)
+        if len(top) < 2:
+            return
+        s1_id, s1_cos = top[0]
+        s2_id, s2_cos = top[1]
+        if s1_cos < 0.65 or s2_cos < 0.60:
+            return
+        try:
+            s1 = self.schemas.get(s1_id)
+            s2 = self.schemas.get(s2_id)
+        except KeyError:
+            return
+        if s1.status not in ("active", "needs_review"):
+            return
+        if s2.status not in ("active", "needs_review"):
+            return
+        self.schemas.add_relation(
+            src_schema_id=s1_id,
+            dst_schema_id=s2_id,
+            relation="reinforces",
+            confidence=round(s2_cos, 3),
+            reason=f"co-clustered via prototype {prototype_id}",
+        )
 
     def _scope_for_episodes(self, episode_ids: list[int]) -> str | None:
         if not episode_ids:
