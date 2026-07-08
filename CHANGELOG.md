@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.0](https://github.com/mrsalty/slowave/compare/slowave-v0.13.0...slowave-v0.14.0) (2026-07-08)
+
+
+### Features
+
+* consolidation-stage1-3 ([ba030ca](https://github.com/mrsalty/slowave/commit/ba030ca7d250c016459feb935b0b0944cf722852))
+
 ## [0.13.0](https://github.com/mrsalty/slowave/compare/slowave-v0.12.1...slowave-v0.13.0) (2026-07-07)
 
 
