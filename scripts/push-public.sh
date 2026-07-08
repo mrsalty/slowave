@@ -12,12 +12,41 @@ SOURCE_BRANCH="main"
 PUBLIC_BRANCH="main"
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
+CURRENT_BRANCH=$(git branch --show-current)
 TMP_DIR=$(mktemp -d)
 
 cleanup() {
     rm -rf "$TMP_DIR"
 }
 trap cleanup EXIT
+
+# ---------------------------------------------------------
+# Safety checks
+# ---------------------------------------------------------
+
+if [[ "$CURRENT_BRANCH" != "$SOURCE_BRANCH" ]]; then
+    echo "ERROR: Run this script from '$SOURCE_BRANCH' (currently on '$CURRENT_BRANCH')."
+    exit 1
+fi
+
+if ! git remote get-url public >/dev/null 2>&1; then
+    echo "ERROR: Remote 'public' not configured."
+    exit 1
+fi
+
+# ---------------------------------------------------------
+# Commit message
+# ---------------------------------------------------------
+
+if [[ $# -gt 0 ]]; then
+    COMMIT_MESSAGE="$*"
+else
+    DEFAULT_MESSAGE="chore(public): sync private repository"
+
+    echo
+    read -r -p "Public commit message [$DEFAULT_MESSAGE]: " COMMIT_MESSAGE
+    COMMIT_MESSAGE="${COMMIT_MESSAGE:-$DEFAULT_MESSAGE}"
+fi
 
 echo "→ Exporting $SOURCE_BRANCH"
 
@@ -57,8 +86,7 @@ git checkout -b "$PUBLIC_BRANCH"
 
 git add .
 
-git commit \
-    -m "${1:-public release $(date +'%Y-%m-%d')}"
+git commit -m "$COMMIT_MESSAGE"
 
 # ---------------------------------------------------------
 # Connect and sync public repository
@@ -72,11 +100,11 @@ echo "→ Syncing public repository"
 
 git fetch public "$PUBLIC_BRANCH" || true
 
-# Replace public main with this sanitized snapshot
 git push public \
     "$PUBLIC_BRANCH:$PUBLIC_BRANCH" \
     --force-with-lease
 
 echo
 echo "✓ Public release completed"
+echo "✓ Commit: $COMMIT_MESSAGE"
 echo "✓ .publicignore paths excluded"
