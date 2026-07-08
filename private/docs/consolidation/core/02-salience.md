@@ -192,7 +192,7 @@ s_{\text{norm}} = \frac{2}{1 + e^{-s/2}} - 1 \;\in [0, 1)
 
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
-| `salience_weight` \( \alpha_s \) | `float` | `0.3` | Episodic recall reinforcement amount AND schema ranking weight |
+| `salience_weight` \( \alpha_s \) | `float` | `0.5` | Episodic recall reinforcement amount AND schema ranking weight |
 
 ### `FeedbackConfig` (schema salience deltas)
 

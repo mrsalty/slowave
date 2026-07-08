@@ -13,7 +13,7 @@ For completed work notes: `outcomes/NN-module.md`.
 | # | Module | Core Doc | Plan | Outcome | Status | Benchmark Δ |
 |---|--------|----------|------|---------|--------|-------------|
 | 1 | **Retrieval** | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +3.7pp, Temporal +6.7pp, DMR +2.2pp |
-| 2 | Salience | ✅ updated | ✅ done | — | plan-ready (ablation next) | — |
+| 2 | Salience | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +0.8pp (79.5%) |
 | 3 | Graph | ✅ generated | — | — | not started | — |
 | 4 | Consolidation | ✅ generated | — | — | not started | — |
 | 5 | Temporal | ✅ generated | — | — | not started | — |
@@ -22,7 +22,7 @@ For completed work notes: `outcomes/NN-module.md`.
 | 8 | VSA | ✅ generated | — | — | deferred (not wired) | — |
 
 **Current benchmarks (2026-07-08):**
-- LoCoMo: 78.7% | LongMemEval: 87.8% | DMR: 95.6% | Temporal: 80.0% | StaleMemory: 45.2%
+- LoCoMo: 79.5% | LongMemEval: 87.8% | DMR: 95.6% | Temporal: 80.0% | StaleMemory: 45.2%
 
 ---
 
