@@ -1,0 +1,75 @@
+name: Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v5
+      with:
+        python-version: ${{ matrix.python-version }}
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[test]"
+        # Install faiss separately as it has complex install requirements
+        pip install faiss-cpu
+        # Install optional spacy model for tests that require it
+        python -m spacy download en_core_web_sm 2>/dev/null || echo "spacy model install skipped (test will skip if unavailable)"
+
+    - name: Run fast tests (skip slow, benchmark, requires_model)
+      run: |
+        python -m pytest tests/ -m "not slow and not benchmark and not requires_model and not requires_faiss" \
+          --timeout=120 --reruns=2 --reruns-delay=5 -v
+      env:
+        SLOWAVE_DB: /tmp/slowave_ci_test.db
+
+    - name: Run faiss integration tests
+      run: |
+        python -m pytest tests/ -m "requires_faiss and not slow" \
+          --timeout=120 --reruns=2 --reruns-delay=5 -v
+      env:
+        SLOWAVE_DB: /tmp/slowave_ci_test.db
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install black isort
+
+    - name: Check formatting with black
+      run: black --check slowave/ tests/
+
+    - name: Check import sort with isort
+      run: isort --check-only slowave/ tests/
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    - uses: astral-sh/setup-uv@v5
+    - run: uv sync --group dev
+    - run: uv run mypy slowave/

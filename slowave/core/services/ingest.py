@@ -1,0 +1,192 @@
+"""IngestService: converts a closed session's raw events into episodic memories.
+
+Owns all episode-formation logic previously scattered as private methods on
+SlowaveEngine. Extracted so it can be tested and reasoned about independently.
+"""
+
+from __future__ import annotations
+
+from typing import Any
+
+import numpy as np
+
+from slowave.latent.episodic_store import EpisodicStore
+from slowave.latent.salience import SalienceEngine
+from slowave.latent.transition_model import TransitionModel
+from slowave.storage.sqlite_db import SQLiteDB
+from slowave.symbolic.episode_text import EpisodeTextStore
+from slowave.symbolic.raw_log import RawLog
+
+
+class IngestService:
+    """Converts raw session events into latent episodic memories.
+
+    Produces both micro-episodes (sliding window over adjacent events) and a
+    macro-episode (whole-session trace). The transition model contributes
+    predictive-surprise salience once consolidation has run at least once.
+    """
+
+    def __init__(
+        self,
+        *,
+        raw_log: RawLog,
+        episodic: EpisodicStore,
+        episode_text: EpisodeTextStore,
+        salience: SalienceEngine,
+        transition_model: TransitionModel,
+        db: SQLiteDB,
+    ):
+        self.raw_log = raw_log
+        self.episodic = episodic
+        self.episode_text = episode_text
+        self.salience = salience
+        self.transition_model = transition_model
+        self.db = db
+
+    # ---- public API --------------------------------------------------------
+
+    def form_episodes(self, session_id: str) -> list[int]:
+        """Convert a session's raw events into multi-scale episodes.
+
+        Returns a list of the new episode IDs (empty if no embeddable events).
+        """
+        events = self.raw_log.list_session(session_id)
+        # Exclude context_query events (activate calls) from episode formation.
+        # Retrieval queries are cues, not memories — encoding them as episodes
+        # causes consolidation to produce episodic summaries whose central text
+        # is the query itself ("remember Karpathy Guidelines...") blended with
+        # project-specific content from the same session.
+        embeddable = [e for e in events if e.embedding is not None and e.type != "context_query"]
+        if not embeddable:
+            return []
+
+        made: list[int] = []
+
+        # Micro episodes: sliding windows over adjacent events. Window=2 keeps
+        # user/assistant exchanges compact; singleton fallback handles 1-turn sessions.
+        window = 2 if len(embeddable) >= 2 else 1
+        for start in range(0, len(embeddable) - window + 1):
+            chunk = embeddable[start : start + window]
+            emb = self._mean_embedding([e.embedding for e in chunk if e.embedding is not None])
+            if emb is None:
+                continue
+            text = "\n".join(self._event_text(e) for e in chunk if e.content.strip())
+            source = "\n".join(e.content.strip() for e in chunk if e.content.strip())
+            salience, surprise = self._episode_salience(emb)
+            if any(e.type.startswith("remember:") for e in chunk):
+                salience = min(1.5, salience + 0.6)
+            ep_id = self.episodic.add(
+                event_id=f"micro_{session_id}_{start}",
+                ts=chunk[len(chunk) // 2].ts,
+                embedding=emb,
+                salience=salience,
+                metadata={
+                    "session_id": session_id,
+                    "kind": "micro",
+                    "n_events": len(chunk),
+                    "prediction_error": surprise,
+                },
+            )
+            self.episode_text.put(
+                episode_id=ep_id,
+                content_text=text,
+                source_content=source,
+                event_ids=[e.id for e in chunk],
+                session_id=session_id,
+            )
+            made.append(ep_id)
+
+        # Macro episode: whole-session trace.
+        macro_emb = self._mean_embedding(
+            [e.embedding for e in embeddable if e.embedding is not None]
+        )
+        if macro_emb is not None:
+            macro_text = "\n".join(self._event_text(e) for e in events if e.content.strip())
+            macro_source = "\n".join(e.content.strip() for e in events if e.content.strip())
+            salience, surprise = self._episode_salience(macro_emb)
+            salience = max(salience * 0.8, 0.05)  # macro useful but less atomic
+            if any(e.type.startswith("remember:") for e in events):
+                salience = min(1.5, salience + 0.6)
+            ep_id = self.episodic.add(
+                event_id=f"macro_{session_id}",
+                ts=embeddable[len(embeddable) // 2].ts,
+                embedding=macro_emb,
+                salience=salience,
+                metadata={
+                    "session_id": session_id,
+                    "kind": "macro",
+                    "n_events": len(embeddable),
+                    "prediction_error": surprise,
+                },
+            )
+            self.episode_text.put(
+                episode_id=ep_id,
+                content_text=macro_text,
+                source_content=macro_source,
+                event_ids=[e.id for e in embeddable],
+                session_id=session_id,
+            )
+            made.append(ep_id)
+
+        return made
+
+    def prototypes_for_episodes(self, episode_ids: list[int]) -> list[int]:
+        """Return prototype IDs that have any of the given episodes mapped to them.
+
+        When episode_ids is empty, returns all prototypes that have any mapping
+        (used by consolidate_once to process all current prototypes).
+        """
+        conn = self.db.connect()
+        if not episode_ids:
+            rows = conn.execute(
+                "SELECT DISTINCT prototype_id FROM episode_prototype_map"
+            ).fetchall()
+            return [int(r["prototype_id"]) for r in rows]
+        ph = ",".join(["?"] * len(episode_ids))
+        rows = conn.execute(
+            f"SELECT DISTINCT prototype_id FROM episode_prototype_map "
+            f"WHERE episode_id IN ({ph})",
+            tuple(int(e) for e in episode_ids),
+        ).fetchall()
+        return [int(r["prototype_id"]) for r in rows]
+
+    # ---- private helpers ---------------------------------------------------
+
+    def _event_text(self, e: Any) -> str:
+        role = "User" if "user" in e.type.lower() else "Assistant"
+        if e.type.startswith("remember:"):
+            role = "Remember"
+        return f"{role}: {e.content.strip()}"
+
+    def _mean_embedding(self, embeddings: list[np.ndarray]) -> np.ndarray | None:
+        if not embeddings:
+            return None
+        emb = np.stack(embeddings, axis=0).mean(axis=0).astype(np.float32)
+        norm = float(np.linalg.norm(emb))
+        return emb / norm if norm > 1e-12 else emb
+
+    def _episode_salience(self, embedding: np.ndarray) -> tuple[float, float]:
+        if self.episodic.count() >= 1:
+            scores, ids = self.episodic.search(embedding, top_k=1)
+            nn_sim = float(scores[0]) if scores.size else -1.0
+            nearest_id = int(ids[0]) if ids.size and int(ids[0]) != -1 else None
+        else:
+            nn_sim = -1.0
+            nearest_id = None
+        novelty = self.salience.compute_novelty_salience(nn_similarity=nn_sim)
+        surprise = 0.0
+        if nearest_id is not None:
+            try:
+                prev = self.episodic.get(nearest_id)
+                pred = (
+                    self.transition_model.predict(prev.embedding.reshape(1, -1))
+                    .reshape(-1)
+                    .astype(np.float32)
+                )
+                pred_norm = float(np.linalg.norm(pred))
+                if pred_norm > 1e-12:
+                    pred = pred / pred_norm
+                surprise = max(0.0, min(1.0, 1.0 - float(pred.dot(embedding))))
+            except Exception:
+                surprise = 0.0
+        return max(0.01, novelty + self.salience.cfg.surprise_weight * surprise), surprise
