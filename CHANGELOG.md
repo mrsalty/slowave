@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.13.1](https://github.com/mrsalty/slowave/compare/slowave-v0.13.0...slowave-v0.13.1) (2026-07-08)
+
+
+### Bug Fixes
+
+* consolidation ([9e58e7e](https://github.com/mrsalty/slowave/commit/9e58e7ed3462615f13a66d4e6a09278ac41d6bf5))
+
 ## [0.13.0](https://github.com/mrsalty/slowave/compare/slowave-v0.12.1...slowave-v0.13.0) (2026-07-07)
 
 
