@@ -13,7 +13,7 @@ For completed work notes: `outcomes/NN-module.md`.
 | # | Module | Core Doc | Plan | Outcome | Status | Benchmark Δ |
 |---|--------|----------|------|---------|--------|-------------|
 | 1 | **Retrieval** | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +3.7pp, Temporal +6.7pp, DMR +2.2pp |
-| 2 | Salience | ✅ updated | — | — | doc-ready (plan next) | — |
+| 2 | Salience | ✅ updated | ✅ done | — | plan-ready (ablation next) | — |
 | 3 | Graph | ✅ generated | — | — | not started | — |
 | 4 | Consolidation | ✅ generated | — | — | not started | — |
 | 5 | Temporal | ✅ generated | — | — | not started | — |
