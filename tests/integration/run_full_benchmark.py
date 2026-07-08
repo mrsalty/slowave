@@ -89,9 +89,7 @@ def _summary_stale(d: dict) -> dict:
     }
 
 
-def _load_prev_summaries(
-    runs_dir: Path, current_dir: Path, limit: int, n: int = 5
-) -> list[dict]:
+def _load_prev_summaries(runs_dir: Path, current_dir: Path, limit: int, n: int = 5) -> list[dict]:
     """Return up to n previous summary.json dicts, oldest-first, matching limit setting."""
     if not runs_dir.exists():
         return []
@@ -134,9 +132,7 @@ def _print_trend(current: dict[str, dict], prev_summaries: list[dict]) -> None:
     W = 9  # column width for score values
     print()
     label_count = len(prev_summaries)
-    print(
-        f"  TREND  (vs {label_count} previous comparable run{'s' if label_count > 1 else ''})"
-    )
+    print(f"  TREND  (vs {label_count} previous comparable run{'s' if label_count > 1 else ''})")
     sep = "  " + "─" * (17 + (W + 2) * label_count + W + 2 + 7)
     print(sep)
     header = f"  {'benchmark':<15}"
@@ -150,9 +146,7 @@ def _print_trend(current: dict[str, dict], prev_summaries: list[dict]) -> None:
         cur_val = _primary(name, r)
         if cur_val is None:
             continue
-        prev_vals = [
-            _primary(name, s.get("results", {}).get(name)) for s in prev_summaries
-        ]
+        prev_vals = [_primary(name, s.get("results", {}).get(name)) for s in prev_summaries]
         row = f"  {name:<15}"
         for v in prev_vals:
             row += f"  {(f'{v:.1f}%') if v is not None else 'n/a':>{W}}"
@@ -213,9 +207,7 @@ def main() -> None:
     args = parser.parse_args()
 
     stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    out_dir = (
-        Path(args.out_dir) if args.out_dir else REPO_ROOT / "data" / "runs" / stamp
-    )
+    out_dir = Path(args.out_dir) if args.out_dir else REPO_ROOT / "data" / "runs" / stamp
     if not out_dir.is_absolute():
         out_dir = REPO_ROOT / out_dir
     out_dir.mkdir(parents=True, exist_ok=True)
