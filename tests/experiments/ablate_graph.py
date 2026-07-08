@@ -5,7 +5,12 @@ no-transition, no-coactivation, no-similarity-at-all, no-self-supervise."""
 
 from __future__ import annotations
 
-import json, logging, os, sys, tempfile, time
+import json
+import logging
+import os
+import sys
+import tempfile
+import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
