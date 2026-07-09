@@ -16,7 +16,7 @@ For completed work notes: `outcomes/NN-module.md`.
 | 2 | Salience | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +0.8pp (79.5%) |
 | 3 | Graph | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | λ₁ 1.0→0.3 (live DB: 89% sim-dom → fixed) |
 | 4 | Consolidation | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | LoCoMo +1.0pp (80.3%→81.3%); StaleMemory: 0pp on every ablation except a small (2-3/360) near-dup-guard effect — confirmed architectural disconnect between judge thresholds and recall ranking, not a bug or a mystery |
-| 5 | Temporal | ✅ generated | — | — | not started | — |
+| 5 | Temporal | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | LongMemEval 0.0pp (all 6 categories) from `use_temporal`; LoCoMo -0.6pp overall / -2.22pp on its temporal category from disabling `use_temporal` — mechanism confirmed alive, benchmark-dependent visibility; `temporal_weight=0.25` grid-searched, flat, kept as-is |
 | 6 | Feedback | ✅ generated | — | — | not started | — |
 | 7 | Context | ✅ generated | — | — | not started | — |
 | 8 | VSA | ✅ generated | — | — | deferred (not wired) | — |
@@ -240,7 +240,26 @@ Re-ran B2, B6, B7, B8 with both scorer fixes (B1 and B4 already had fixed-scorer
 
 Full session log: `outcomes/05-consolidation.md`. All 8 phases done. Two deferred, optional items if revisited: the `test_verdict_distribution_bounds` gap-fill test, and a schema-status-aware StaleMemory metric (check `schema.status == "active"` directly against the DB instead of keyword-matching retrieved text).
 
-## Next Session: Temporal (Module 5)
-1. Read `core/07-temporal.md` — audit alignment with `temporal.py` implementation
-2. Key question: does `TemporalProbe` actually fire? What fraction of queries get temporal anchors vs fallback to `now()`?
-3. Rewrite following template
+---
+
+## What Was Done: Temporal (2026-07-09)
+
+Full session log: `outcomes/07-temporal.md`. All 8 phases done.
+
+**Root problem found:** `core/07-temporal.md`'s Stage 10 anchor-estimation section documented a fabricated 12-probe table (invented "a few minutes ago"/"an hour ago" entries that don't exist in `_TEMPORAL_PROBES`, missing the real "two months ago"/"six months ago"/"two years ago" entries) and the wrong `softmax_temperature` default (0.15 documented vs. 0.05 actual). The doc also lacked every template section past Key Invariants. A second, independent staleness bug was found *in the source itself*: `TemporalProbe`'s docstring claimed a 0.1 default that the constructor never used — fixed (`temporal.py:211`, no behavior change).
+
+**Key question answered** (PROGRESS.md's standing question): `TemporalProbe` fires on **65% of queries** (LongMemEval oracle baseline, 60 questions) — not dead weight. But firing rate tracks *backward-referencing phrasing* ("checking back on our previous conversation"), not the benchmark's category taxonomy — `single-session-assistant` fires at 90%, identical to `temporal-reasoning`, while `single-session-preference` (present/future-tense phrasing) is the real outlier at 10%. This refuted the plan's original Q4 framing (using category label as ground truth for calibration) mid-investigation.
+
+**Ablation matrix (`use_temporal` on/off, the only wired boolean in this module):** LongMemEval shows **exactly 0.0pp on every category**, including `temporal-reasoning` — despite the mechanism firing 65% of the time. LoCoMo shows a real, benchmark-specific effect: **-0.6pp overall, -2.22pp on its dedicated temporal category** (categories 3/4/5 exactly 0.0pp, matching LongMemEval's flatness). Two benchmarks disagreeing this cleanly on a real, confirmed-alive mechanism mirrors the Consolidation module's "architectural disconnect" pattern — not a bug, a benchmark-sensitivity difference.
+
+**Grid search:** `temporal_weight` swept {0.0, 0.10, 0.25, 0.40, 0.60} on LoCoMo's two sensitive categories. Flat, non-monotonic landscape at real sample sizes (n=74/n=90) — current default (0.25) already at or near the empirical optimum on both. **No change.**
+
+**Micro-benchmark tests (MANDATORY):** `tests/unit/test_temporal_probe.py` — 12 new tests, zero prior coverage of `TemporalProbe` (dead-zone gate, softmax-bound invariant, determinism, probe-embedded-once discipline, internal normalization). All pass; full 394+ unit suite unaffected.
+
+**Residual open questions (deferred):** `softmax_temperature`/`atemporal_margin` recalibration (needs phrasing-level annotation, not category labels — Q4's original ground truth was shown wrong); the probe set's minute/hour coverage gap (same-day queries fall into the dead zone or map to "yesterday" — structural, not a threshold); why LongMemEval is insensitive to `use_temporal` while LoCoMo isn't (plausible mechanism proposed, not confirmed by direct instrumentation).
+
+---
+
+## Next Session: Feedback (Module 6)
+1. Read `core/08-feedback.md` — audit alignment with `slowave/core/feedback.py` implementation
+2. Rewrite following template
