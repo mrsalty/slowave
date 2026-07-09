@@ -219,7 +219,7 @@ class SlowaveEngine:
             schemas=self.schemas,
             encoder=self.encoder,
             latent_builder=LatentSchemaBuilder(),
-            geometric_judge=GeometricContradictionJudge(),
+            geometric_judge=GeometricContradictionJudge(self.cfg.judge),
         )
         # The latent consolidator needs episode embeddings + ts.
         self.consolidator._episodic_store_ref = self.episodic
@@ -393,6 +393,10 @@ class SlowaveEngine:
                     "schemas_reinforced": cstats.schemas_reinforced,
                     "schemas_contradicted": cstats.schemas_contradicted,
                     "schemas_skipped": cstats.schemas_skipped,
+                    "verdict_counts": dict(cstats.verdict_counts),
+                    "near_dup_intercepts": cstats.near_dup_intercepts,
+                    "gate_downgrades": dict(cstats.gate_downgrades),
+                    "confidence_histogram": list(cstats.confidence_histogram),
                 }
         return stats
 

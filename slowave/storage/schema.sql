@@ -123,6 +123,16 @@ CREATE TABLE IF NOT EXISTS schemas (
   salience                 REAL NOT NULL DEFAULT 1.0,
   embedding                BLOB,
   dim                      INTEGER,
+  -- Facet axes (within-cluster PCA directions, see 05-consolidation.md Phase 2) and
+  -- their singular-value strengths, packed as flat float32 blobs (n_facet_axes x dim
+  -- and n_facet_axes respectively). Persisted so Consolidator._write_latent_schema can
+  -- reconstruct a real "old" LatentSchema view for the geometric judge's facet-distance
+  -- comparison, instead of an always-empty placeholder (root cause fixed 2026-07-09 —
+  -- see PROGRESS.md). NULL / n_facet_axes=0 means no facet data (legacy row, or the
+  -- schema genuinely had fewer than min_members_for_facets member episodes).
+  facet_axes               BLOB,
+  facet_strengths          BLOB,
+  n_facet_axes             INTEGER NOT NULL DEFAULT 0,
   supporting_episode_ids   TEXT NOT NULL DEFAULT '[]',     -- JSON array
   contradicting_episode_ids TEXT NOT NULL DEFAULT '[]',    -- JSON array
   needs_review             INTEGER NOT NULL DEFAULT 0,     -- 0/1

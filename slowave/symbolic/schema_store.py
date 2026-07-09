@@ -16,7 +16,14 @@ from typing import Any, Iterable
 import numpy as np
 
 from slowave.storage.sqlite_db import SQLiteDB
-from slowave.utils.vec import dumps_json, loads_json, pack_f32, unpack_f32
+from slowave.utils.vec import (
+    dumps_json,
+    loads_json,
+    pack_f32,
+    pack_f32_matrix,
+    unpack_f32,
+    unpack_f32_matrix,
+)
 
 VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archived")
 VALID_RELATIONS = ("reinforces", "refines", "contradicts", "supersedes", "related_to", "part_of")
@@ -263,6 +270,12 @@ class Schema:
     # 0=scoped, 1=portable (same scope_kind), 2=contextual (all scopes, penalised),
     # 3=global (all scopes, no penalty). Promoted automatically by recall breadth.
     generalization_stage: int = 0
+    # Facet axes / strengths unpacked from the DB blobs (see schema.sql). Shape
+    # (0, dim) / (0,) when the schema has no facet data (legacy row, or fewer
+    # than min_members_for_facets member episodes at creation time) rather than
+    # None, so callers can treat "no facets" uniformly without a None-check.
+    facet_axes: "np.ndarray | None" = None
+    facet_strengths: "np.ndarray | None" = None
 
 
 @dataclass(frozen=True)
@@ -347,6 +360,8 @@ class SchemaStore:
         needs_review: bool = False,
         evidence: list[tuple[int | None, int | None, str | None, float]] | None = None,
         dedupe: bool = True,
+        facet_axes: np.ndarray | None = None,
+        facet_strengths: np.ndarray | None = None,
     ) -> int:
         self.last_create_reinforced_existing_id = None
         status = status if status in VALID_STATUS else "active"
@@ -388,15 +403,40 @@ class SchemaStore:
             emb_blob = pack_f32(vec)
             emb_dim = self.dim
 
+        # Facet axes/strengths (see schema.sql comment on the `schemas` table):
+        # persisted so a later comparison can reconstruct a real "old" view
+        # instead of an always-empty placeholder.
+        facet_axes_blob = None
+        facet_strengths_blob = None
+        n_facet_axes = 0
+        if facet_axes is not None and facet_axes.size > 0:
+            fa = np.asarray(facet_axes, dtype=np.float32)
+            if fa.ndim != 2 or fa.shape[1] != self.dim:
+                raise ValueError(
+                    f"schema facet_axes shape mismatch: expected (k, {self.dim}), got {fa.shape}"
+                )
+            facet_axes_blob = pack_f32_matrix(fa)
+            n_facet_axes = fa.shape[0]
+            fs = np.asarray(
+                facet_strengths if facet_strengths is not None else np.zeros(n_facet_axes),
+                dtype=np.float32,
+            ).reshape(-1)
+            if fs.size != n_facet_axes:
+                raise ValueError(
+                    f"schema facet_strengths size mismatch: expected {n_facet_axes}, got {fs.size}"
+                )
+            facet_strengths_blob = pack_f32(fs)
+
         conn = self.db.connect()
         cur = conn.execute(
             """
             INSERT INTO schemas (
               prototype_id, content_text, facets_json, tags_json, scope_id, status, confidence,
-              salience, embedding, dim, supporting_episode_ids,
+              salience, embedding, dim, facet_axes, facet_strengths, n_facet_axes,
+              supporting_episode_ids,
               contradicting_episode_ids, needs_review, first_formed_ts,
               last_updated_ts
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 primary_proto,
@@ -409,6 +449,9 @@ class SchemaStore:
                 float(salience),
                 emb_blob,
                 emb_dim,
+                facet_axes_blob,
+                facet_strengths_blob,
+                n_facet_axes,
                 dumps_json({"ids": supporting}),
                 dumps_json({"ids": contradicting}),
                 1 if needs_review else 0,
@@ -1375,15 +1418,37 @@ class SchemaStore:
         # Unpack stored embedding blob so the working-memory gate can score
         # activation geometrically (cosine) rather than purely lexically.
         emb: np.ndarray | None = None
+        dim: int | None = None
         try:
-            if row["embedding"] is not None and row["dim"] is not None:
-                emb = unpack_f32(row["embedding"], int(row["dim"]))
+            if row["dim"] is not None:
+                dim = int(row["dim"])
+            if row["embedding"] is not None and dim is not None:
+                emb = unpack_f32(row["embedding"], dim)
         except Exception:
             emb = None
         try:
             gen_stage = int(row["generalization_stage"])
         except (KeyError, TypeError, IndexError):
             gen_stage = 0
+        # Facet axes/strengths: NULL / n_facet_axes=0 (legacy row, or the schema
+        # genuinely had fewer than min_members_for_facets members) both degrade
+        # to an empty (0, dim) / (0,) matrix rather than None.
+        n_facets = 0
+        try:
+            if row["n_facet_axes"] is not None:
+                n_facets = int(row["n_facet_axes"])
+        except (KeyError, TypeError, IndexError):
+            n_facets = 0
+        facet_axes = np.zeros((0, dim or 0), dtype=np.float32)
+        facet_strengths = np.zeros((0,), dtype=np.float32)
+        try:
+            if n_facets > 0 and dim is not None and row["facet_axes"] is not None:
+                facet_axes = unpack_f32_matrix(row["facet_axes"], n_facets, dim)
+            if n_facets > 0 and row["facet_strengths"] is not None:
+                facet_strengths = unpack_f32(row["facet_strengths"], n_facets)
+        except (KeyError, TypeError, IndexError, ValueError):
+            facet_axes = np.zeros((0, dim or 0), dtype=np.float32)
+            facet_strengths = np.zeros((0,), dtype=np.float32)
         return Schema(
             id=int(row["id"]),
             prototype_id=None if row["prototype_id"] is None else int(row["prototype_id"]),
@@ -1401,4 +1466,6 @@ class SchemaStore:
             last_updated_ts=int(row["last_updated_ts"]),
             embedding=emb,
             generalization_stage=gen_stage,
+            facet_axes=facet_axes,
+            facet_strengths=facet_strengths,
         )
