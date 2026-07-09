@@ -8,7 +8,7 @@ _HTML_TEMPLATE = r"""
 <head>
 <meta charset="utf-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1"/>
-<title>Slowave Dashboard</title>
+<title>🧠 Slowave Dashboard</title>
 <style>
 :root{
   --bg:#080e1c;--panel:#0f1829;--panel2:#141e33;--panel3:#192540;
