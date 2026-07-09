@@ -68,7 +68,7 @@ def _make_schema(
         INSERT INTO schemas
           (content_text, facets_json, tags_json, scope_id, status, confidence,
            salience, supporting_episode_ids, contradicting_episode_ids,
-           needs_review, generalization_stage, first_formed_ts, last_updated_ts)
+           is_labile, generalization_stage, first_formed_ts, last_updated_ts)
         VALUES (?, '{}', '{"tags":[]}', ?, 'active', 1.0,
                 1.0, '{"ids":[]}', '{"ids":[]}', 0, ?, ?, ?)
         """,
@@ -250,7 +250,7 @@ def _schema_obj(
         salience=1.0,
         supporting_episode_ids=[],
         contradicting_episode_ids=[],
-        needs_review=False,
+        is_labile=False,
         first_formed_ts=int(time.time()),
         last_updated_ts=int(time.time()),
         embedding=None,
@@ -503,7 +503,7 @@ class TestRecallCosineScoring:
             "INSERT INTO schemas "
             "(content_text, facets_json, tags_json, scope_id, status, confidence,"
             " salience, supporting_episode_ids, contradicting_episode_ids,"
-            " needs_review, generalization_stage, first_formed_ts, last_updated_ts,"
+            " is_labile, generalization_stage, first_formed_ts, last_updated_ts,"
             " embedding, dim)"
             " VALUES (?, '{}', '{\"tags\":[]}', ?, 'active', 1.0,"
             " 1.0, '{\"ids\":[]}', '{\"ids\":[]}', 0, 2, ?, ?, ?, ?)",
@@ -555,7 +555,7 @@ def _cross_scope_schema(*, gen_stage: int = 2, embedding=None) -> "Schema":
         salience=5.0,
         supporting_episode_ids=[],
         contradicting_episode_ids=[],
-        needs_review=False,
+        is_labile=False,
         first_formed_ts=int(time.time()),
         last_updated_ts=int(time.time()),
         embedding=embedding,

@@ -42,9 +42,11 @@ class ConsolidationService:
     def consolidate_once(
         self, *, triggered_by: str = "worker", decay_idle_days: float = 30.0
     ) -> dict[str, Any]:
-        """Run one replay + latent consolidation pass, then decay unused schemas.
+        """Run one replay + latent consolidation pass, reconsolidate labile
+        schemas, then decay unused schemas.
 
-        Returns a stats dict with keys ``replay``, ``consolidation``, and ``decay``.
+        Returns a stats dict with keys ``replay``, ``consolidation``,
+        ``reconsolidation``, and ``decay``.
         """
         conn = self.db.connect()
         started_ts = int(time.time())
@@ -64,15 +66,25 @@ class ConsolidationService:
         try:
             replay_stats = self.replay_engine.replay_once()
             consolidation: dict[str, Any] = {}
+            reconsolidation: dict[str, Any] = {}
             if self.consolidator is not None:
                 protos = self._ingest.prototypes_for_episodes([])
                 cs = self.consolidator.consolidate(prototype_ids=protos)
                 consolidation = dataclasses.asdict(cs)
+                # Reconsolidation (2026-07-10): re-examine labile schemas
+                # (needs_review=True) by replaying them against their
+                # nearest active neighbor via the same judge, instead of
+                # leaving them flagged indefinitely. "Labile" is the state,
+                # "reconsolidation" is the process that resolves it — see
+                # core/08-feedback.md's "Labile State & Reconsolidation"
+                # section and outcomes/08-feedback.md.
+                reconsolidation = self.consolidator.reconsolidate_labile_schemas()
             decay = self.schemas.decay_unused(idle_days=decay_idle_days, dry_run=False)
 
             result = {
                 "replay": replay_stats,
                 "consolidation": consolidation,
+                "reconsolidation": reconsolidation,
                 "decay": decay,
                 "procedures": {},  # removed Phase 1 P1
             }

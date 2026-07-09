@@ -57,11 +57,15 @@ class FeedbackSignal:
 
     review_pressure:
         urgency to flag memory for manual review (0 to 1)
-        for stale/wrong memories
+        for stale/wrong memories — fixed per label (see _STALE_REVIEW_PRESSURE /
+        _WRONG_REVIEW_PRESSURE below), informational only: nothing compares this
+        against a threshold. needs_review is set unconditionally by
+        FeedbackConfig.apply_stale_wrong_review, not by this value.
 
     outcome_reward:
         task-level reward signal (-1 to +1)
-        stored separately; not applied to schema reward by default
+        stored separately; never applied to schema reward — there is no config
+        path that feeds this back into salience/confidence
     """
 
     valence: float
@@ -81,11 +85,28 @@ class FeedbackSignal:
 # ============================================================================
 
 
+#: review_pressure value stamped onto every "stale" signal — informational
+#: only (see FeedbackSignal.review_pressure docstring); not configurable
+#: because nothing has ever compared it against a threshold.
+_STALE_REVIEW_PRESSURE = 0.7
+
+#: review_pressure value stamped onto every "wrong" signal — same caveat.
+_WRONG_REVIEW_PRESSURE = 1.0
+
+
 @dataclass(frozen=True)
 class FeedbackConfig:
     """Configuration for context feedback system.
 
-    All knobs are exposed to enable ablation/grid search.
+    All knobs are exposed to enable ablation/grid search. Three fields that
+    were previously here (`apply_outcome_to_schema_reward`,
+    `missing_creates_memory`, `missing_replay_enabled`) were removed
+    2026-07-10 — confirmed dead (read nowhere outside this dataclass) during
+    the Feedback module's algorithmic deep-dive. `stale_review_threshold`/
+    `wrong_review_threshold` were removed the same day for the same reason
+    (see `_STALE_REVIEW_PRESSURE`/`_WRONG_REVIEW_PRESSURE` above) — they only
+    ever set `FeedbackSignal.review_pressure`, which nothing compares against
+    a threshold.
     """
 
     # Master enable
@@ -104,7 +125,6 @@ class FeedbackConfig:
     apply_positive_learning: bool = True
     apply_negative_learning: bool = True
     apply_stale_wrong_review: bool = True
-    apply_outcome_to_schema_reward: bool = False
     context_feedback_weight: float = 0.5
     recall_feedback_weight: float = 1.0
 
@@ -123,18 +143,10 @@ class FeedbackConfig:
     stale_confidence_delta: float = -0.20  # was -0.15
     wrong_confidence_delta: float = -0.40  # was -0.30
 
-    # Review thresholds
-    stale_review_threshold: float = 0.7
-    wrong_review_threshold: float = 1.0
-
     # Bounds
     min_salience: float = 0.01
     min_confidence: float = 0.0
     max_confidence: float = 1.0
-
-    # Missing context handling
-    missing_creates_memory: bool = False
-    missing_replay_enabled: bool = True
 
 
 # ============================================================================
@@ -259,7 +271,7 @@ def feedback_signal_for(
             overload=0.0,
             salience_delta=cfg.stale_salience_delta,
             confidence_delta=cfg.stale_confidence_delta,
-            review_pressure=cfg.stale_review_threshold,
+            review_pressure=_STALE_REVIEW_PRESSURE,
             outcome_reward=outcome_reward,
         )
 
@@ -273,7 +285,7 @@ def feedback_signal_for(
             overload=0.0,
             salience_delta=cfg.wrong_salience_delta,
             confidence_delta=cfg.wrong_confidence_delta,
-            review_pressure=cfg.wrong_review_threshold,
+            review_pressure=_WRONG_REVIEW_PRESSURE,
             outcome_reward=outcome_reward,
         )
 

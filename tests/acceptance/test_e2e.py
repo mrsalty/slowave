@@ -1,6 +1,8 @@
 """End-to-end acceptance test: full cognitive cycle via CLI blackbox.
 
-Tests 9 phases of the Slowave core-mechanism validation using only:
+Tests the Slowave core-mechanism validation, including the 2026-07-10
+"labile" lifecycle (Phase 4's recovery-via-feedback, Phase 4b's scope_id-
+independent noise tracking, Phase 5's reconsolidation assertion), using only:
   - subprocess calls to the `slowave` CLI
   - read-only sqlite3 queries for assertions
 
@@ -404,7 +406,9 @@ class TestE2E:
     # ── Phase 4 ───────────────────────────────────────────────────────────────
 
     def test_phase4_demotion(self, cli, db):
-        """S1 (team retrospective) demoted to needs_review; T1 stays clean."""
+        """S1 (team retrospective) demoted to is_labile; T1 stays clean;
+        S1 then recovers via an explicit useful mark (2026-07-10 labile
+        lifecycle, recovery channel 1)."""
         t0 = time.time()
 
         s1_id = _schema_id_for(db, "team retrospective")
@@ -452,32 +456,123 @@ class TestE2E:
 
         rows = _query(
             db,
-            "SELECT needs_review, json_extract(facets_json,'$.context_noise_score') as noise "
+            "SELECT is_labile, json_extract(facets_json,'$.context_noise_score') as noise "
             "FROM schemas WHERE id=?",
             (s1_id,),
         )
-        nr, noise = rows[0]["needs_review"], float(rows[0]["noise"] or 0)
-        _detail(f"S1  needs_review={nr}  noise_score={noise:.3f}  (threshold 0.75)")
+        nr, noise = rows[0]["is_labile"], float(rows[0]["noise"] or 0)
+        _detail(f"S1  is_labile={nr}  noise_score={noise:.3f}  (threshold 0.75)")
 
         t1_id = _schema_id_for(db, "SessionReaper runs as a daemon")
-        t1_row = _query(db, "SELECT needs_review, status FROM schemas WHERE id=?", (t1_id,))[0]
-        _detail(f"T1  needs_review={t1_row['needs_review']}  status={t1_row['status']}")
+        t1_row = _query(db, "SELECT is_labile, status FROM schemas WHERE id=?", (t1_id,))[0]
+        _detail(f"T1  is_labile={t1_row['is_labile']}  status={t1_row['status']}")
 
-        assert nr == 1, f"S1 needs_review expected 1, got {nr}"
+        assert nr == 1, f"S1 is_labile expected 1, got {nr}"
         assert noise >= 0.75, f"S1 noise_score expected ≥0.75, got {noise:.3f}"
         assert t1_row["status"] == "active"
-        assert t1_row["needs_review"] == 0
+        assert t1_row["is_labile"] == 0
+
+        # Recovery channel 1 (core/08-feedback.md "Labile State &
+        # Reconsolidation"): an explicit "useful" mark is direct positive
+        # evidence and clears is_labile immediately, independent of
+        # scope_id or the noise-count history that set the flag in the
+        # first place.
+        r_recover = cli(
+            "activate", "--query", "unrelated warm-up query", "--scope", "project:slowave"
+        )
+        cli(
+            "reinforce",
+            r_recover["retrieval_id"],
+            "--feedback",
+            "useful",
+            "--outcome",
+            "success",
+            "--used",
+            f"sch_{s1_id}",
+        )
+        cli("commit", r_recover["session_id"], "--outcome", "success")
+
+        nr_recovered = _query(db, "SELECT is_labile FROM schemas WHERE id=?", (s1_id,))[0][
+            "is_labile"
+        ]
+        _detail(f"S1  is_labile after explicit useful mark: {nr_recovered}  (expected 0)")
+        assert (
+            nr_recovered == 0
+        ), f"S1 should recover via explicit useful feedback, got is_labile={nr_recovered}"
+
+    # ── Phase 4b ──────────────────────────────────────────────────────────────
+
+    def test_phase4b_scope_independent_noise_tracking(self, cli, db):
+        """Fixed 2026-07-10: context_noise_score no longer requires scope_id.
+
+        `reinforce` has no --scope flag at all — scope is always auto-derived
+        from the activate/recall call that produced the retrieval_id being
+        replied to. Calling it against a retrieval_id that was never
+        registered by activate/recall (as done here) leaves scope_id NULL
+        end-to-end, with no way for this CLI command to supply one directly.
+        Before the fix, this silently zeroed out noise tracking with no
+        error or warning; D2 must now demote exactly like S1 did in Phase 4,
+        purely from scope-less feedback. D2 is deliberately left labile
+        going into Phase 5, so that phase's consolidation pass has a real
+        candidate for Consolidation's reconsolidation channel (recovery
+        channel 3) to examine.
+        """
+        t0 = time.time()
+
+        d2_id = _schema_id_for(db, "must never route through an LLM call")
+        assert d2_id is not None
+
+        before = _query(
+            db,
+            "SELECT is_labile, json_extract(facets_json,'$.context_noise_score') as noise "
+            "FROM schemas WHERE id=?",
+            (d2_id,),
+        )[0]
+        noise_before = float(before["noise"] or 0)
+        _detail(f"D2 before: is_labile={before['is_labile']}  noise={noise_before:.3f}")
+
+        for i in range(3):
+            cli(
+                "reinforce",
+                f"ctx_never_registered_scope_test_{i}",
+                "--feedback",
+                "irrelevant",
+                "--outcome",
+                "unknown",
+                "--irrelevant",
+                f"sch_{d2_id}",
+            )
+            _detail(f"scope-less irrelevant mark {i + 1}/3 (no prior activate/recall call at all)")
+
+        after = _query(
+            db,
+            "SELECT is_labile, json_extract(facets_json,'$.context_noise_score') as noise "
+            "FROM schemas WHERE id=?",
+            (d2_id,),
+        )[0]
+        noise_after = float(after["noise"] or 0)
+        _detail(f"D2 after:  is_labile={after['is_labile']}  noise={noise_after:.3f}")
+
+        assert noise_after > noise_before, (
+            "context_noise_score did not move at all from scope-less feedback — "
+            "the 2026-07-10 scope_id fix appears to have regressed"
+        )
+        assert after["is_labile"] == 1, f"D2 is_labile expected 1, got {after['is_labile']}"
 
     # ── Phase 5 ───────────────────────────────────────────────────────────────
 
     def test_phase5_consolidation_hygiene(self, cli, db):
-        """Two consolidation passes must not create new schemas; max salience ≤ 20."""
+        """Two consolidation passes must not create new schemas; max salience ≤ 20;
+        reconsolidation examines D2 (left labile by Phase 4b)."""
         t0 = time.time()
 
         before = _query(db, "SELECT COUNT(*) as n FROM schemas WHERE status='active'")[0]["n"]
         _detail(f"schema count before: {before}")
 
-        cli("consolidate")
+        r1 = cli("consolidate")
+        recon = r1.get("reconsolidation", {})
+        _detail(f"reconsolidation (pass 1): {recon}")
+
         cli("consolidate")
 
         after = _query(db, "SELECT COUNT(*) as n FROM schemas WHERE status='active'")[0]["n"]
@@ -487,6 +582,25 @@ class TestE2E:
 
         assert after == before, f"Schema count changed: {before} → {after}"
         assert float(max_sal or 0) <= 20.0, f"Max salience {max_sal} > 20"
+
+        # Reconsolidation (2026-07-10, core/05-consolidation.md Phase 7): D2
+        # was deliberately left labile by Phase 4b so this pass has a real
+        # candidate to examine. The specific outcome (restabilized/
+        # superseded/contradicted/inconclusive) depends on real embedding
+        # similarity to the rest of the seeded dataset and isn't asserted on
+        # directly — only that the mechanism actually ran and accounted for
+        # whatever it found.
+        assert (
+            recon.get("examined", 0) >= 1
+        ), f"Expected reconsolidation to examine ≥1 labile schema, got {recon}"
+        outcomes = {
+            k: recon.get(k, 0)
+            for k in ("restabilized", "superseded", "contradicted", "inconclusive")
+        }
+        _detail(f"reconsolidation outcomes: {outcomes}")
+        assert (
+            sum(outcomes.values()) == recon["examined"]
+        ), f"Outcome counts {outcomes} don't sum to examined={recon['examined']}"
 
     # ── Phase 6 ───────────────────────────────────────────────────────────────
 
