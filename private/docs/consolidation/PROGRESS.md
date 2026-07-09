@@ -18,7 +18,7 @@ For completed work notes: `outcomes/NN-module.md`.
 | 4 | Consolidation | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | LoCoMo +1.0pp (80.3%→81.3%); StaleMemory: 0pp on every ablation except a small (2-3/360) near-dup-guard effect — confirmed architectural disconnect between judge thresholds and recall ranking, not a bug or a mystery. **Follow-up 2026-07-10**: gained a new Phase 7 (`reconsolidate_labile_schemas()`) as part of Module 6's labile/reconsolidation work — see Module 6 row and both modules' outcome docs |
 | 5 | Temporal | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | LongMemEval 0.0pp (all 6 categories) from `use_temporal`; LoCoMo -0.6pp overall / -2.22pp on its temporal category from disabling `use_temporal` — mechanism confirmed alive, benchmark-dependent visibility; `temporal_weight=0.25` grid-searched, flat, kept as-is |
 | 6 | Feedback | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | No external benchmark exercises `retrieval_feedback()`; scored internal AUC benchmark (`scripts/feedback_ablation.py`) instead — baseline separates good/bad schemas perfectly (salience_auc=1.0, noise_score_auc=1.0); `apply_learning=False` collapses only salience_auc (0.5), not noise_score_auc (stays 1.0 — new finding, the "master gate" doesn't gate noise-score demotion); `scope_id=None` collapses only noise_score_auc. **Follow-up 2026-07-10, part 2**: `needs_review` ("labile") now has 3 recovery channels + Consolidation reconsolidation, `scope_id` gap fixed — see below |
-| 7 | Context | ✅ generated | — | — | not started | — |
+| | 7 | Context | ✅ updated | ✅ done | ✅ done | **COMPLETE** | Core doc follows CORE_DOC_TEMPLATE (318 lines, 10 sections, 13 invariants); 34 micro-benchmark tests; diagnostics from live DB (78 schemas) + backup DB (385 schemas, 179 Stage 1-3, 119 episodic_summary) — all mechanisms confirmed load-bearing; Phases 4-6 skipped with documented justification |
 | 8 | VSA | ✅ generated | — | — | deferred (not wired) | — |
 
 **Current benchmarks (2026-07-08, post-graph-tuning full run):**
@@ -296,6 +296,10 @@ Three recovery channels were built, all reusing existing machinery: (1) explicit
 
 ---
 
-## Next Session: Context Gating (Module 7)
-1. Read `core/09-context.md` — audit alignment with `slowave/core/context.py` implementation
-2. Rewrite following template
+## Next Session: Context Gating (Module 7, Phases 4-8)
+
+1. Phase 4 — Live-DB query + benchmark instrumentation to answer Q1-Q8 from `plans/09-context.md`
+2. Phase 5 — Ablation matrix (7 boolean flags × benchmarks)
+3. Phase 6 — Grid search top-2 parameters
+4. Phase 7 — Micro-benchmark tests (`tests/unit/test_context_gating.py`)
+5. Phase 8 — Outcome document + PROGRESS update
