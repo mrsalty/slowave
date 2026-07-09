@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.1](https://github.com/mrsalty/slowave/compare/slowave-v0.14.0...slowave-v0.14.1) (2026-07-09)
+
+
+### Bug Fixes
+
+* consolidation and feedback cycle ([5169917](https://github.com/mrsalty/slowave/commit/516991725e47f7110b0bc248045d7ab62d72c54b))
+
 ## [0.14.0](https://github.com/mrsalty/slowave/compare/slowave-v0.13.0...slowave-v0.14.0) (2026-07-08)
 
 
