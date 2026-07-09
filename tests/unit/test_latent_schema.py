@@ -16,7 +16,6 @@ import dataclasses
 import time
 
 import numpy as np
-import pytest
 
 from slowave.latent.schema import (
     GeometricContradictionJudge,

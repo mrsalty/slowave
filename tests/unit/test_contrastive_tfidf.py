@@ -8,8 +8,6 @@ reflects global rarity, not intra-cluster commonality.
 
 from __future__ import annotations
 
-import pytest
-
 from slowave.latent.schema import _build_lexical_signature
 
 

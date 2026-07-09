@@ -7,7 +7,6 @@ any external encoder or database. Used by test_smoke.py and benchmark harnesses.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Any
 
 import numpy as np
 

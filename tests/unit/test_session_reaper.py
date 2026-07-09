@@ -7,12 +7,10 @@ Tests verify:
 
 import tempfile
 import time
-from pathlib import Path
 
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.mcp.session_reaper import _reap_once, get_idle_timeout_s
-from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
 
 
 def _build_test_engine(db_path: str) -> SlowaveEngine:

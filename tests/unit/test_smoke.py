@@ -18,7 +18,6 @@ from slowave.cli.main import cli
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.latent.synthetic import SyntheticConfig, generate_synthetic_events
-from slowave.latent.types import Event
 
 
 def test_imports() -> None:

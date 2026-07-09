@@ -104,10 +104,18 @@ markers = [
     "benchmark: benchmark test (long-running)",
 ]
 
-[dependency-groups]
-dev = [
-    "black",
-    "isort",
-    "mypy>=2.1.0",
-    "pytest>=9.0.3",
-]
+[tool.ruff.lint.per-file-ignores]
+# Scripts that need sys.path manipulation before imports
+"scripts/*" = ["E402"]
+"slowave/__main__.py" = ["E402"]
+"slowave/cli/main.py" = ["E402"]
+"slowave/mcp/http_server.py" = ["E402"]
+"slowave/mcp/server.py" = ["E402"]
+"tests/experiments/*.py" = ["E402"]
+"tests/integration/*.py" = ["E402"]
+"tests/temporal_eval/*.py" = ["E402"]
+"tests/wiki_scenarios/*.py" = ["E402"]
+"tests/unit/test_setup.py" = ["E402"]
+"tests/unit/test_supersession_geometry.py" = ["E402"]
+"tests/unit/test_vsa.py" = ["E402"]
+"tests/unit/test_working_memory_context.py" = ["E402"]

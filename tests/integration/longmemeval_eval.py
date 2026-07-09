@@ -494,7 +494,7 @@ def print_report(results: list[QuestionResult], consolidate: bool) -> None:
     print("=" * 70)
     print(" SLOWAVE — LongMemEval Evaluation Report")
     print("=" * 70)
-    print(f" Dataset : LongMemEval Oracle")
+    print(" Dataset : LongMemEval Oracle")
     print(f" Mode    : {'with LLM consolidation' if consolidate else 'NO LLM (recall only)'}")
     print(f" Scorer  : keyword overlap (threshold={HIT_THRESHOLD})")
     print(f" Total   : {len(results)} questions")
@@ -602,7 +602,7 @@ def print_report(results: list[QuestionResult], consolidate: bool) -> None:
             f"  db size:         mean={sum(sizes_mb)/len(sizes_mb):.2f}MB   max={max(sizes_mb):.2f}MB"
         )
         # Rough cost estimate for two common API points.
-        total_tokens_all = sum(total)
+        sum(total)
         n_q = max(1, len(valid))
         # gpt-4o-mini ~ $0.15/$0.60 per Mtok in/out; assume 80/20 split as a rough average
         gpt4mini_cost = (sum(prompt) * 0.15 + sum(compl) * 0.60) / 1_000_000
@@ -936,7 +936,7 @@ def main() -> None:
                 salience_weight=args.salience_weight,
                 surprise_weight=args.surprise_weight,
             )
-            elapsed = time.time() - t0
+            time.time() - t0
             status = "HIT" if r.hit else "miss"
             err = f" ERROR:{r.error[:60]}" if r.error else ""
             comp = ""

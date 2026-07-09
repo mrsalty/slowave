@@ -215,7 +215,7 @@ def ingest_wikipedia_page(
     
     eng.close()
     
-    log.info(f"\nIngestion complete:")
+    log.info("\nIngestion complete:")
     log.info(f"  - Successfully stored: {stored_count}")
     log.info(f"  - Failed: {failed_count}")
     log.info(f"  - Total paragraphs: {len(paragraphs)}")
