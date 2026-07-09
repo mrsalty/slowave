@@ -537,7 +537,7 @@ def context_cmd(
                 f"  act={item.activation:.3f} status={s.status} sal={s.salience:.3f}"
                 f" supports={len(s.supporting_episode_ids)}"
                 f" tags={','.join(s.tags)}"
-                f" reason={item.reason}" + ("  needs_review" if s.needs_review else "")
+                f" reason={item.reason}" + ("  needs_review" if s.is_labile else "")
             )
 
 
@@ -675,7 +675,7 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
     eng = _build_engine(ctx.obj["db"])
     kwargs: dict[str, Any] = {"limit": limit}
     if needs_review:
-        kwargs["needs_review"] = True
+        kwargs["is_labile"] = True
     items = eng.list_schemas(**kwargs)
     if ctx.obj["json"]:
         _print([asdict(s) for s in items], True)
@@ -686,7 +686,7 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
             click.echo(
                 f"  [sch_{s.id}]{label_str} {s.content_text}"
                 f"  status={s.status} sal={s.salience:.3f} supports={len(s.supporting_episode_ids)}"
-                f" tags={','.join(s.tags)}" + ("  needs_review" if s.needs_review else "")
+                f" tags={','.join(s.tags)}" + ("  needs_review" if s.is_labile else "")
             )
     eng.close()
 

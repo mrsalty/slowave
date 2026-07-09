@@ -103,3 +103,11 @@ Not a calibration issue. `Consolidator._write_latent_schema` reconstructed the *
 ## Next Module
 
 **Module 5: Temporal.** Key question: does `TemporalProbe` actually fire? What fraction of queries get temporal anchors vs. fallback to `now()`?
+
+## Follow-up (2026-07-10): Reconsolidation of Labile Schemas (Phase 7)
+
+Added well after this module was marked complete, as part of a Feedback-module (Module 6) follow-up investigation — see `outcomes/08-feedback.md`'s "Follow-up (2026-07-10, part 2)" for the full design reasoning (dashboard confusion → the `needs_review`-boolean-vs-`status`-string naming collision → discovering no subsystem ever resolved a flagged schema → a brain-inspired redesign using standard reconsolidation-theory terminology).
+
+**What changed here:** `Consolidator.reconsolidate_labile_schemas()` (new method, `slowave/core/consolidation.py`) — every `consolidate_once()` pass now re-examines up to 20 schemas flagged `needs_review=True` ("labile") by replaying each against its nearest active neighbor through the *same* `GeometricContradictionJudge` and *same* caution gates (`min_support_to_supersede`, `min_time_delta_to_supersede_s`) Phases 3-4 already use — no new judge, no new thresholds. See core doc's new Phase 7 for the full mechanics, including the chronology-based `old`/`new` argument assignment needed to avoid the judge's asymmetric argument slots silently biasing every contradiction toward whichever schema happened to be labile.
+
+This is the first functional change to this module since it was marked complete — everything else in this file (root cause, fixes, benchmark impact, open items above) predates it and is unaffected. `tests/unit/test_labile_lifecycle.py::TestReconsolidateLabileSchemas` covers the new method directly; the existing 394+ unit tests remain unaffected.

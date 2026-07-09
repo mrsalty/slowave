@@ -165,7 +165,7 @@ class TestSameScopeGeometry:
 
         old_schema = eng.schemas.get(old_id)
         assert old_schema.status == "active", "Ambiguous dir_score must not auto-supersede"
-        assert old_schema.needs_review, "Ambiguous dir_score should flag needs_review"
+        assert old_schema.is_labile, "Ambiguous dir_score should flag is_labile"
         eng.close()
 
     def test_cosine_below_extended_threshold_no_action(self, tmp_db: str) -> None:

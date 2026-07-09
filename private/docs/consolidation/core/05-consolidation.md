@@ -267,6 +267,34 @@ Explicit-remember schemas (`source_kind == "explicit_remember"`) and schemas wit
 
 Brain analogue: memories never activated during waking or sleep weaken over time (synaptic downscaling). This is a lazy background pass, not a per-consolidation operation — it runs at the end of `consolidate_once()`.
 
+`flag_review` here is one of four independent triggers for what `08-feedback.md` calls the **labile** state (`needs_review=True`) — see Phase 7 immediately below for what resolves it. Before 2026-07-10, this flag was never read anywhere; a schema decayed into review had no path back out.
+
+### Phase 7: Reconsolidation of Labile Schemas (`reconsolidate_labile_schemas`, added 2026-07-10)
+
+Every `consolidate_once()` pass, after the main consolidation loop, re-examines up to `limit` (default 20) schemas that are **labile** (`needs_review=True`, `status="active"`) by replaying each against its nearest active neighbor — reusing the *same* judge and gates the fresh-schema path above uses, not new ones:
+
+\[
+\text{neighbor} = \operatorname*{arg\,max}_{s \neq \text{schema},\; \text{status}(s) \in \{\text{active},\text{needs\_review}\}} \cos(\text{schema.embedding}, s.\text{embedding}), \quad \text{subject to } \cos \geq \tau_{\text{related}}=0.72
+\]
+
+If no neighbor clears \(\tau_{\text{related}}\), the schema is left labile — **inconclusive**, the brain analogue of passive extinction (nothing ever challenges or corroborates the trace, so it just keeps decaying via Phase 6 rather than being actively resolved). Otherwise, both schemas are wrapped as `LatentSchema` views (`_schema_to_latent_view`, mirroring the ad-hoc `old_view` construction in Phase 3/4 above, generalized to work on either side) and passed to the same `GeometricContradictionJudge.judge()`:
+
+\[
+\text{new}, \text{old} = \begin{cases} \text{schema}, \text{neighbor} & \text{schema.last\_updated\_ts} \geq \text{neighbor.last\_updated\_ts} \\ \text{neighbor}, \text{schema} & \text{otherwise} \end{cases}
+\]
+
+**This ordering is load-bearing, not cosmetic.** `judge()`'s `old`/`new` argument slots are asymmetric — on a `"contradicts"` verdict, the caller convention (established in Phase 3/4) always demotes whichever schema was passed as `old`, regardless of the verdict's `time_delta_s` sign. Always passing the labile schema as `new` would silently bias every contradiction in its favor purely because of which argument slot it occupies — so which schema is chronologically newer (`last_updated_ts`, since `mean_ts` in facets is only populated for consolidation-authored schemas) must be decided *before* calling the judge.
+
+Verdict handling:
+
+| Verdict | Outcome | Effect |
+|---|---|---|
+| `reinforces` / `refines` / `unrelated` | **restabilized** | `needs_review` cleared on the examined schema; no `status` change |
+| `contradicts`, gates pass (\(\text{support}(\text{new}) \geq \tau_{\text{support}}\), \(\text{time\_delta\_s} = 0\) or \(\geq \tau_{\text{dt}}\)) | **superseded** (\(\text{time\_delta\_s} > 0\)) or **contradicted** (\(\text{time\_delta\_s} = 0\)) | `old`'s status set to `superseded`/`contradicted`, salience → `0.05`; relation edge added; the examined schema's `needs_review` cleared either way (it's now resolved, whether it won or lost) |
+| `contradicts`, gates fail | **inconclusive** | Left labile — same caution the fresh-schema path already applies (a single weak neighbor can't resolve anything) |
+
+Brain analogue: hippocampal replay reactivates a labile trace alongside related memories during consolidation; if nothing challenges it, it restabilizes; if it's contradicted or cleanly superseded by better/more-recent evidence, it resolves that way instead. "Reconsolidation" is the standard term for this whole resolution process — see `08-feedback.md`'s "Labile State & Reconsolidation" section for the full terminology writeup and the two other (non-Consolidation) channels that can also resolve a labile schema.
+
 ---
 
 ## Configuration
@@ -276,6 +304,14 @@ Brain analogue: memories never activated during waking or sleep weaken over time
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `max_episodes_per_prototype` | `int` | `8` | Max member episodes sampled per prototype for schema building |
+
+### `reconsolidate_labile_schemas()` (method parameter, not a config dataclass field)
+
+| Parameter | Type | Default | Description |
+|-----------|------|---------|-------------|
+| `limit` | `int` | `20` | Max labile schemas examined per `consolidate_once()` pass — bounds per-pass cost; any remainder is picked up on a later pass since the flag persists until resolved |
+
+Uses `related_schema_cosine`, `min_support_to_supersede`, and `min_time_delta_to_supersede_s` from the *same* `GeometricJudgeConfig` below — no new thresholds were introduced for this method.
 
 ### `LatentSchemaConfig` (`slowave/latent/schema.py`)
 
@@ -325,6 +361,8 @@ Brain analogue: memories never activated during waking or sleep weaken over time
 8. **Schema confidence = 1.0 for singleton prototypes, 0.0 for loose clusters** — bounded in [0, 1], driven by within-cluster variance relative to `variance_floor`.
 9. **Facet axes require ≥ 3 members** — below this threshold, `facet_axes` is a zero matrix and `facet_strengths` is empty. The geometric judge treats facet distance as 0.0 in this case.
 10. **Superseded/contradicted schemas get salience 0.05** — they remain in the DB (for provenance and relation edges) but are suppressed from retrieval.
+11. **`reconsolidate_labile_schemas()` reuses the fresh-schema judge and gates verbatim — no separate threshold set exists for it.** `related_schema_cosine`, `min_support_to_supersede`, and `min_time_delta_to_supersede_s` are read from the same `GeometricJudgeConfig` as Phases 3-4; tuning one tunes both paths simultaneously. (Added 2026-07-10.)
+12. **The `old`/`new` argument assignment into the judge is decided by chronology (`last_updated_ts`), never by which schema happened to be labile.** Always passing the labile schema as `new` would bias every contradiction verdict in its favor purely by construction, since the judge always demotes whichever schema is passed as `old` on a `"contradicts"` verdict regardless of the verdict's own `time_delta_s` sign. (Added 2026-07-10; see Phase 7 and `outcomes/08-feedback.md`.)
 
 ---
 
@@ -335,7 +373,8 @@ Brain analogue: memories never activated during waking or sleep weaken over time
 | `slowave/core/consolidation.py` | `Consolidator` — prototype iteration, schema building delegation, `_write_latent_schema()`, explicit-remember gate, near-duplicate guard, geometric verdict routing, schema classification, related-schema linking, debug recording |
 | `slowave/core/consolidation.py` | `ConsolidationStats` — frozen dataclass with outcome counters |
 | `slowave/core/consolidation.py` | `_classify_consolidated_schema()` — structure-based classification (fact vs episodic_summary) |
-| `slowave/core/services/consolidation.py` | `ConsolidationService` — orchestrates replay + consolidation + decay in one pass, writes `worker_runs` rows |
+| `slowave/core/consolidation.py` | `Consolidator.reconsolidate_labile_schemas()`, `_schema_to_latent_view()` — Phase 7, added 2026-07-10 |
+| `slowave/core/services/consolidation.py` | `ConsolidationService` — orchestrates replay + consolidation + reconsolidation + decay in one pass, writes `worker_runs` rows (the `reconsolidation` result key is not yet persisted into `worker_runs` itself — see Known Failure Modes) |
 | `slowave/latent/schema.py` | `LatentSchema` — frozen dataclass: centroid, facet axes/strengths, temporal anchor, confidence, lexical signature, VSA vector |
 | `slowave/latent/schema.py` | `LatentSchemaConfig` — builder configuration dataclass |
 | `slowave/latent/schema.py` | `LatentSchemaBuilder` — `.build()` method: SVD facet axes, confidence, contrastive TF-IDF, VSA encoding |
@@ -357,6 +396,7 @@ Brain analogue: memories never activated during waking or sleep weaken over time
 | `tests/unit/test_contrastive_tfidf.py` | Contrastive TF-IDF lexical signature tests |
 | `tests/unit/test_schema_utility.py` | Schema utility score and decay tests |
 | `tests/unit/test_engine_consolidate.py` | End-to-end consolidate_once with created schemas |
+| `tests/unit/test_labile_lifecycle.py` | `TestReconsolidateLabileSchemas` — restabilize/supersede/contradict/isolated/gated-inconclusive outcomes for Phase 7, against a real `GeometricContradictionJudge` (added 2026-07-10) |
 
 ---
 
@@ -372,6 +412,7 @@ Brain analogue: memories never activated during waking or sleep weaken over time
 | `decay_impact` | Mean salience drop and fraction flagged `needs_review` | Returned by `decay_unused` stats dict (`decayed`, `flagged_review`) |
 | `schema_confidence_distribution` | Histogram of LatentSchema confidence values | Add a list to consolidation debug output or `ConsolidationStats` |
 | `corpus_size_for_tfidf` | Number of schemas in the background corpus for contrastive TF-IDF | Log at start of `_consolidate_latent` — already tracked as `_global_corpus` length |
+| `reconsolidation` outcome distribution | Is Phase 7 mostly restabilizing, superseding/contradicting, or landing inconclusive? Are labile schemas being examined at all, or all sitting past the `limit` backlog? | `reconsolidate_labile_schemas()`'s return dict (`examined`/`restabilized`/`superseded`/`contradicted`/`inconclusive`), surfaced under `consolidate_once()`'s `"reconsolidation"` key — not yet aggregated across passes or persisted to `worker_runs` |
 
 ## Parameter Sensitivity
 
@@ -396,8 +437,10 @@ Brain analogue: memories never activated during waking or sleep weaken over time
 | Too many false contradictions | `same_topic_cosine` too high AND `contradicts_facet_dist` too low → noise in facet axes triggers spurious contradictions | `contradiction_rate` > 20%, schemas toggling between active/superseded |
 | Explicit-remember schemas duplicated by consolidation | `_episodes_all_explicit_remember` gate broken → episodes from remember-only sessions are re-consolidated into near-duplicate schemas | Same content text appears across multiple schema IDs from consolidation |
 | Loose clusters get confidence = 0.0 → no schema created | `variance_floor` too low → tight calibration breaks for real noisy clusters | `schemas_skipped` high despite non-empty prototypes |
-| Decay deletes everything | `idle_days` too short OR `decay_amount` too large → all unreinforced schemas decay below review threshold in one pass | All active schemas flagged `needs_review` after one consolidate_once |
+| Decay deletes everything | `idle_days` too short OR `decay_amount` too large → all unreinforced schemas decay below review threshold in one pass | All active schemas flagged `needs_review` after one consolidate_once — note this alone does not exclude them from retrieval (see `08-feedback.md`'s needs_review-boolean-vs-status-string distinction); it does mean all of them are now eligible for Phase 7 reconsolidation next pass |
 | Cross-scope relations never form | `scope_id` is NULL for all episodes → `scope_for_episodes` returns None, no cross-scope reinforcement | `cross_scope_reinforcement_count` always 0 |
+| Labile schemas seem to accumulate faster than they resolve | `reconsolidate_labile_schemas()`'s `limit` (default 20) is smaller than the per-pass flagging rate, or most labile schemas are landing "inconclusive" (no related neighbor) | Compare `reconsolidation.examined` against the total `needs_review=True, status="active"` count; check the `inconclusive` fraction |
+| Reconsolidation stats never show up anywhere persistent | `reconsolidate_labile_schemas()`'s return dict is surfaced in `consolidate_once()`'s result under `"reconsolidation"` but is **not** written into the `worker_runs` table (deliberate scope decision, 2026-07-10, to avoid an additional migration) | It's only visible in the immediate return value of that specific `consolidate_once()` call, not in any historical/aggregate view |
 
 ## Relationship to Other Modules
 
@@ -406,7 +449,7 @@ Brain analogue: memories never activated during waking or sleep weaken over time
 | `03-replay.md` | Upstream producer — `ReplayEngine.replay_once()` runs before consolidation, providing updated centroids and graph edges |
 | `04-graph.md` | Indirect — prototype creation (which determines what gets consolidated) is driven by replay; `_link_schemas_via_prototype_centroid()` reads `semantic.get(pid)` to find existing schemas |
 | `06-retrieval.md` | Downstream consumer — consolidated schemas are the primary recall candidates; schema status (active/superseded/contradicted) gates retrieval eligibility |
-| `08-feedback.md` | Feedback reinforces schemas via `reinforce_schema()` and `increment_cross_scope_reinforcement()` — increases salience and recurrence_count, which protects against decay |
-| `09-context.md` | Decay feeds into WorkingMemoryGate — schemas flagged `needs_review` are excluded from default context; generalization stage promotion uses `cross_scope_reinforcement_count` |
+| `08-feedback.md` | Feedback reinforces schemas via `reinforce_schema()` and `increment_cross_scope_reinforcement()` — increases salience and recurrence_count, which protects against decay. **Since 2026-07-10, bidirectional**: Feedback (and decay, and `remember()`'s ambiguous-update case) set the `needs_review`/"labile" flag; this module's `reconsolidate_labile_schemas()` (Phase 7) reads it and can clear it or escalate `status` — see `08-feedback.md`'s "Labile State & Reconsolidation" section for the shared terminology and the other two (non-Consolidation) recovery channels. |
+| `09-context.md` | Generalization stage promotion uses `cross_scope_reinforcement_count`. **Correction**: `needs_review=True` alone does *not* exclude a schema from default context — only a non-`"active"` `status` does (see `08-feedback.md` Invariant 6); this doc previously stated otherwise. |
 | `10-supersession.md` | The geometric judge replaces the old SVD1-direction-based supersession manifold for the consolidation path (the manifold still applies at `remember()` time) |
 | `11-vsa.md` | VSA vectors are built and stored during consolidation (`build_schema_vsa`) but not currently used in retrieval — deferred |

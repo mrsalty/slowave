@@ -221,7 +221,7 @@ def _stub_schema(
         salience=salience,
         supporting_episode_ids=[],
         contradicting_episode_ids=[],
-        needs_review=False,
+        is_labile=False,
         first_formed_ts=1000000,
         last_updated_ts=1000000,
         embedding=embedding,
