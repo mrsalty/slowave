@@ -29,6 +29,20 @@ def unpack_f32(blob: bytes, dim: int) -> np.ndarray:
     return vec
 
 
+def pack_f32_matrix(mat: np.ndarray) -> bytes:
+    mat = to_f32(mat)
+    if mat.ndim != 2:
+        raise ValueError("pack_f32_matrix expects a 2D matrix")
+    return np.ascontiguousarray(mat).tobytes(order="C")
+
+
+def unpack_f32_matrix(blob: bytes, rows: int, cols: int) -> np.ndarray:
+    vec = np.frombuffer(blob, dtype=np.float32)
+    if vec.size != rows * cols:
+        raise ValueError(f"Matrix blob size mismatch: expected {rows}x{cols}, got {vec.size}")
+    return vec.reshape(rows, cols).copy()
+
+
 def dumps_json(data: Any) -> str:
     return json.dumps(data, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
 

@@ -14,6 +14,7 @@ from slowave.latent.graph_manager import GraphConfig
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
 from slowave.latent.salience import SalienceConfig
+from slowave.latent.schema import GeometricJudgeConfig
 from slowave.latent.transition_model import TransitionModelConfig
 from slowave.symbolic.encoder import EncoderConfig
 
@@ -36,6 +37,7 @@ class SlowaveConfig:
     graph: GraphConfig = field(default_factory=GraphConfig)
     retrieval: RetrievalConfig = field(default_factory=RetrievalConfig)
     transition: TransitionModelConfig | None = None
+    judge: GeometricJudgeConfig = field(default_factory=GeometricJudgeConfig)
 
     # Convenience shorthand for the most-tuned parameter: prototype
     # assignment threshold. When set, overrides replay.assignment_threshold
