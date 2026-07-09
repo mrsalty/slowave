@@ -208,7 +208,7 @@ class TemporalProbe:
       existing default behaviour exactly.
     - ``softmax_temperature`` controls sharpness: high T → flat weights
       (anchor ≈ centre of mass of all probes ≈ ~4 months ago); low T →
-      winner-takes-all (anchor = closest probe).  Default 0.1 is gently
+      winner-takes-all (anchor = closest probe).  Default 0.05 is sharply
       peaked — a clear "last month" signal wins decisively, an ambiguous
       query spreads smoothly.
 
