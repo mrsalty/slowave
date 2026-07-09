@@ -46,6 +46,23 @@ LongMemEval shows **zero** measurable effect from `use_temporal` on every catego
 - **`TemporalProbe` docstring drift — fixed.** The in-source docstring's claimed default (0.1) didn't match the constructor's real default (0.05); corrected to 0.05 (`temporal.py:211`), no behavior change.
 - **Why LongMemEval is insensitive to `use_temporal` while LoCoMo isn't:** plausible mechanism proposed (Finding 3) but not confirmed by direct instrumentation (e.g., comparing episode-vs-schema hypothesis-text contribution ratios between the two benchmarks). Would require a dedicated diagnostic beyond this investigation's scope.
 
+## Design Evaluation
+
+Qualitative assessment of the module's design, beyond the doc-accuracy and benchmark findings above.
+
+**Strong points:**
+- Stage 7 (sinusoidal encoding) is a genuinely elegant piece of engineering: zero-training, deterministic, and the multi-scale sin/cos basis correctly captures "close on any timescale" similarity without a learned model. The math in the code matched the (corrected) doc cleanly — no shortcuts or simplifications.
+- Stage 10 (anchor estimation) is a clever, low-cost trick — reusing the existing sentence encoder against 12 static probes instead of writing a date-parsing rule engine. Zero regex, zero extra LLM calls, generalizes to phrasing the encoder has seen. The dead-zone gate is sound defensive design — it's what stops every query from getting a spurious past-anchor.
+- Additive-only integration (core doc Invariant 3) is the right architectural call: temporal proximity nudges ranking but never overrides semantic relevance, so a wrong anchor estimate degrades gracefully instead of hijacking retrieval.
+
+**Where the design is weaker than it looks:**
+1. **The dead-zone gate answers "is this phrased with backward reference?", not "is this a temporal question?"** — and the module was built (and `atemporal_margin` calibrated) as if those were the same thing. That's a conceptual gap, not just a doc bug (Finding 2 above): `single-session-assistant` fires the anchor at the same rate as `temporal-reasoning`, for reasons that have nothing to do with the mechanism being wrong — it's detecting something legitimate the design didn't anticipate.
+2. **No config surface at all for `TemporalProbe`.** `softmax_temperature`, `atemporal_margin`, and the probe set are hardcoded class defaults with zero path to override in production (see Open Items). For a component whose calibration is explicitly empirical (per the code's own comment — one encoder, one informal calibration set), having no way to recalibrate without editing source is a real gap.
+3. **Coverage gap in the probe set** — no minute/hour-scale probe, so same-day backward reference ("this morning", "an hour ago") either falls into the dead zone or gets mapped to "yesterday." Reads as an oversight rather than a deliberate, documented tradeoff.
+4. **The benchmark evidence for `use_temporal` is genuinely mixed, and should be read as inconclusive rather than validating.** 0.0pp on LongMemEval isn't "no effect," it's "this benchmark's metric can't see the effect" (Finding 3); LoCoMo's -2.22pp is a single ablation on one category at limit=3 (n=90) — suggestive, not proof the mechanism pulls its weight in general.
+
+**Bottom line:** the two core ideas — encode time as geometry, read temporal intent off the same embedding space already in use — are sound and cheap, and better than most systems' answer to "how do I do time-aware recall without a scheduler or regex." But the module shipped without the config surface or benchmark coverage needed to know if the specific constants are right, and the one clear signal (LoCoMo category 2, driven by backward-referencing phrasing) was interpreted through the wrong lens (category label) until this investigation's ablation corrected it. Trust the architecture; do not assume the current thresholds are well-tuned beyond "not obviously broken."
+
 ## PROGRESS.md Update
 
 Module 5 (Temporal) status: **not started → COMPLETE**. Benchmark deltas: LongMemEval 0.0pp (all categories) from `use_temporal`; LoCoMo -0.6pp overall / -2.22pp on category 2 from disabling `use_temporal` (i.e. `use_temporal=True` is a net positive, concentrated on the temporal and single-session categories). No parameter changes — `temporal_weight=0.25` confirmed near-optimal by grid search, kept as-is.
