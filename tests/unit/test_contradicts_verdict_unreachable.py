@@ -147,7 +147,9 @@ def test_facet_distance_is_always_zero_for_the_old_view(consolidator):
         support_count=1,
     )
     for facet_axes in (
-        np.eye(4, DIM, dtype=np.float32),  # orthonormal, maximally distinct from any "true" old axes
+        np.eye(
+            4, DIM, dtype=np.float32
+        ),  # orthonormal, maximally distinct from any "true" old axes
         -np.eye(4, DIM, dtype=np.float32),  # sign-flipped
         np.random.default_rng(0).standard_normal((4, DIM)).astype(np.float32),
     ):

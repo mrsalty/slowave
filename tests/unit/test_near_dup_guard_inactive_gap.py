@@ -128,9 +128,7 @@ def test_active_near_dup_does_block_judge(consolidator):
     consolidator.schemas.search_embedding.return_value = [(99, 0.97)]
     consolidator.schemas.get.return_value = active_near_dup
 
-    with patch.object(
-        consolidator.geometric_judge, "judge"
-    ) as mock_judge:
+    with patch.object(consolidator.geometric_judge, "judge") as mock_judge:
         outcome, new_id = consolidator._write_latent_schema(
             prototype_id=1, schema=make_latent_schema()
         )
