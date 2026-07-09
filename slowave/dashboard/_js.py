@@ -4,7 +4,7 @@ _APP_JS = r"""
 const REFRESH_MS=__REFRESH_MS__;
 const ALLOW_ACTIONS=__ALLOW_ACTIONS__;
 
-const statusColor={active:"#3ecf6e",needs_review:"#f5b942",contradicted:"#f04e6a",superseded:"#9d71f0",archived:"#5a6e91"};
+const statusColor={active:"#3ecf6e",needs_review:"#f5b942",contradicted:"#f04e6a",superseded:"#9d71f0",archived:"#5a6e91",labile:"#f5b942"};
 const relColor={reinforces:"#3ecf6e",refines:"#4f9bff",contradicts:"#f04e6a",supersedes:"#f5b942",related_to:"#5a6e91",part_of:"#34c4c4"};
 const relLabel={reinforces:"reinforces",refines:"refines",contradicts:"contradicts",supersedes:"supersedes",related_to:"related",part_of:"part of"};
 
@@ -403,7 +403,7 @@ function renderSchemasTable(schemas){
         <div class="sal-bar-fill" style="width:${salPct}%"></div></div>`;
     const confHtml=confBar(s.confidence);
     const tagsHtml=(s.tags||[]).map(t=>`<span class="pill" style="font-size:10px">${esc(t)}</span>`).join("");
-    const nr=s.needs_review?`<span class="pill pill-warn" style="font-size:10px">⚠ review</span>`:""
+    const nr=s.is_labile?`<span class="pill pill-warn" style="font-size:10px">⚠ labile</span>`:""
     const stage=s.generalization_stage||0;
     const stageBadge=stage>0?`<span class="gen-badge gen-${stage}" style="font-size:10px">${GEN_LABELS[stage]||stage}</span>`:`<span class="gen-badge gen-0" style="font-size:10px">SCOPED</span>`;
     return `<tr class="expandable" data-id="${s.schema_id}">
@@ -730,7 +730,7 @@ function renderLegend(){
 }
 let schemaCy=null;
 let graphLabelsForced=false;
-function effectiveNodeStatus(n){return n.needs_review?"needs_review":(n.status||"active");}
+function effectiveNodeStatus(n){return n.is_labile?"labile":(n.status||"active");}
 function nodeColor(n){return statusColor[effectiveNodeStatus(n)]||"#5a6e91";}
 function graphNodeSize(n){return 12+Math.min(34,Math.sqrt(Math.max(0,Number(n.salience||0)))*3.2);}
 function graphNodeLabel(n){return `sch_${n.schema_id}`;}
@@ -777,9 +777,9 @@ function drawGraph(g){
     elements.push({data:{
       id:n.id,label:graphNodeLabel(n),schema_id:n.schema_id,content:n.content||n.label||"",
       status:n.status,effective_status:effectiveNodeStatus(n),scope:n.scope||"",schema_class:n.schema_class||"",
-      salience:Number(n.salience||0),confidence:Number(n.confidence||0),stage,needs_review:!!n.needs_review,
+      salience:Number(n.salience||0),confidence:Number(n.confidence||0),stage,is_labile:!!n.is_labile,
       color:nodeColor(n),size:graphNodeSize(n),border:stage>=3?"#6af5aa":stage===2?"#ffd580":stage===1?"#7ab5ff":"#253050",
-      borderWidth:n.needs_review?4:(stage>0?2.5:1.2)
+      borderWidth:n.is_labile?4:(stage>0?2.5:1.2)
     },position:randomPointInDisk(1600)});
   });
   edges.forEach(e=>{
@@ -963,7 +963,7 @@ async function selectGraphNode(n,el){
         <span class="pill">sal ${Number(s.salience).toFixed(3)}</span>
         <span class="pill">conf ${Number(s.confidence).toFixed(2)}</span>
         ${s.schema_class?`<span class="pill">${esc(s.schema_class)}</span>`:""}
-        ${s.needs_review?`<span class="pill pill-warn">⚠ review</span>`:""}
+        ${s.is_labile?`<span class="pill pill-warn">⚠ labile</span>`:""}
       </div>
     </div>
     <div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px;padding:10px;background:var(--panel2);border-radius:var(--radius-sm);border:1px solid var(--line)">${esc(s.content)}</div>

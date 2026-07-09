@@ -135,7 +135,11 @@ CREATE TABLE IF NOT EXISTS schemas (
   n_facet_axes             INTEGER NOT NULL DEFAULT 0,
   supporting_episode_ids   TEXT NOT NULL DEFAULT '[]',     -- JSON array
   contradicting_episode_ids TEXT NOT NULL DEFAULT '[]',    -- JSON array
-  needs_review             INTEGER NOT NULL DEFAULT 0,     -- 0/1
+  -- "Labile" (reconsolidation-theory term for a reactivated, temporarily
+  -- uncertain memory trace) — distinct from the unrelated status='needs_review'
+  -- string value above. See core/08-feedback.md's "Labile State &
+  -- Reconsolidation" section.
+  is_labile                INTEGER NOT NULL DEFAULT 0,     -- 0/1
   generalization_stage     INTEGER NOT NULL DEFAULT 0,         -- 0=scoped 1=portable 2=contextual 3=global
   first_formed_ts          INTEGER NOT NULL,
   last_updated_ts          INTEGER NOT NULL,
@@ -144,7 +148,7 @@ CREATE TABLE IF NOT EXISTS schemas (
 CREATE INDEX IF NOT EXISTS idx_schemas_prototype ON schemas(prototype_id);
 CREATE INDEX IF NOT EXISTS idx_schemas_scope ON schemas(scope_id);
 CREATE INDEX IF NOT EXISTS idx_schemas_status ON schemas(status);
-CREATE INDEX IF NOT EXISTS idx_schemas_needs_review ON schemas(needs_review);
+CREATE INDEX IF NOT EXISTS idx_schemas_is_labile ON schemas(is_labile);
 CREATE INDEX IF NOT EXISTS idx_schemas_gen_stage ON schemas(generalization_stage);
 
 -- Normalized evidence links for schema provenance. The legacy JSON arrays on

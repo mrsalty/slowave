@@ -107,7 +107,10 @@ class TestFeedbackSignalMapping:
         assert sig.temporal_error == 1.0
         assert sig.salience_delta == cfg.stale_salience_delta
         assert sig.confidence_delta == cfg.stale_confidence_delta
-        assert sig.review_pressure == cfg.stale_review_threshold
+        # review_pressure is a fixed, informational constant (0.7 for "stale")
+        # since 2026-07-10 — stale_review_threshold was removed from
+        # FeedbackConfig because nothing ever compared it against anything.
+        assert sig.review_pressure == 0.7
         assert sig.outcome_reward == -1.0
 
     def test_wrong_signal(self) -> None:
@@ -116,7 +119,10 @@ class TestFeedbackSignalMapping:
         assert sig.truth_error == 1.0
         assert sig.salience_delta == cfg.wrong_salience_delta
         assert sig.confidence_delta == cfg.wrong_confidence_delta
-        assert sig.review_pressure == cfg.wrong_review_threshold
+        # review_pressure is a fixed, informational constant (1.0 for "wrong")
+        # since 2026-07-10 — wrong_review_threshold was removed from
+        # FeedbackConfig because nothing ever compared it against anything.
+        assert sig.review_pressure == 1.0
 
     def test_missing_signal(self) -> None:
         cfg = FeedbackConfig()
@@ -258,7 +264,7 @@ class TestIrrelevantPenalizes:
             sid = _create_schema(eng, "irrelevant memory")
             s = eng.schemas.get(sid)
             before_salience = s.salience
-            before_review = s.needs_review
+            before_review = s.is_labile
             context_id = _ctx_id()
 
             eng.record_context_recall(context_id=context_id)
@@ -271,21 +277,21 @@ class TestIrrelevantPenalizes:
 
             s = eng.schemas.get(sid)
             assert s.salience < before_salience
-            assert s.needs_review == before_review  # doesn't change
+            assert s.is_labile == before_review  # doesn't change
         finally:
             eng.close()
             _cleanup(path)
 
 
 class TestStalePenalizeAndReview:
-    """Test that stale feedback marks needs_review."""
+    """Test that stale feedback marks is_labile."""
 
     def test_stale_marks_review(self) -> None:
         eng, path = _tmp_engine()
         try:
             sid = _create_schema(eng, "stale memory")
             s = eng.schemas.get(sid)
-            assert s.needs_review is False
+            assert s.is_labile is False
             context_id = _ctx_id()
 
             eng.record_context_recall(context_id=context_id)
@@ -297,7 +303,7 @@ class TestStalePenalizeAndReview:
             )
 
             s = eng.schemas.get(sid)
-            assert s.needs_review is True
+            assert s.is_labile is True
             assert s.salience < 1.0  # also reduced
         finally:
             eng.close()
@@ -305,7 +311,7 @@ class TestStalePenalizeAndReview:
 
 
 class TestWrongPenalizeAndReview:
-    """Test that wrong feedback marks needs_review strongly."""
+    """Test that wrong feedback marks is_labile strongly."""
 
     def test_wrong_marks_review(self) -> None:
         eng, path = _tmp_engine()
@@ -323,7 +329,7 @@ class TestWrongPenalizeAndReview:
             )
 
             s = eng.schemas.get(sid)
-            assert s.needs_review is True
+            assert s.is_labile is True
             assert s.salience < s_before.salience
             assert s.confidence < s_before.confidence
         finally:
@@ -556,8 +562,8 @@ class TestMixedFeedbackPayloads:
             assert result["applied"]["marked_review"] == [f"sch_{stale_sid}", f"sch_{wrong_sid}"]
             stale_after = eng.schemas.get(stale_sid)
             wrong_after = eng.schemas.get(wrong_sid)
-            assert stale_after.needs_review is True
-            assert wrong_after.needs_review is True
+            assert stale_after.is_labile is True
+            assert wrong_after.is_labile is True
             assert stale_after.salience < stale_before.salience
             assert wrong_after.salience < wrong_before.salience
             assert stale_after.confidence < stale_before.confidence

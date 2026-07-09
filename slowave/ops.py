@@ -200,7 +200,7 @@ def recall(
             "scope_id": s.scope_id,
             "status": s.status,
             "salience": s.salience,
-            "needs_review": s.needs_review,
+            "needs_review": s.is_labile,
             "generalization_stage": s.generalization_stage,
         }
         for s in result.schemas
