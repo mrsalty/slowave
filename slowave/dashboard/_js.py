@@ -165,8 +165,8 @@ async function loadStatus(){
       }).join("")}
     </div>
     <div style="margin-top:10px;display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:12px">
-      <div><span style="color:var(--muted)">Avg salience</span><br><b>${avgSal.toFixed(3)}</b></div>
-      <div><span style="color:var(--muted)">Max salience</span><br><b>${maxSalience.toFixed(3)}</b></div>
+      <div><span style="color:var(--muted)">Avg salience</span><br><b>${avgSal.toFixed(2)}</b></div>
+      <div><span style="color:var(--muted)">Max salience</span><br><b>${maxSalience.toFixed(2)}</b></div>
       <div><span style="color:var(--muted)">Duplicates</span><br><b>${num(h.active_exact_duplicate_rows||0)}</b></div>
     </div>
     <div style="margin-top:10px;font-size:11px;color:var(--muted)">${esc(lastConsolidated)}</div>
@@ -375,6 +375,39 @@ function statusBreakdown(by){
 
 // ── SCHEMAS ──
 let schemaMaxSalience=1;
+let schemaSort={col:null,dir:"asc"};
+let cachedSchemas=[];
+function sortBy(col){
+  if(schemaSort.col===col){schemaSort.dir=schemaSort.dir==="asc"?"desc":"asc";}
+  else{schemaSort.col=col;schemaSort.dir="asc";}
+  if(!cachedSchemas.length)return;
+  const sorted=cachedSchemas.slice();
+  sorted.sort((a,b)=>{
+    let va,vb;
+    switch(col){
+      case"id":va=a.schema_id;vb=b.schema_id;break;
+      case"status":va=a.status||"";vb=b.status||"";break;
+      case"salience":va=a.salience||0;vb=b.salience||0;break;
+      case"confidence":va=a.confidence||0;vb=b.confidence||0;break;
+      case"stage":va=a.generalization_stage||0;vb=b.generalization_stage||0;break;
+      case"class":va=a.schema_class||"";vb=b.schema_class||"";break;
+      case"scope":va=a.scope||"";vb=b.scope||"";break;
+      case"support":va=a.support_count||0;vb=b.support_count||0;break;
+      case"content":va=a.content||"";vb=b.content||"";break;
+      default:return 0;
+    }
+    const mul=schemaSort.dir==="asc"?1:-1;
+    if(typeof va==="string")return mul*va.localeCompare(vb);
+    return mul*(va-vb);
+  });
+  const el=document.getElementById("schemaTable");
+  el.innerHTML=renderSchemasTable(sorted);
+  el.querySelectorAll("tr.expandable").forEach(tr=>{
+    tr.addEventListener("click",()=>expandSchemaRow(tr,parseInt(tr.dataset.id)));
+  });
+}
+function sortArrow(col){return schemaSort.col===col?(schemaSort.dir==="asc"?" ▲":" ▼"):"";}
+function sortStyle(col){return schemaSort.col===col?"color:var(--blue);":"";}
 async function loadSchemas(){
   const el=document.getElementById("schemaTable");
   const ld=document.getElementById("schemaLoading");
@@ -387,7 +420,10 @@ async function loadSchemas(){
     const lim=document.getElementById("schemaLimit").value;
     const d=await getJSON(`/api/schemas?limit=${lim}&status=${encodeURIComponent(st)}&scope=${sc}&q=${q}`);
     schemaMaxSalience=Math.max(1,...(d.schemas||[]).map(s=>s.salience));
-    el.innerHTML=renderSchemasTable(d.schemas||[]);
+    cachedSchemas=d.schemas||[];
+    const schemas=cachedSchemas.slice();
+    if(schemaSort.col)schemas.sort((a,b)=>{let va,vb;switch(schemaSort.col){case"id":va=a.schema_id;vb=b.schema_id;break;case"status":va=a.status||"";vb=b.status||"";break;case"salience":va=a.salience||0;vb=b.salience||0;break;case"confidence":va=a.confidence||0;vb=b.confidence||0;break;case"stage":va=a.generalization_stage||0;vb=b.generalization_stage||0;break;case"class":va=a.schema_class||"";vb=b.schema_class||"";break;case"scope":va=a.scope||"";vb=b.scope||"";break;case"support":va=a.support_count||0;vb=b.support_count||0;break;case"content":va=a.content||"";vb=b.content||"";break;default:return 0;}const mul=schemaSort.dir==="asc"?1:-1;if(typeof va==="string")return mul*va.localeCompare(vb);return mul*(va-vb);});
+    el.innerHTML=renderSchemasTable(schemas);
     // attach expand handlers
     el.querySelectorAll("tr.expandable").forEach(tr=>{
       tr.addEventListener("click",()=>expandSchemaRow(tr,parseInt(tr.dataset.id)));
@@ -398,17 +434,16 @@ function renderSchemasTable(schemas){
   if(!schemas.length)return emptyState("No schemas found.","📖");
   const rows=schemas.map(s=>{
     const salPct=Math.round(s.salience/Math.max(0.001,schemaMaxSalience)*100);
-    const salHtml=`<span style="font-size:12px;font-weight:600">${s.salience.toFixed(3)}</span>
+    const salHtml=`<span style="font-size:12px;font-weight:600">${s.salience.toFixed(2)}</span>
       <div class="sal-bar-track" style="width:50px;display:inline-block;vertical-align:middle;margin-left:4px">
         <div class="sal-bar-fill" style="width:${salPct}%"></div></div>`;
     const confHtml=confBar(s.confidence);
     const tagsHtml=(s.tags||[]).map(t=>`<span class="pill" style="font-size:10px">${esc(t)}</span>`).join("");
-    const nr=s.is_labile?`<span class="pill pill-warn" style="font-size:10px">⚠ labile</span>`:""
     const stage=s.generalization_stage||0;
     const stageBadge=stage>0?`<span class="gen-badge gen-${stage}" style="font-size:10px">${GEN_LABELS[stage]||stage}</span>`:`<span class="gen-badge gen-0" style="font-size:10px">SCOPED</span>`;
     return `<tr class="expandable" data-id="${s.schema_id}">
-      <td><code style="font-size:11px">sch_${s.schema_id}</code></td>
-      <td>${pill(s.status)}${nr}</td>
+      <td><code style="font-size:11px${s.is_labile?';border:2px solid #f5b942;border-radius:10px;padding:1px 4px':''}${s.is_labile?`" title="Labile memory: under verification. Clears with sustained use — otherwise corrected or removed during background consolidation."`:""}>sch_${s.schema_id}</code></td>
+      <td style="white-space:nowrap">${pill(s.status)}</td>
       <td>${salHtml}</td>
       <td>${confHtml}</td>
       <td>${stageBadge}</td>
@@ -419,8 +454,8 @@ function renderSchemasTable(schemas){
     </tr>`;
   }).join("");
   return `<table><thead><tr>
-    <th>ID</th><th>Status</th><th>Salience</th><th>Confidence</th>
-    <th>Stage</th><th>Class</th><th>Scope</th><th>Support</th><th>Content</th>
+    <th style="cursor:pointer;user-select:none;${sortStyle('id')}" onclick="sortBy('id')">ID${sortArrow('id')}</th><th style="width:1%;white-space:nowrap;cursor:pointer;user-select:none;${sortStyle('status')}" onclick="sortBy('status')">Status${sortArrow('status')}</th><th style="cursor:pointer;user-select:none;${sortStyle('salience')}" onclick="sortBy('salience')">Salience${sortArrow('salience')}</th><th style="cursor:pointer;user-select:none;${sortStyle('confidence')}" onclick="sortBy('confidence')">Confidence${sortArrow('confidence')}</th>
+    <th style="cursor:pointer;user-select:none;${sortStyle('stage')}" onclick="sortBy('stage')">Stage${sortArrow('stage')}</th><th style="cursor:pointer;user-select:none;${sortStyle('class')}" onclick="sortBy('class')">Class${sortArrow('class')}</th><th style="cursor:pointer;user-select:none;${sortStyle('scope')}" onclick="sortBy('scope')">Scope${sortArrow('scope')}</th><th style="cursor:pointer;user-select:none;${sortStyle('support')}" onclick="sortBy('support')">Support${sortArrow('support')}</th><th style="cursor:pointer;user-select:none;${sortStyle('content')}" onclick="sortBy('content')">Content${sortArrow('content')}</th>
   </tr></thead><tbody>${rows}</tbody></table>`;
 }
 async function expandSchemaRow(tr,schemaId){
@@ -720,7 +755,7 @@ async function loadGraph(){
 function renderLegend(){
   const el=document.getElementById("graphLegend");
   if(!el)return;
-  const statusEntries=Object.entries(statusColor).map(([k,v])=>`<div class="legend-item"><div class="legend-dot" style="background:${v}"></div>${k}</div>`).join("");
+  const statusEntries=Object.entries(statusColor).filter(([k])=>k!=="labile").map(([k,v])=>`<div class="legend-item"><div class="legend-dot" style="background:${v}"></div>${k}</div>`).join("");
   const relEntries=Object.entries(relColor).map(([k,v])=>`<div class="legend-item"><div class="legend-line" style="background:${v}"></div>${relLabel[k]||k}</div>`).join("");
   document.getElementById("graphLegend").innerHTML=`
     <div style="font-size:11px;color:var(--muted);font-weight:600;margin-right:4px">Nodes:</div>${statusEntries}
@@ -730,8 +765,7 @@ function renderLegend(){
 }
 let schemaCy=null;
 let graphLabelsForced=false;
-function effectiveNodeStatus(n){return n.is_labile?"labile":(n.status||"active");}
-function nodeColor(n){return statusColor[effectiveNodeStatus(n)]||"#5a6e91";}
+function nodeColor(n){return statusColor[n.status||"active"]||"#5a6e91";}
 function graphNodeSize(n){return 12+Math.min(34,Math.sqrt(Math.max(0,Number(n.salience||0)))*3.2);}
 function graphNodeLabel(n){return `sch_${n.schema_id}`;}
 function updateGraphLabels(){
@@ -776,7 +810,7 @@ function drawGraph(g){
     const stage=Number(n.generalization_stage||0);
     elements.push({data:{
       id:n.id,label:graphNodeLabel(n),schema_id:n.schema_id,content:n.content||n.label||"",
-      status:n.status,effective_status:effectiveNodeStatus(n),scope:n.scope||"",schema_class:n.schema_class||"",
+      status:n.status,effective_status:n.status||"active",scope:n.scope||"",schema_class:n.schema_class||"",
       salience:Number(n.salience||0),confidence:Number(n.confidence||0),stage,is_labile:!!n.is_labile,
       color:nodeColor(n),size:graphNodeSize(n),border:stage>=3?"#6af5aa":stage===2?"#ffd580":stage===1?"#7ab5ff":"#253050",
       borderWidth:n.is_labile?4:(stage>0?2.5:1.2)
@@ -822,7 +856,7 @@ function drawGraph(g){
   schemaCy.on("zoom",updateGraphLabels);
   schemaCy.on("mouseover","node",ev=>{
     const n=ev.target.data();
-    showTip(ev.originalEvent,`<b>${esc(n.label)}</b><br><span style="color:#7a8db5">${esc(n.effective_status)}</span> · sal ${Number(n.salience).toFixed(3)} · stage ${n.stage}<br><em>${esc(String(n.content||"").slice(0,180))}</em>`);
+    showTip(ev.originalEvent,`<b>${esc(n.label)}</b><br><span style="color:#7a8db5">${esc(n.effective_status)}</span> · sal ${Number(n.salience).toFixed(2)} · stage ${n.stage}<br><em>${esc(String(n.content||"").slice(0,180))}</em>`);
   });
   schemaCy.on("mouseout","node",hideTip);
   schemaCy.on("mouseover","edge",ev=>{
@@ -927,7 +961,7 @@ function drawGraphSvgFallback(g){
     c.setAttribute("fill",color);c.setAttribute("fill-opacity","0.85");
     c.setAttribute("stroke",color);c.setAttribute("stroke-width","1.5");
     c.setAttribute("class","node");
-    c.addEventListener("mouseenter",ev=>showTip(ev,`<b>sch_${n.schema_id}</b><br><span style="color:#7a8db5">${esc(n.status)}</span> · sal ${Number(n.salience).toFixed(3)}<br><em>${esc(n.label)}</em>`));
+    c.addEventListener("mouseenter",ev=>showTip(ev,`<b>sch_${n.schema_id}</b><br><span style="color:#7a8db5">${esc(n.status)}</span> · sal ${Number(n.salience).toFixed(2)}<br><em>${esc(n.label)}</em>`));
     c.addEventListener("mouseleave",hideTip);
     c.onclick=()=>selectGraphNode(n,c);
     svg.appendChild(c);
@@ -942,7 +976,7 @@ async function selectGraphNode(n,el){
   if(el){document.querySelectorAll(".node").forEach(x=>x.classList.remove("selected"));el.classList.add("selected");}
   const d=await getJSON(`/api/schemas/${n.schema_id}`);
   const s=d.schema||n;
-  const eStat=effectiveNodeStatus(s);
+  const eStat=s.status||"active";
   const evHtml=d.evidence&&d.evidence.length
     ?table(["Ep.","Evt.","Weight","Quote"],d.evidence.map(e=>[
         e.episode_id?`epi_${e.episode_id}`:"—",e.raw_event_id?`evt_${e.raw_event_id}`:"—",
@@ -958,12 +992,11 @@ async function selectGraphNode(n,el){
     :"<em style='color:var(--muted)'>None.</em>";
   document.getElementById("graphDetail").innerHTML=`
     <div style="margin-bottom:10px">
-      <div style="font-size:16px;font-weight:700">sch_${s.schema_id}</div>
+      <div style="font-size:16px;font-weight:700${s.is_labile?';border-left:3px solid #f5b942;padding-left:8px':''}${s.is_labile?`" title="Labile memory: under verification. Clears with sustained use — otherwise corrected or removed during background consolidation."`:""}>sch_${s.schema_id}</div>
       <div style="margin-top:6px">${pill(eStat)}
-        <span class="pill">sal ${Number(s.salience).toFixed(3)}</span>
+        <span class="pill">sal ${Number(s.salience).toFixed(2)}</span>
         <span class="pill">conf ${Number(s.confidence).toFixed(2)}</span>
         ${s.schema_class?`<span class="pill">${esc(s.schema_class)}</span>`:""}
-        ${s.is_labile?`<span class="pill pill-warn">⚠ labile</span>`:""}
       </div>
     </div>
     <div style="font-size:13px;color:var(--text);line-height:1.6;margin-bottom:12px;padding:10px;background:var(--panel2);border-radius:var(--radius-sm);border:1px solid var(--line)">${esc(s.content)}</div>
@@ -1000,7 +1033,7 @@ async function runRecall(){
         d.schemas.map(s=>[
           `<code style="font-size:11px">sch_${s.id||s.schema_id}</code>`,
           pill(s.status),
-          salBar(s.salience||0,maxSal)+` <span style="font-size:11px">${Number(s.salience||0).toFixed(3)}</span>`,
+          salBar(s.salience||0,maxSal)+` <span style="font-size:11px">${Number(s.salience||0).toFixed(2)}</span>`,
           esc(s.facets?.schema_class||s.schema_class||"—"),
           esc(s.content_text||s.content||"")
         ]),
@@ -1013,7 +1046,7 @@ async function runRecall(){
         ["ID","Salience","Date","Content"],
         d.episodes.map(e=>[
           `epi_${e.id}`,
-          Number(e.salience||0).toFixed(3),
+          Number(e.salience||0).toFixed(2),
           fmtDate(e.ts||0),
           esc((e.content_text||"").slice(0,200))
         ]),
