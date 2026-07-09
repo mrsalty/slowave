@@ -168,6 +168,9 @@ class QuestionResult:
     error: str | None = None
     component_scores: dict[str, Any] = field(default_factory=dict)
     debug: dict[str, Any] = field(default_factory=dict)
+    # Temporal anchor diagnostics (plans/07-temporal.md Phase 4).
+    anchor_fired: bool = False
+    anchor_displacement_s: int = 0
 
 
 def run_question(
@@ -343,6 +346,8 @@ def run_question(
             db_size_bytes=int(db_size_bytes),
             component_scores=component_scores,
             debug=debug_payload,
+            anchor_fired=result.anchor_fired,
+            anchor_displacement_s=result.anchor_displacement_s,
         )
 
     except Exception as e:
@@ -385,7 +390,7 @@ def _schema_dict(s: Any) -> dict[str, Any]:
         "salience": s.salience,
         "supporting_episode_ids": s.supporting_episode_ids,
         "contradicting_episode_ids": s.contradicting_episode_ids,
-        "needs_review": s.needs_review,
+        "needs_review": s.is_labile,
         "first_formed_ts": s.first_formed_ts,
         "last_updated_ts": s.last_updated_ts,
     }
@@ -647,6 +652,8 @@ def _result_row(r: QuestionResult) -> dict[str, Any]:
         "db_size_bytes": r.db_size_bytes,
         "component_scores": r.component_scores,
         "debug": r.debug,
+        "anchor_fired": r.anchor_fired,
+        "anchor_displacement_s": r.anchor_displacement_s,
         "error": r.error,
     }
 
@@ -660,6 +667,7 @@ def _build_payload(
     partial: bool,
 ) -> dict[str, Any]:
     by_cat: dict[str, dict[str, Any]] = {}
+    anchor_by_cat: dict[str, dict[str, Any]] = {}
     for cat in sorted({r.question_type for r in results}):
         rs = [r for r in results if r.question_type == cat]
         hits = sum(1 for r in rs if r.hit)
@@ -670,7 +678,30 @@ def _build_payload(
             "avg_keyword_score": round(sum(r.keyword_score for r in rs) / max(1, len(rs)), 4),
             "errors": sum(1 for r in rs if r.error),
         }
+        fired = [r for r in rs if r.anchor_fired]
+        anchor_by_cat[cat] = {
+            "n": len(rs),
+            "anchor_fired_n": len(fired),
+            "anchor_fired_rate": round(len(fired) / max(1, len(rs)), 4),
+            "mean_displacement_s": (
+                round(sum(r.anchor_displacement_s for r in fired) / max(1, len(fired)), 1)
+                if fired
+                else 0.0
+            ),
+        }
     total_hits = sum(1 for r in results if r.hit)
+    fired_all = [r for r in results if r.anchor_fired]
+    temporal_diag = {
+        "n": len(results),
+        "anchor_fired_n": len(fired_all),
+        "anchor_fired_rate": round(len(fired_all) / max(1, len(results)), 4),
+        "mean_displacement_s": (
+            round(sum(r.anchor_displacement_s for r in fired_all) / max(1, len(fired_all)), 1)
+            if fired_all
+            else 0.0
+        ),
+        "by_category": anchor_by_cat,
+    }
     valid_results = [r for r in results if not r.error]
     cost_summary: dict[str, Any] = {
         "n_llm_calls_total": sum(r.n_llm_calls for r in valid_results),
@@ -707,6 +738,7 @@ def _build_payload(
             "keep_debug_dbs": args.keep_debug_dbs,
             "no_salience_rerank": args.no_salience_rerank,
             "no_graph_expansion": args.no_graph_expansion,
+            "no_temporal": args.no_temporal,
             "total_elapsed_s": round(total_elapsed, 2),
         },
         "summary": {
@@ -715,6 +747,9 @@ def _build_payload(
             "score_pct": round(100.0 * total_hits / max(1, len(results)), 2),
             "by_category": by_cat,
             "cost": cost_summary,
+        },
+        "diagnostics": {
+            "temporal": temporal_diag,
         },
         "results": [_result_row(r) for r in results],
     }

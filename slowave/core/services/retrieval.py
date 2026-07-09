@@ -45,6 +45,11 @@ class RecallResult:
     )  # schema_id -> cosine/activation score
     episode_diagnostics: list[EpisodeDiagnostic] = field(default_factory=list)
     query_diagnostics: QueryDiagnostics | None = None
+    # Stage 10 anchor diagnostics (plans/07-temporal.md Phase 4). Populated
+    # unconditionally — TemporalProbe.estimate_anchor() runs on every recall()
+    # regardless of RetrievalConfig.use_temporal (core/07-temporal.md Invariant 7).
+    anchor_fired: bool = False  # True when estimate_anchor() returned something other than now_ts
+    anchor_displacement_s: int = 0  # anchor_ts - now_ts; 0 when not fired
 
 
 def _prefix_date(text: str, ts: int) -> str:
@@ -140,10 +145,14 @@ class RetrievalService:
         q = self.encoder.encode(query)
 
         retrieval_pipeline = self.retrieval
+        anchor_fired = False
+        anchor_displacement_s = 0
         if self._temporal_probe is not None:
             now_ts = int(time.time())
             anchor_ts = self._temporal_probe.estimate_anchor(q, now_ts=now_ts)
             if anchor_ts != now_ts:
+                anchor_fired = True
+                anchor_displacement_s = anchor_ts - now_ts
                 anchored_cfg = dataclasses.replace(
                     self._retrieval_cfg,
                     temporal_anchor_ts=anchor_ts,
@@ -304,8 +313,8 @@ class RetrievalService:
                     else:
                         continue  # stage 0: hard block
 
-            # Belt-and-suspenders: apply score multiplier for needs_review
-            if s.needs_review and s.status == "active":
+            # Belt-and-suspenders: apply score multiplier for labile schemas
+            if s.is_labile and s.status == "active":
                 schema_scores[s.id] = schema_scores.get(s.id, 0.0) * 0.20
 
             filtered_schemas.append(s)
@@ -408,6 +417,8 @@ class RetrievalService:
             schema_activations=schema_scores,
             episode_diagnostics=retrieved.episode_diagnostics,
             query_diagnostics=retrieved.query_diagnostics,
+            anchor_fired=anchor_fired,
+            anchor_displacement_s=anchor_displacement_s,
         )
 
     def context(self, *, scope: str | None = None, limit: int = 10) -> list[Schema]:

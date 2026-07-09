@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 import time
 from typing import Any, Callable
 
@@ -16,6 +17,8 @@ from slowave.core.scope import scope_kind as _scope_kind
 from slowave.storage.sqlite_db import SQLiteDB
 from slowave.symbolic.schema_store import SchemaStore
 from slowave.utils.vec import dumps_json
+
+log = logging.getLogger(__name__)
 
 
 class FeedbackService:
@@ -291,6 +294,15 @@ class FeedbackService:
 
         Caller-supplied values (if not None) override the DB-derived values,
         preserving backward compatibility.
+
+        `scope_id` (supplied here or derivable from the original
+        `record_retrieval()` snapshot) is optional — `irrelevant`/`stale`/
+        `wrong` marks accumulate into `context_noise_score` regardless of
+        whether a scope is present (fixed 2026-07-10; the counting query
+        used to require a non-null scope, which silently excluded scopeless
+        events with no warning — see outcomes/08-feedback.md). `scope_id` is
+        still used to attribute cross-scope generalization signal, which is
+        a separate, unrelated computation from noise tracking.
         """
         if not self.cfg.enabled:
             return {
@@ -374,13 +386,19 @@ class FeedbackService:
                     try:
                         if fb_label == "useful":
                             self.schemas.reinforce(
-                                schema_id, amount=useful_signal.salience_delta * source_weight
+                                schema_id,
+                                amount=useful_signal.salience_delta * source_weight,
+                                confidence_delta=useful_signal.confidence_delta * source_weight,
+                                min_confidence=self.cfg.min_confidence,
+                                max_confidence=self.cfg.max_confidence,
+                                clear_labile=True,
                             )
                         else:
                             self.schemas.adjust_feedback_state(
                                 schema_id,
                                 salience_delta=partial_signal.salience_delta * source_weight,
                                 confidence_delta=partial_signal.confidence_delta * source_weight,
+                                is_labile=False,
                                 min_salience=self.cfg.min_salience,
                                 min_confidence=self.cfg.min_confidence,
                                 max_confidence=self.cfg.max_confidence,
@@ -411,7 +429,7 @@ class FeedbackService:
                             schema_id,
                             salience_delta=stale_signal.salience_delta * source_weight,
                             confidence_delta=stale_signal.confidence_delta * source_weight,
-                            needs_review=True,
+                            is_labile=True,
                             min_salience=self.cfg.min_salience,
                             min_confidence=self.cfg.min_confidence,
                             max_confidence=self.cfg.max_confidence,
@@ -426,7 +444,7 @@ class FeedbackService:
                             schema_id,
                             salience_delta=wrong_signal.salience_delta * source_weight,
                             confidence_delta=wrong_signal.confidence_delta * source_weight,
-                            needs_review=True,
+                            is_labile=True,
                             min_salience=self.cfg.min_salience,
                             min_confidence=self.cfg.min_confidence,
                             max_confidence=self.cfg.max_confidence,
