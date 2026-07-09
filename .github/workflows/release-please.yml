@@ -20,6 +20,7 @@ jobs:
   # ── Release Please only after tests pass ─────────────────────────────
   release-please:
     needs: test
+    if: github.repository == 'mrsalty/slowave'
     runs-on: ubuntu-latest
     steps:
       - name: Run Release Please
