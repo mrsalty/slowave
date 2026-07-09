@@ -29,6 +29,28 @@ VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archive
 VALID_RELATIONS = ("reinforces", "refines", "contradicts", "supersedes", "related_to", "part_of")
 DEDUP_ACTIVE_STATUSES = ("active", "needs_review")
 
+# Shared salience ceiling for every reinforcement/feedback write path. The
+# working-memory gate normalises salience by /20 (core/context.py), so growth
+# past this is invisible to ranking and only distorts salience-ordered
+# listings. Used by both reinforce() and adjust_feedback_state() so the two
+# code paths stay bounded consistently instead of one capping and the other not.
+SALIENCE_CEILING = 20.0
+
+# A schema flagged is_labile is temporarily uncertain and open to revision
+# (see core/08-feedback.md's "Labile State & Reconsolidation" section) —
+# the flag is set by decay, remember()'s ambiguous-collision case, or
+# feedback's noise-demotion/direct stale-wrong marks. A labile schema
+# restabilizes on its own if it keeps getting genuinely reactivated
+# afterward — sustained reactivation is itself evidence the memory is
+# still good, mirroring how repeated recall drives real memory
+# consolidation. This is a passive counterpart to
+# Consolidator.reconsolidate_labile_schemas() (the active, replay-against-
+# neighbor form of the same resolution process): _RECONSOLIDATION_RECOVERY_RECURRENCE
+# recurrence hits *since being flagged* (tracked via the recurrence_count_at_flag
+# facet, captured lazily the first time _update_utility_scores observes the
+# flag) clears is_labile.
+_RECONSOLIDATION_RECOVERY_RECURRENCE = 3
+
 # ============================================================================
 # Cross-scope generalization (Stage 11)
 # ============================================================================
@@ -259,7 +281,7 @@ class Schema:
     salience: float
     supporting_episode_ids: list[int]
     contradicting_episode_ids: list[int]
-    needs_review: bool
+    is_labile: bool
     first_formed_ts: int
     last_updated_ts: int
     # Canonical embedding vector unpacked from the DB blob. Optional so
@@ -357,7 +379,7 @@ class SchemaStore:
         salience: float = 1.0,
         supporting_episode_ids: list[int] | None = None,
         contradicting_episode_ids: list[int] | None = None,
-        needs_review: bool = False,
+        is_labile: bool = False,
         evidence: list[tuple[int | None, int | None, str | None, float]] | None = None,
         dedupe: bool = True,
         facet_axes: np.ndarray | None = None,
@@ -434,7 +456,7 @@ class SchemaStore:
               prototype_id, content_text, facets_json, tags_json, scope_id, status, confidence,
               salience, embedding, dim, facet_axes, facet_strengths, n_facet_axes,
               supporting_episode_ids,
-              contradicting_episode_ids, needs_review, first_formed_ts,
+              contradicting_episode_ids, is_labile, first_formed_ts,
               last_updated_ts
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
@@ -454,7 +476,7 @@ class SchemaStore:
                 n_facet_axes,
                 dumps_json({"ids": supporting}),
                 dumps_json({"ids": contradicting}),
-                1 if needs_review else 0,
+                1 if is_labile else 0,
                 now,
                 now,
             ),
@@ -608,15 +630,15 @@ class SchemaStore:
         schema_id: int,
         *,
         status: str,
-        needs_review: bool | None = None,
+        is_labile: bool | None = None,
         salience: float | None = None,
     ) -> None:
         status = status if status in VALID_STATUS else "active"
         sets = ["status = ?", "last_updated_ts = ?"]
         args: list[Any] = [status, int(time.time())]
-        if needs_review is not None:
-            sets.append("needs_review = ?")
-            args.append(1 if needs_review else 0)
+        if is_labile is not None:
+            sets.append("is_labile = ?")
+            args.append(1 if is_labile else 0)
         if salience is not None:
             sets.append("salience = ?")
             args.append(float(salience))
@@ -653,17 +675,48 @@ class SchemaStore:
         )
         conn.commit()
 
-    def reinforce(self, schema_id: int, *, amount: float = 0.2) -> None:
-        # Salience is capped at 20.0 — the working-memory gate normalises by
-        # /20, so growth past that is invisible to ranking and only distorts
-        # salience-ordered listings.
+    def reinforce(
+        self,
+        schema_id: int,
+        *,
+        amount: float = 0.2,
+        confidence_delta: float = 0.0,
+        min_confidence: float = 0.0,
+        max_confidence: float = 1.0,
+        clear_labile: bool = False,
+    ) -> None:
         conn = self.db.connect()
-        conn.execute(
-            "UPDATE schemas SET salience = min(salience + ?, 20.0), last_updated_ts = ? WHERE id = ?",
-            (float(amount), int(time.time()), int(schema_id)),
-        )
+        if confidence_delta or clear_labile:
+            row = conn.execute(
+                "SELECT confidence FROM schemas WHERE id = ?", (int(schema_id),)
+            ).fetchone()
+            if row is None:
+                raise KeyError(f"No schema id={schema_id}")
+            sets = ["salience = min(salience + ?, ?)", "last_updated_ts = ?"]
+            args: list[Any] = [float(amount), SALIENCE_CEILING, int(time.time())]
+            if confidence_delta:
+                new_confidence = max(
+                    min_confidence, min(max_confidence, float(row["confidence"]) + confidence_delta)
+                )
+                sets.append("confidence = ?")
+                args.append(new_confidence)
+            if clear_labile:
+                # An explicit useful/partially_useful mark is direct positive
+                # evidence a labile schema is still good — clear it here
+                # rather than leaving reconsolidation only to Consolidator.
+                # reconsolidate_labile_schemas()'s replay or sustained
+                # passive recurrence (core/08-feedback.md's "Labile State &
+                # Reconsolidation" section).
+                sets.append("is_labile = 0")
+            args.append(int(schema_id))
+            conn.execute(f"UPDATE schemas SET {', '.join(sets)} WHERE id = ?", tuple(args))
+        else:
+            conn.execute(
+                "UPDATE schemas SET salience = min(salience + ?, ?), last_updated_ts = ? WHERE id = ?",
+                (float(amount), SALIENCE_CEILING, int(time.time()), int(schema_id)),
+            )
         conn.commit()
-        self._update_utility_scores(schema_id, recall_hit=True)
+        self._update_utility_scores(schema_id, recall_hit=True, force_clear_labile=clear_labile)
 
     def increment_cross_scope_reinforcement(self, schema_id: int) -> None:
         """Increment cross_scope_reinforcement_count in facets for a schema.
@@ -698,8 +751,9 @@ class SchemaStore:
         *,
         salience_delta: float = 0.0,
         confidence_delta: float = 0.0,
-        needs_review: bool | None = None,
+        is_labile: bool | None = None,
         min_salience: float = 0.01,
+        max_salience: float = SALIENCE_CEILING,
         min_confidence: float = 0.0,
         max_confidence: float = 1.0,
     ) -> None:
@@ -712,8 +766,11 @@ class SchemaStore:
             schema_id: schema to adjust
             salience_delta: change in salience (can be positive or negative)
             confidence_delta: change in confidence (usually negative for errors)
-            needs_review: set needs_review flag (or None to leave unchanged)
+            is_labile: set the labile flag (or None to leave unchanged)
             min_salience: floor for salience
+            max_salience: ceiling for salience — defaults to SALIENCE_CEILING,
+                the same ceiling reinforce() uses, so this path is bounded
+                consistently with it.
             min_confidence: floor for confidence
             max_confidence: ceiling for confidence
         """
@@ -725,7 +782,7 @@ class SchemaStore:
         if row is None:
             raise KeyError(f"No schema id={schema_id}")
 
-        new_salience = max(min_salience, float(row["salience"]) + salience_delta)
+        new_salience = min(max_salience, max(min_salience, float(row["salience"]) + salience_delta))
         new_confidence = max(
             min_confidence,
             min(
@@ -737,9 +794,9 @@ class SchemaStore:
         sets = ["salience = ?", "confidence = ?", "last_updated_ts = ?"]
         args: list[Any] = [new_salience, new_confidence, int(time.time())]
 
-        if needs_review is not None:
-            sets.append("needs_review = ?")
-            args.append(1 if needs_review else 0)
+        if is_labile is not None:
+            sets.append("is_labile = ?")
+            args.append(1 if is_labile else 0)
 
         args.append(int(schema_id))
         conn.execute(f"UPDATE schemas SET {', '.join(sets)} WHERE id = ?", tuple(args))
@@ -749,13 +806,15 @@ class SchemaStore:
         """Recompute utility/generalization/noise facets for a schema.
 
         Public entry point for the feedback service: called after a feedback
-        event is persisted so context_noise_score and needs_review demotion
-        bite at the next retrieval, not at the next consolidation pass that
-        happens to touch this schema.
+        event is persisted so context_noise_score and the labile-demotion
+        rule bite at the next retrieval, not at the next consolidation pass
+        that happens to touch this schema.
         """
         self._update_utility_scores(schema_id, recall_hit=False)
 
-    def _update_utility_scores(self, schema_id: int, *, recall_hit: bool = False) -> None:
+    def _update_utility_scores(
+        self, schema_id: int, *, recall_hit: bool = False, force_clear_labile: bool = False
+    ) -> None:
         """Recompute and persist stability_score, recurrence_score, schema_utility.
 
         Called after every reinforce() and reinforce_schema() so the composite
@@ -772,8 +831,8 @@ class SchemaStore:
         """
         conn = self.db.connect()
         row = conn.execute(
-            "SELECT facets_json, first_formed_ts, last_updated_ts, supporting_episode_ids, scope_id "
-            "FROM schemas WHERE id = ?",
+            "SELECT facets_json, first_formed_ts, last_updated_ts, supporting_episode_ids, "
+            "scope_id, is_labile FROM schemas WHERE id = ?",
             (int(schema_id),),
         ).fetchone()
         if row is None:
@@ -799,6 +858,25 @@ class SchemaStore:
         if recall_hit:
             recurrence_count += 1
         recurrence_score = round(recurrence_count / (recurrence_count + 5.0), 4)
+
+        # --- reconsolidation via sustained recurrence: repeated genuine
+        # reactivation restabilizes a labile schema on its own (see
+        # _RECONSOLIDATION_RECOVERY_RECURRENCE above) ---
+        recover = False
+        was_flagged = bool(row["is_labile"])
+        if was_flagged:
+            baseline = facets.get("recurrence_count_at_flag")
+            if baseline is None:
+                # First time this function has observed the flag with no
+                # recorded baseline — capture one now rather than counting
+                # any pre-flagging history toward recovery.
+                facets["recurrence_count_at_flag"] = recurrence_count
+            elif (
+                recall_hit
+                and (recurrence_count - int(baseline)) >= _RECONSOLIDATION_RECOVERY_RECURRENCE
+            ):
+                recover = True
+                facets.pop("recurrence_count_at_flag", None)
 
         # --- schema_utility ---
         schema_utility = round(0.5 * stability_score + 0.5 * recurrence_score, 4)
@@ -827,14 +905,21 @@ class SchemaStore:
         schema_id_key = f"sch_{int(schema_id)}"
         token = f'"{schema_id_key}"'
 
+        # This query does not filter on scope_id — total_negative_marks and
+        # total_used_marks below count every matching feedback event
+        # regardless of scope. Rows with no scope_id count normally;
+        # `fb_scope` below becomes the literal string "None" for them, which
+        # never collides with anything in `recall_rows` further down (that
+        # query is independently filtered and always has a real scope_id),
+        # so this has no effect on the separate cross-scope generalization
+        # computation.
         fb_rows = conn.execute(
             """
             SELECT scope_id, used_memory_ids_json, irrelevant_memory_ids_json,
                    stale_memory_ids_json, wrong_memory_ids_json
             FROM context_feedback_events
-            WHERE scope_id IS NOT NULL
-              AND (used_memory_ids_json LIKE ? OR irrelevant_memory_ids_json LIKE ?
-                   OR stale_memory_ids_json LIKE ? OR wrong_memory_ids_json LIKE ?)
+            WHERE used_memory_ids_json LIKE ? OR irrelevant_memory_ids_json LIKE ?
+               OR stale_memory_ids_json LIKE ? OR wrong_memory_ids_json LIKE ?
             """,
             (f"%{token}%",) * 4,
         ).fetchall()
@@ -961,16 +1046,44 @@ class SchemaStore:
             total_negative_marks / (total_negative_marks + 3.0 * total_used_marks + 1.0), 4
         )
 
-        # Demotion: consistently-negative memories leave default context
-        # entirely (needs_review is only visible in broad/debug modes).
+        # Demotion: flags consistently-negative memories as labile, but this
+        # alone does NOT exclude them from default-mode retrieval — only a
+        # schema whose `status` column is set away from "active" is hard-
+        # excluded there (see SchemaStore.update_status / context.py's
+        # _eligible). This flag only feeds context_noise_score's soft ranking
+        # penalty; a schema can sit at is_labile=1, status="active"
+        # indefinitely, still fully eligible, just down-ranked.
         demote = total_negative_marks >= 3 and total_used_marks == 0
 
-        conn.execute(
-            "UPDATE schemas SET facets_json = ?, generalization_stage = ?"
-            + (", needs_review = 1" if demote else "")
-            + " WHERE id = ?",
-            (dumps_json(facets), new_stage, int(schema_id)),
-        )
+        # force_clear_labile wins unconditionally: it's set only by
+        # reinforce() for an explicit "useful" mark that is *itself* in the
+        # middle of being applied — the context_feedback_events row for it
+        # hasn't been INSERTed yet (that happens later in
+        # FeedbackService.retrieval_feedback(), after this call returns), so
+        # `demote`'s recount above is blind to the very event that's
+        # supposed to be clearing the flag and would otherwise immediately
+        # re-set is_labile=1 using stale history.
+        # Absent that, demote wins over recover on same-call conflict:
+        # explicit accumulated negative feedback is stronger, more
+        # deliberate evidence than passive reactivation, so a schema that
+        # both qualifies for demotion and has crossed the recovery
+        # threshold this call stays flagged.
+        if force_clear_labile:
+            labile_action: bool | None = False
+        elif demote:
+            labile_action = True
+        elif recover:
+            labile_action = False
+        else:
+            labile_action = None
+
+        sets = "facets_json = ?, generalization_stage = ?"
+        args: list[Any] = [dumps_json(facets), new_stage]
+        if labile_action is not None:
+            sets += ", is_labile = ?"
+            args.append(1 if labile_action else 0)
+        args.append(int(schema_id))
+        conn.execute(f"UPDATE schemas SET {sets} WHERE id = ?", tuple(args))
         conn.commit()
 
     def get(self, schema_id: int) -> Schema:
@@ -1017,7 +1130,7 @@ class SchemaStore:
     def list(
         self,
         *,
-        needs_review: bool | None = None,
+        is_labile: bool | None = None,
         scope_id: str | None = None,
         status: str | None = None,
         limit: int = 100,
@@ -1025,9 +1138,9 @@ class SchemaStore:
         conn = self.db.connect()
         sql = "SELECT * FROM schemas WHERE 1=1"
         args: list[Any] = []
-        if needs_review is not None:
-            sql += " AND needs_review = ?"
-            args.append(1 if needs_review else 0)
+        if is_labile is not None:
+            sql += " AND is_labile = ?"
+            args.append(1 if is_labile else 0)
         if scope_id is not None:
             sql += " AND scope_id = ?"
             args.append(scope_id)
@@ -1324,7 +1437,7 @@ class SchemaStore:
         *,
         idle_days: float = 30.0,
         decay_amount: float = 0.15,
-        review_threshold: float = 0.30,
+        labile_threshold: float = 0.30,
         dry_run: bool = False,
     ) -> dict[str, Any]:
         """Decay salience of active schemas that have never been recalled.
@@ -1332,15 +1445,15 @@ class SchemaStore:
         Brain analogue: memories that are never activated during waking or sleep
         phases weaken over time. Schemas with zero recurrence that are older than
         ``idle_days`` lose ``decay_amount`` salience per call. Those whose salience
-        falls below ``review_threshold`` are flagged ``needs_review`` for eventual
-        pruning.
+        falls below ``labile_threshold`` are flagged labile (see core/08-feedback.md's
+        "Labile State & Reconsolidation" section for what reads and resolves this flag).
 
         Only affects ``active`` schemas with ``recurrence_count == 0`` (or missing)
         and ``first_formed_ts`` older than ``idle_days``. Explicit-remember schemas
         (``source_kind == "explicit_remember"``) are intentionally excluded — the
         user asked us to keep those.
 
-        Returns a stats dict with ``decayed``, ``flagged_review``, ``dry_run``.
+        Returns a stats dict with ``decayed``, ``flagged_labile``, ``dry_run``.
         """
         now = int(time.time())
         cutoff_ts = now - int(idle_days * 86400)
@@ -1367,17 +1480,17 @@ class SchemaStore:
 
             sid = int(row["id"])
             new_salience = max(0.01, float(row["salience"]) - decay_amount)
-            flag_review = new_salience < review_threshold
+            flag_labile = new_salience < labile_threshold
 
             if not dry_run:
                 sets = ["salience = ?", "last_updated_ts = ?"]
                 args: list[Any] = [new_salience, now]
-                if flag_review:
-                    sets.append("needs_review = 1")
+                if flag_labile:
+                    sets.append("is_labile = 1")
                 args.append(sid)
                 conn.execute(f"UPDATE schemas SET {', '.join(sets)} WHERE id = ?", tuple(args))
             decayed += 1
-            if flag_review:
+            if flag_labile:
                 flagged += 1
 
         if not dry_run:
@@ -1386,9 +1499,9 @@ class SchemaStore:
         return {
             "idle_days": idle_days,
             "decay_amount": decay_amount,
-            "review_threshold": review_threshold,
+            "labile_threshold": labile_threshold,
             "decayed": decayed,
-            "flagged_review": flagged,
+            "flagged_labile": flagged,
             "dry_run": dry_run,
         }
 
@@ -1461,7 +1574,7 @@ class SchemaStore:
             salience=float(row["salience"]),
             supporting_episode_ids=[int(x) for x in supporting],
             contradicting_episode_ids=[int(x) for x in contradicting],
-            needs_review=bool(row["needs_review"]),
+            is_labile=bool(row["is_labile"]),
             first_formed_ts=int(row["first_formed_ts"]),
             last_updated_ts=int(row["last_updated_ts"]),
             embedding=emb,

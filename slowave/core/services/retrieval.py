@@ -313,8 +313,8 @@ class RetrievalService:
                     else:
                         continue  # stage 0: hard block
 
-            # Belt-and-suspenders: apply score multiplier for needs_review
-            if s.needs_review and s.status == "active":
+            # Belt-and-suspenders: apply score multiplier for labile schemas
+            if s.is_labile and s.status == "active":
                 schema_scores[s.id] = schema_scores.get(s.id, 0.0) * 0.20
 
             filtered_schemas.append(s)

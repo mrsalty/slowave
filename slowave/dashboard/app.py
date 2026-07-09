@@ -270,7 +270,7 @@ def _schema_row_to_node(row: sqlite3.Row, prototype_ids: list[int] | None = None
         "status": str(row["status"]),
         "confidence": float(row["confidence"]),
         "salience": float(row["salience"]),
-        "needs_review": bool(row["needs_review"]),
+        "is_labile": bool(row["is_labile"]),
         "facets": facets,
         "schema_class": _schema_class(facets),
         "tags": tags,
@@ -523,8 +523,6 @@ def _warnings(schema_health: dict[str, Any], daemon: dict[str, Any]) -> list[str
     out: list[str] = []
     if not daemon.get("running"):
         out.append("HTTP MCP daemon is not running. Run: slowave serve start")
-    if schema_health.get("needs_review_schemas", 0):
-        out.append(f"{schema_health['needs_review_schemas']} schemas need review.")
     if schema_health.get("active_exact_duplicate_rows", 0):
         out.append(
             f"{schema_health['active_exact_duplicate_rows']} active duplicate schema rows detected."

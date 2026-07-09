@@ -390,7 +390,7 @@ def _schema_dict(s: Any) -> dict[str, Any]:
         "salience": s.salience,
         "supporting_episode_ids": s.supporting_episode_ids,
         "contradicting_episode_ids": s.contradicting_episode_ids,
-        "needs_review": s.needs_review,
+        "needs_review": s.is_labile,
         "first_formed_ts": s.first_formed_ts,
         "last_updated_ts": s.last_updated_ts,
     }

@@ -544,7 +544,7 @@ class SlowaveEngine:
         #
         # Same scope:
         #   value substitution → supersede old schema immediately
-        #   ambiguous          → flag needs_review, take no irreversible action
+        #   ambiguous          → flag labile, take no irreversible action
         #   restatement        → reinforce existing (salience bump)
         #
         # Different scope:
@@ -634,9 +634,7 @@ class SlowaveEngine:
                                     )
                             elif dir_score >= DIR_REVIEW_BAND:
                                 try:
-                                    self.schemas.adjust_feedback_state(
-                                        candidate_id, needs_review=True
-                                    )
+                                    self.schemas.adjust_feedback_state(candidate_id, is_labile=True)
                                 except (KeyError, Exception) as e:
                                     log.warning(
                                         "remember: adjust_feedback_state failed for schema %d: %s",

@@ -149,6 +149,7 @@ tbody tr:hover td{background:rgba(20,30,51,.6)}
 }
 .pill-active{background:#0a2018;color:#7af5aa;border-color:#1a4d2e}
 .pill-needs_review{background:#221800;color:#ffd580;border-color:#5a3c0a}
+.pill-labile{background:#221800;color:#ffd580;border-color:#5a3c0a}
 .pill-contradicted{background:#200d14;color:#ff9aaa;border-color:#4a1a22}
 .pill-superseded{background:#1a1430;color:#c4b0f5;border-color:#3a2d6a}
 .pill-archived{background:#181e30;color:#8090b4;border-color:#2a3558}
