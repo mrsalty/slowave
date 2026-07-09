@@ -161,23 +161,23 @@ coact_means = [
     d["component_fractions"]["coactivation"]["mean"] for d in all_diags if d["component_fractions"]
 ]
 
-print(f"\n--- Q1: Edge weight decomposition ---")
+print("\n--- Q1: Edge weight decomposition ---")
 print(f"Similarity fraction: mean={np.mean(sim_means):.3f}, median={np.mean(sim_medians):.3f}")
 print(f"Transition  fraction: mean={np.mean(trans_means):.3f}")
 print(f"Coactivation fraction: mean={np.mean(coact_means):.3f}")
 
-print(f"\n--- Q1b: Similarity dominance ---")
+print("\n--- Q1b: Similarity dominance ---")
 print(f"% edges with >80% similarity: mean={np.mean(sim_dom_pcts):.1f}%")
 
 # Symmetry
 sym_medians = [d["symmetry"]["median"] for d in all_diags if d["symmetry"]["median"] is not None]
 if sym_medians:
-    print(f"\n--- Q6: Edge directionality ---")
+    print("\n--- Q6: Edge directionality ---")
     print(f"Median symmetry index: {np.mean(sym_medians):.3f}")
-    print(f"(0=fully directional, 1=fully symmetric)")
+    print("(0=fully directional, 1=fully symmetric)")
 
 # Degree distribution
-print(f"\n--- Q7: Degree distribution ---")
+print("\n--- Q7: Degree distribution ---")
 for d in all_diags:
     dd = d["degree_distribution"]
     if dd:

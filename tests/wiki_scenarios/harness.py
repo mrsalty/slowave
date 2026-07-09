@@ -14,8 +14,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from slowave.core.engine import RecallResult
 from slowave.latent.types import QueryDiagnostics
-from slowave.symbolic.encoder import TextEncoder
-from tests.temporal_eval.harness import ScenarioResult, TemporalHarness, keyword_hit
+from tests.temporal_eval.harness import TemporalHarness
 from tests.wiki_scenarios.corpus import paragraphs_for
 
 
@@ -49,7 +48,6 @@ class WikiHarness(TemporalHarness):
         if self.ablation == "no_consolidation":
             consolidate = False
         paras = paragraphs_for(title)
-        scope = f"wikiscenarios:{title}"
         turns = [("user", p) for p in paras]
         # Use the inherited session() method which handles timestamps correctly
         self.session(turns, consolidate=consolidate)

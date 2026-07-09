@@ -350,8 +350,8 @@ def print_report(results: list[ScenarioResult]) -> None:
     print("=" * 70)
     print(" SLOWAVE — StaleMemory Evaluation Report")
     print("=" * 70)
-    print(f" Dataset : StaleMemory (implicit belief staleness, 1,200 scenarios)")
-    print(f" Scorer  : keyword value-match (zero LLM calls)")
+    print(" Dataset : StaleMemory (implicit belief staleness, 1,200 scenarios)")
+    print(" Scorer  : keyword value-match (zero LLM calls)")
     print(f" Total   : {len(results)} scenarios")
     print()
     valid = [r for r in results if not r.error]

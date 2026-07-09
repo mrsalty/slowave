@@ -4,12 +4,10 @@ from __future__ import annotations
 
 import os
 import sqlite3
-import subprocess
 import sys
 import tempfile
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
 
 from slowave.cli.output import CheckResult, Status
 from slowave.core.paths import default_db_path

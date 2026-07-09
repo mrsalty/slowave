@@ -27,7 +27,6 @@ import time
 from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
-from typing import Any
 
 logging.basicConfig(level=logging.WARNING)
 for _n in (
@@ -159,11 +158,14 @@ def keyword_score(hyp, ans):
         "has",
         "had",
     }
-    tok = lambda s: {
-        w
-        for w in re.findall(r"[a-z0-9]+", s.lower())
-        if w not in stop and (len(w) > 1 or w.isdigit())
-    }
+
+    def tok(s):
+        return {
+            w
+            for w in re.findall(r"[a-z0-9]+", s.lower())
+            if w not in stop and (len(w) > 1 or w.isdigit())
+        }
+
     at = tok(ans)
     return len(at & tok(hyp)) / len(at) if at else 0.0
 
@@ -172,7 +174,7 @@ def _parse_ts(s):
     s = str(s).strip()
     try:
         return int(datetime.strptime(s, "%I:%M %p on %d %B, %Y").timestamp())
-    except:
+    except Exception:
         pass
     m = re.search(r"(\d{1,2})\s+(\w+),?\s+(\d{4})", s)
     if m:
@@ -182,7 +184,7 @@ def _parse_ts(s):
                     "%s %s %s" % (m.group(1), m.group(2), m.group(3)), "%d %B %Y"
                 ).timestamp()
             )
-        except:
+        except Exception:
             pass
     return int(time.time())
 
@@ -258,7 +260,7 @@ def run_conversation(
     _np.random.seed(_seed)
     conv = sample["conversation"]
     speaker_a = conv.get("speaker_a", "A")
-    speaker_b = conv.get("speaker_b", "B")
+    conv.get("speaker_b", "B")
     qa_items = [q for q in sample["qa"] if q["category"] in categories]
     if not qa_items:
         return []

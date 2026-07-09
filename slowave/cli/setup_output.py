@@ -4,9 +4,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import Any
 
-from slowave.cli.output import ConsoleRenderer, Status, get_renderer, status_symbol
+from slowave.cli.output import ConsoleRenderer, Status, get_renderer
 
 
 class ChangeType(str, Enum):
@@ -111,13 +110,13 @@ class SetupSession:
         error_count = len(self.errors)
 
         if new_count:
-            self.renderer.item(f"Created/installed", f"{new_count}")
+            self.renderer.item("Created/installed", f"{new_count}")
         if update_count:
-            self.renderer.item(f"Updated", f"{update_count}")
+            self.renderer.item("Updated", f"{update_count}")
         if skip_count:
-            self.renderer.item(f"Skipped", f"{skip_count}")
+            self.renderer.item("Skipped", f"{skip_count}")
         if error_count:
-            self.renderer.item(f"Errors", f"{error_count}", dim=False)
+            self.renderer.item("Errors", f"{error_count}", dim=False)
 
         if self.dry_run:
             self.renderer.section("Next Steps")

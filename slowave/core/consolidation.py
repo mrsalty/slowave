@@ -12,8 +12,8 @@ import numpy as np
 from slowave.latent.semantic_store import SemanticStore
 from slowave.storage.sqlite_db import SQLiteDB
 from slowave.symbolic.encoder import TextEncoder
-from slowave.symbolic.episode_text import EpisodeText, EpisodeTextStore
-from slowave.symbolic.schema_store import Schema, SchemaStore, canonical_schema_text
+from slowave.symbolic.episode_text import EpisodeTextStore
+from slowave.symbolic.schema_store import Schema, SchemaStore
 from slowave.utils.vec import dumps_json
 
 log = logging.getLogger(__name__)

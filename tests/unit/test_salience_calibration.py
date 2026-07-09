@@ -186,7 +186,7 @@ class TestLifecycle:
         s0 = 0.6
         s1 = fast_engine.penalize_after_consolidation(s0)
         assert s1 == pytest.approx(0.3)
-        s2 = fast_engine.decay(s1, 500.0)
+        fast_engine.decay(s1, 500.0)
 
     def test_reinforce_after_floor_decay(self, fast_engine: SalienceEngine) -> None:
         """Even after hitting floor, reinforcement can revive an episode."""
