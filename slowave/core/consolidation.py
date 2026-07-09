@@ -570,9 +570,19 @@ class Consolidator:
             return
         if s2.status not in ("active", "needs_review"):
             return
+        # This is a symmetric "these two co-cluster" signal, not a directed
+        # claim, but add_relation's uniqueness is on (src, dst, relation).
+        # Ranking by per-call cosine similarity to the prototype centroid
+        # is unstable — the same pair can rank in either order across
+        # repeated calls on the same prototype (centroid drifts as replay
+        # adds members) or across different prototypes near the same two
+        # schemas — which previously produced both A->B and B->A rows for
+        # the same pair. Canonicalize on schema id so direction is stable
+        # and ON CONFLICT collapses repeat calls into one row.
+        src_id, dst_id = (s1_id, s2_id) if s1_id <= s2_id else (s2_id, s1_id)
         self.schemas.add_relation(
-            src_schema_id=s1_id,
-            dst_schema_id=s2_id,
+            src_schema_id=src_id,
+            dst_schema_id=dst_id,
             relation="reinforces",
             confidence=round(s2_cos, 3),
             reason=f"co-clustered via prototype {prototype_id}",
