@@ -209,9 +209,9 @@ echo "→ Pushing to public"
 
 # First push: need --set-upstream if we bootstrapped
 if $BOOTSTRAP; then
-    git push --set-upstream public "$PUBLIC_BRANCH:$PUBLIC_BRANCH"
+    git push --set-upstream origin "$PUBLIC_BRANCH:$PUBLIC_BRANCH"
 else
-    git push public "$PUBLIC_BRANCH:$PUBLIC_BRANCH"
+    git push origin "$PUBLIC_BRANCH:$PUBLIC_BRANCH"
 fi
 
 echo
