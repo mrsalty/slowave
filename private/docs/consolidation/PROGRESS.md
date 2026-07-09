@@ -15,9 +15,9 @@ For completed work notes: `outcomes/NN-module.md`.
 | 1 | **Retrieval** | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +3.7pp, Temporal +6.7pp, DMR +2.2pp |
 | 2 | Salience | ✅ updated | ✅ done | ✅ done | **COMPLETE** | LoCoMo +0.8pp (79.5%) |
 | 3 | Graph | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | λ₁ 1.0→0.3 (live DB: 89% sim-dom → fixed) |
-| 4 | Consolidation | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | LoCoMo +1.0pp (80.3%→81.3%); StaleMemory: 0pp on every ablation except a small (2-3/360) near-dup-guard effect — confirmed architectural disconnect between judge thresholds and recall ranking, not a bug or a mystery |
-| 5 | Temporal | ✅ generated | — | — | not started | — |
-| 6 | Feedback | ✅ generated | — | — | not started | — |
+| 4 | Consolidation | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | LoCoMo +1.0pp (80.3%→81.3%); StaleMemory: 0pp on every ablation except a small (2-3/360) near-dup-guard effect — confirmed architectural disconnect between judge thresholds and recall ranking, not a bug or a mystery. **Follow-up 2026-07-10**: gained a new Phase 7 (`reconsolidate_labile_schemas()`) as part of Module 6's labile/reconsolidation work — see Module 6 row and both modules' outcome docs |
+| 5 | Temporal | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | LongMemEval 0.0pp (all 6 categories) from `use_temporal`; LoCoMo -0.6pp overall / -2.22pp on its temporal category from disabling `use_temporal` — mechanism confirmed alive, benchmark-dependent visibility; `temporal_weight=0.25` grid-searched, flat, kept as-is |
+| 6 | Feedback | ✅ rewritten | ✅ done | ✅ done | **COMPLETE** | No external benchmark exercises `retrieval_feedback()`; scored internal AUC benchmark (`scripts/feedback_ablation.py`) instead — baseline separates good/bad schemas perfectly (salience_auc=1.0, noise_score_auc=1.0); `apply_learning=False` collapses only salience_auc (0.5), not noise_score_auc (stays 1.0 — new finding, the "master gate" doesn't gate noise-score demotion); `scope_id=None` collapses only noise_score_auc. **Follow-up 2026-07-10, part 2**: `needs_review` ("labile") now has 3 recovery channels + Consolidation reconsolidation, `scope_id` gap fixed — see below |
 | 7 | Context | ✅ generated | — | — | not started | — |
 | 8 | VSA | ✅ generated | — | — | deferred (not wired) | — |
 
@@ -240,7 +240,62 @@ Re-ran B2, B6, B7, B8 with both scorer fixes (B1 and B4 already had fixed-scorer
 
 Full session log: `outcomes/05-consolidation.md`. All 8 phases done. Two deferred, optional items if revisited: the `test_verdict_distribution_bounds` gap-fill test, and a schema-status-aware StaleMemory metric (check `schema.status == "active"` directly against the DB instead of keyword-matching retrieved text).
 
-## Next Session: Temporal (Module 5)
-1. Read `core/07-temporal.md` — audit alignment with `temporal.py` implementation
-2. Key question: does `TemporalProbe` actually fire? What fraction of queries get temporal anchors vs fallback to `now()`?
-3. Rewrite following template
+---
+
+## What Was Done: Temporal (2026-07-09)
+
+Full session log: `outcomes/07-temporal.md`. All 8 phases done.
+
+**Root problem found:** `core/07-temporal.md`'s Stage 10 anchor-estimation section documented a fabricated 12-probe table (invented "a few minutes ago"/"an hour ago" entries that don't exist in `_TEMPORAL_PROBES`, missing the real "two months ago"/"six months ago"/"two years ago" entries) and the wrong `softmax_temperature` default (0.15 documented vs. 0.05 actual). The doc also lacked every template section past Key Invariants. A second, independent staleness bug was found *in the source itself*: `TemporalProbe`'s docstring claimed a 0.1 default that the constructor never used — fixed (`temporal.py:211`, no behavior change).
+
+**Key question answered** (PROGRESS.md's standing question): `TemporalProbe` fires on **65% of queries** (LongMemEval oracle baseline, 60 questions) — not dead weight. But firing rate tracks *backward-referencing phrasing* ("checking back on our previous conversation"), not the benchmark's category taxonomy — `single-session-assistant` fires at 90%, identical to `temporal-reasoning`, while `single-session-preference` (present/future-tense phrasing) is the real outlier at 10%. This refuted the plan's original Q4 framing (using category label as ground truth for calibration) mid-investigation.
+
+**Ablation matrix (`use_temporal` on/off, the only wired boolean in this module):** LongMemEval shows **exactly 0.0pp on every category**, including `temporal-reasoning` — despite the mechanism firing 65% of the time. LoCoMo shows a real, benchmark-specific effect: **-0.6pp overall, -2.22pp on its dedicated temporal category** (categories 3/4/5 exactly 0.0pp, matching LongMemEval's flatness). Two benchmarks disagreeing this cleanly on a real, confirmed-alive mechanism mirrors the Consolidation module's "architectural disconnect" pattern — not a bug, a benchmark-sensitivity difference.
+
+**Grid search:** `temporal_weight` swept {0.0, 0.10, 0.25, 0.40, 0.60} on LoCoMo's two sensitive categories. Flat, non-monotonic landscape at real sample sizes (n=74/n=90) — current default (0.25) already at or near the empirical optimum on both. **No change.**
+
+**Micro-benchmark tests (MANDATORY):** `tests/unit/test_temporal_probe.py` — 12 new tests, zero prior coverage of `TemporalProbe` (dead-zone gate, softmax-bound invariant, determinism, probe-embedded-once discipline, internal normalization). All pass; full 394+ unit suite unaffected.
+
+**Residual open questions (deferred):** `softmax_temperature`/`atemporal_margin` recalibration (needs phrasing-level annotation, not category labels — Q4's original ground truth was shown wrong); the probe set's minute/hour coverage gap (same-day queries fall into the dead zone or map to "yesterday" — structural, not a threshold); why LongMemEval is insensitive to `use_temporal` while LoCoMo isn't (plausible mechanism proposed, not confirmed by direct instrumentation).
+
+---
+
+## What Was Done: Feedback (2026-07-09)
+
+Full session log: `outcomes/08-feedback.md`. All 8 phases done.
+
+**Root problem found:** the generated doc claimed a `review_pressure ≥ threshold` gate on `needs_review` that doesn't exist in code (unconditional given `apply_stale_wrong_review`), documented `useful_confidence_delta` as active when `reinforce()` — the only call path `"useful"` uses — has no confidence parameter at all, and was missing 6/29 `FeedbackConfig` fields plus every template section past Key Invariants.
+
+**Structural finding (new pattern, not seen in prior modules):** none of the project's 6 benchmarks ever call `retrieval_feedback()`/`record_retrieval()` — feedback requires multi-turn, labeled interaction that single-shot offline evals don't produce. Substituted two evidence sources: the live dogfood DB (`~/.slowave/slowave.db`, 30 real feedback events from this project's own sessions — `slowave_reinforce` **is** this module's public entry point) and a new deterministic ablation script (`scripts/feedback_ablation.py`).
+
+**Key findings, confirmed both on live data and in a controlled script:** the noise-score demotion rule (3+ negative marks, 0 used marks → boolean `needs_review=1`) fires on real usage (6/47 live schemas) but only soft-penalizes ranking — it never excludes from default retrieval, contradicting its own code comment (fixed, comment-only, no behavior change). Only an explicit `wrong`+`outcome="failure"` escalates the `status` *string* to `"needs_review"`, which does hard-exclude (1/47 live schemas). A new discovery made while building the repro: `context_noise_score` tracking requires `scope_id` — feedback calls with no scope are silently invisible to it. Three config fields (`apply_outcome_to_schema_reward`, `missing_creates_memory`, `missing_replay_enabled`) are confirmed dead (zero call sites); two threshold fields (`stale_review_threshold`, `wrong_review_threshold`) are confirmed cosmetic (no comparison exists anywhere). None of these were blindly fixed — each requires a product decision this investigation flagged rather than made unilaterally.
+
+**Ablation (F1-F4, the only wired boolean flags):** all four (`apply_learning`, `apply_positive_learning`, `apply_negative_learning`, `apply_stale_wrong_review`) confirmed load-bearing on the internal scenario — no external task metric exists to move, so this is measured against the module's own invariants rather than a benchmark Δ.
+
+**Grid search:** skipped — no benchmark task-metric exists at all (distinct from prior modules' "flat but real" landscape finding).
+
+**Micro-benchmark tests (MANDATORY):** `tests/unit/test_feedback_review_gating.py` — 16 new tests (0.78s), zero prior coverage of the boolean-vs-string eligibility distinction, `scope_id` requirement, salience-bound asymmetry, threshold cosmetics, dead flags, and F1-F4 regression coverage. All pass; full unit suite unaffected (existing 26-test `test_context_feedback.py` untouched).
+
+**Residual open questions (deferred):** whether to wire `apply_outcome_to_schema_reward`/`missing_creates_memory`/`missing_replay_enabled` (unbuilt features, not bugs); whether `review_pressure` should be redefined from an independent signal so the threshold fields could gate something real; whether `useful_confidence_delta` should be wired into the `useful` path; whether the salience-bound asymmetry needs a shared clamp (no evidence of real-world harm found).
+
+### Follow-up (2026-07-10): Design Evaluation fixes
+
+User reviewed the Design Evaluation and made per-item calls: **plug in** `useful_confidence_delta` (now wired into `reinforce()`, clamped); **remove** the two review-threshold fields and the three dead flags (5 `FeedbackConfig` fields deleted, 29→24) rather than build unused features; **add** a shared salience ceiling (`SchemaStore.SALIENCE_CEILING=20.0`) to `adjust_feedback_state()` so it matches `reinforce()` (the asymmetry is gone); **document + warn** (not yet fix) the `scope_id` footgun — docstrings updated, a `WARNING` now logs when negative feedback arrives with no `scope_id`; **rewrite** `scripts/feedback_ablation.py` into a scored AUC micro-benchmark (see table above). The `needs_review`/`status`-string naming-collision question was explained in more depth but left undecided — no fix chosen yet, flagged as an open item.
+
+**New finding surfaced while building the AUC benchmark:** `apply_learning=False` does not disable the noise-score/`needs_review` demotion mechanism — only the *direct* salience/confidence/status mutations. `refresh_utility()` runs unconditionally per touched schema regardless of `apply_learning`. Locked in as core doc Invariant 11 and a new regression test. Full details: `outcomes/08-feedback.md`'s "Follow-up (2026-07-10)" section. Test count: 26 (`test_context_feedback.py`, unchanged) + 17 (`test_feedback_review_gating.py`, up from 16) = 43, all passing.
+
+### Follow-up (2026-07-10, part 2): the Labile State & Reconsolidation
+
+The `needs_review`/`status`-string naming collision left open above got resolved through further design discussion, prompted by the user sharing dashboard screenshots showing exactly the confusion this collision causes in practice (a "1 warning" banner counting only the `status` string sitting above a table where most rows carry a "⚠ review" badge rendering the unrelated boolean column). Tracing the dashboard's two queries confirmed **nothing anywhere ever clears the boolean flag once set** — three subsystems (`decay_unused()`, `remember()`'s ambiguous-update case, feedback's noise-demotion rule) all flag a schema "for later" and none of them ever built the "later" step; Consolidation, the most plausible place for it, was checked directly and confirmed to never read the flag.
+
+Reconstructed against real memory science (brain-inspired framing, per the user's request): the state is called **labile** (a reactivated memory trace temporarily uncertain and open to revision — standard reconsolidation-theory term, not an invented metaphor) and the resolution process is **reconsolidation**. These pair with the module's own existing vocabulary — "reconsolidate" is a natural sibling of "consolidate." (A first naming attempt, `resolve_labile_schemas()`/`"labile_resolution"`, paired the right state word with an unrelated generic process noun; corrected to `reconsolidate_labile_schemas()`/`"reconsolidation"`.) **Explicit scoping decision**: the `needs_review` column itself was not renamed to `is_labile` — that's a real migration touching the dashboard (a different tech stack), deliberately left for a separate future decision.
+
+Three recovery channels were built, all reusing existing machinery: (1) explicit `useful`/`partially_useful` feedback now clears the flag directly (`reinforce()` gained `clear_needs_review`; `adjust_feedback_state()`'s existing `needs_review` param now gets used); (2) sustained genuine recurrence (3+ reactivations *since* being flagged, not lifetime) clears it passively (`_update_utility_scores`, new `recurrence_count_at_flag` baseline facet); (3) Consolidation's new `reconsolidate_labile_schemas()` (Module 4, Phase 7) actively replays a labile schema against its nearest neighbor through the *same* judge and gates the fresh-schema path already uses, resolving to restabilized/superseded/contradicted/inconclusive. The `scope_id` fix from part 1 was implemented alongside this (not held back) since a memory that should enter this pipeline but never gets flagged is now a bigger miss than before — verified via live-DB + backup history first (zero confirmed real instances of the gap mattering to date, so bundled as a robustness fix, not an incident response).
+
+26 tests across `test_feedback_review_gating.py` (updated) and the new `test_labile_lifecycle.py` (9 tests), plus `05-consolidation.md`'s new Phase 7 tests. Full details: `outcomes/08-feedback.md`'s "Follow-up (2026-07-10, part 2)" section and `outcomes/05-consolidation.md`'s matching follow-up note.
+
+---
+
+## Next Session: Context Gating (Module 7)
+1. Read `core/09-context.md` — audit alignment with `slowave/core/context.py` implementation
+2. Rewrite following template
