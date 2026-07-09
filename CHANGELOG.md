@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.14.0](https://github.com/mrsalty/slowave/compare/slowave-v0.13.0...slowave-v0.14.0) (2026-07-09)
+
+
+### Features
+
+* **evals:** make tau_seconds, salience_weight, surprise_weight injectable via CLI ([40ced85](https://github.com/mrsalty/slowave/commit/40ced8500f9e10b19182ce8347f2f348ab7da09d))
+* **feedback:** complete Module 6 algorithmic deep-dive with labile/reconsolidation lifecycle ([da5e860](https://github.com/mrsalty/slowave/commit/da5e860b5ec5fea2c6240d0a653b44c2ccc330ec))
+* **graph:** quality deep-dive — λ₁ 1.0→0.3, diagnostics, tests, docs ([1f460b8](https://github.com/mrsalty/slowave/commit/1f460b8fd9b263a3362c26a526ef3c56a3be41c8))
+* **retrieval:** spread-projection architecture + diagnostics + tests ([6393be2](https://github.com/mrsalty/slowave/commit/6393be22384eedc3203c248fd11184a494f3fa0a))
+* **retrieval:** spread-projection architecture + diagnostics + tests ([637cd71](https://github.com/mrsalty/slowave/commit/637cd717161207302d3f1f24f06cdee2da053155))
+* wrap up retrieval + sal + salience modules ([e66d4b5](https://github.com/mrsalty/slowave/commit/e66d4b5c518cbb2e22c56553c89f077d40b6bd28))
+* wrap up retrieval + sal + salience modules ([f9b4089](https://github.com/mrsalty/slowave/commit/f9b40890e3a0a9998d980c46eb1f943e5754faf7))
+
+
+### Bug Fixes
+
+* **consolidation:** canonicalize reinforces edge direction by schema id ([5f3823f](https://github.com/mrsalty/slowave/commit/5f3823f63e97e9b6d1cbd693335a6ab242e0c599))
+* **consolidation:** canonicalize reinforces edge direction by schema id ([28d6156](https://github.com/mrsalty/slowave/commit/28d6156fd32a00c2939e1d6f69120054d766dc0e))
+* **consolidation:** persist facet axes so contradiction detection actually works ([56ab2de](https://github.com/mrsalty/slowave/commit/56ab2de593756e32e0164e1767b19af964d365cb))
+* dashboard ([045e318](https://github.com/mrsalty/slowave/commit/045e3181a38722caf17eac3ddd186b95355e29f4))
+* dashboard ([76fde48](https://github.com/mrsalty/slowave/commit/76fde48a03c0066f51757d36d42cff0a1c62f884))
+* dashboard + consolidation ([45a7c79](https://github.com/mrsalty/slowave/commit/45a7c790454526584688d13bcc6b0426a1c2f16f))
+* **feedback:** Module 6 algorithmic deep-dive — labile/reconsolidation lifecycle ([e287325](https://github.com/mrsalty/slowave/commit/e2873258d067e802b1022cd19c231ce51ffa0c54))
+* **graph:** quality deep-dive — λ₁ 1.0→0.3, diagnostics, tests, docs ([b65b71a](https://github.com/mrsalty/slowave/commit/b65b71adc7f02d3be63915a7fe6cfc72cb1392d8))
+* populate schema_relations in pure-remember consolidation pass ([a9a74f1](https://github.com/mrsalty/slowave/commit/a9a74f1671a622df80e20062e86f5242b9d32381))
+* populate schema_relations in pure-remember consolidation pass ([ad73b4f](https://github.com/mrsalty/slowave/commit/ad73b4f1741bc3800cd3d216e171d1aa4f41ebe5))
+* restore [dependency-groups] accidentally removed by lint config ([a919b0e](https://github.com/mrsalty/slowave/commit/a919b0ec7c39d277bbacd206e912f5a05701d23f))
+* restore wiki/temporal/trend-table in run_full_benchmark.py ([f4b7b08](https://github.com/mrsalty/slowave/commit/f4b7b085e5ec06fda4a552ec17226a0a6a3c6dcf))
+* restore wiki/temporal/trend-table in run_full_benchmark.py ([27b80bc](https://github.com/mrsalty/slowave/commit/27b80bc6a5c33ac07ebafe4cd3f0c33c68ef4a90))
+* **scripts:** push-public.sh uses wrong remote name in temp clone ([bc08407](https://github.com/mrsalty/slowave/commit/bc084071cfa148efe4727ce32819772c4d0b9512))
+
+
+### Documentation
+
+* add core doc template + generation prompt (CORE_DOC_TEMPLATE.md) ([1871bad](https://github.com/mrsalty/slowave/commit/1871bad704ec9aaedb5d371a5447c0b7fa41a9da))
+* add implementation file table to 06-retrieval.md ([1d1283a](https://github.com/mrsalty/slowave/commit/1d1283a5d47e3a63fe562d0bd8ef0bd91034f6f1))
+* fix 06-retrieval.md audid audit findings ([3d9c013](https://github.com/mrsalty/slowave/commit/3d9c013f81f0d820489ad2aa2532f38ecf6d7d2b))
+* fix LaTeX formatting + add logical explanations to retrieval & salience core docs ([9015a10](https://github.com/mrsalty/slowave/commit/9015a10550210a2757d25a9964d19288a011ef3e))
+* fix stale defaults in consolidation docs post-salience tuning ([485cbc9](https://github.com/mrsalty/slowave/commit/485cbc969df310b27a85b746d9da9baf5ce00524))
+* **graph:** full benchmark results — LoCoMo 80.1% (new record), no regressions ([b8e9720](https://github.com/mrsalty/slowave/commit/b8e97203ffbee6089d16b38443151e60fe673973))
+* LoCoMo 79.7% → 80.1% (post-λ₁ fix full run) ([c103237](https://github.com/mrsalty/slowave/commit/c1032377cfe6cd2e18817518c839086174f3b303))
+* rewrite 06-retrieval.md (full alignment) + add 01-retrieval plan ([35dbe9c](https://github.com/mrsalty/slowave/commit/35dbe9c61e281b485d3bdb99ef54b052f32dbf7c))
+* **salience:** add improvement plan and update progress ([dc8643c](https://github.com/mrsalty/slowave/commit/dc8643c56985b0337f82763e58d8a59c7caccfd5))
+* **salience:** record outcome, update benchmarks and doc defaults ([19714f2](https://github.com/mrsalty/slowave/commit/19714f2e117fdcb8acef8d242941758037d93cc4))
+* **temporal:** add design evaluation to outcome notes ([ddac3e2](https://github.com/mrsalty/slowave/commit/ddac3e2d1ec0dd5fe3c4790a5e156f409fd73e26))
+* **temporal:** complete Module 5 algorithmic deep-dive ([d7f855d](https://github.com/mrsalty/slowave/commit/d7f855d5759e8eb15779f18d5ca76f11b9d46a62))
+* update benchmark numbers + consolidation structure ([08f0f46](https://github.com/mrsalty/slowave/commit/08f0f4611a2242d2f8c42a4599ddd5abd137d5f7))
+* update benchmark numbers post-salience tuning (LoCoMo 78.7→79.7%) ([b926ca8](https://github.com/mrsalty/slowave/commit/b926ca8149f31ba6f83f7b0fb0555ae478628583))
+
 ## [0.13.0](https://github.com/mrsalty/slowave/compare/slowave-v0.12.1...slowave-v0.13.0) (2026-07-07)
 
 
