@@ -223,3 +223,40 @@ def test_explicit_remember_prototype_does_not_crash_link_step(eng):
 
     # Schema count must not grow — relation-linking never creates schemas
     assert eng.schemas.count() == before
+
+
+def test_link_schemas_via_prototype_centroid_is_direction_stable(eng, tmp_path):
+    """A "co-clustered" reinforces edge is a symmetric signal, not a directed
+    claim. If ranking by per-call cosine similarity to the prototype centroid
+    is allowed to pick which schema is src vs dst, repeated calls (or calls
+    from different prototypes near the same pair) can flip the order and
+    write both A->B and B->A rows for the same pair. Direction must be
+    canonicalized on schema id so it can never depend on call-time ranking."""
+    dim = eng.cfg.dim
+    rng = np.random.default_rng(7)
+    emb_a = rng.standard_normal(dim).astype(np.float32)
+    emb_a /= np.linalg.norm(emb_a)
+    emb_b = emb_a + rng.standard_normal(dim).astype(np.float32) * 0.05
+    emb_b /= np.linalg.norm(emb_b)
+
+    id_a = eng.schemas.create(content_text="schema A", embedding=emb_a, dedupe=False)
+    id_b = eng.schemas.create(content_text="schema B", embedding=emb_b, dedupe=False)
+
+    consolidator = eng._consolidation.consolidator
+
+    # Two different prototype centroids, one nearer A and one nearer B, so
+    # search_embedding's top-2 ranking flips which schema lands in position
+    # 0 vs 1 — reproducing how two distinct (or drifted) prototypes near the
+    # same pair used to yield opposite src/dst assignments.
+    consolidator._link_schemas_via_prototype_centroid(1, emb_a)
+    consolidator._link_schemas_via_prototype_centroid(2, emb_b)
+
+    conn = eng.db.connect()
+    rows = conn.execute(
+        "SELECT src_schema_id, dst_schema_id FROM schema_relations "
+        "WHERE relation = 'reinforces' AND src_schema_id IN (?, ?) AND dst_schema_id IN (?, ?)",
+        (id_a, id_b, id_a, id_b),
+    ).fetchall()
+    assert len(rows) == 1, f"expected a single canonical-direction edge, got {list(rows)}"
+    assert int(rows[0]["src_schema_id"]) == min(id_a, id_b)
+    assert int(rows[0]["dst_schema_id"]) == max(id_a, id_b)
