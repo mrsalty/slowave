@@ -441,8 +441,10 @@ function renderSchemasTable(schemas){
     const tagsHtml=(s.tags||[]).map(t=>`<span class="pill" style="font-size:10px">${esc(t)}</span>`).join("");
     const stage=s.generalization_stage||0;
     const stageBadge=stage>0?`<span class="gen-badge gen-${stage}" style="font-size:10px">${GEN_LABELS[stage]||stage}</span>`:`<span class="gen-badge gen-0" style="font-size:10px">SCOPED</span>`;
+    const labileStyle=s.is_labile?';border:2px solid #f5b942;border-radius:10px;padding:1px 4px':'';
+    const labileTitle=s.is_labile?' title="Labile memory: under verification. Clears with sustained use — otherwise corrected or removed during background consolidation."':'';
     return `<tr class="expandable" data-id="${s.schema_id}">
-      <td><code style="font-size:11px${s.is_labile?';border:2px solid #f5b942;border-radius:10px;padding:1px 4px':''}${s.is_labile?`" title="Labile memory: under verification. Clears with sustained use — otherwise corrected or removed during background consolidation."`:""}>sch_${s.schema_id}</code></td>
+      <td><code style="font-size:11px${labileStyle}"${labileTitle}>sch_${s.schema_id}</code></td>
       <td style="white-space:nowrap">${pill(s.status)}</td>
       <td>${salHtml}</td>
       <td>${confHtml}</td>
@@ -812,7 +814,7 @@ function drawGraph(g){
       id:n.id,label:graphNodeLabel(n),schema_id:n.schema_id,content:n.content||n.label||"",
       status:n.status,effective_status:n.status||"active",scope:n.scope||"",schema_class:n.schema_class||"",
       salience:Number(n.salience||0),confidence:Number(n.confidence||0),stage,is_labile:!!n.is_labile,
-      color:nodeColor(n),size:graphNodeSize(n),border:stage>=3?"#6af5aa":stage===2?"#ffd580":stage===1?"#7ab5ff":"#253050",
+      color:nodeColor(n),size:graphNodeSize(n),border:n.is_labile?"#f5b942":(stage>=3?"#6af5aa":stage===2?"#ffd580":stage===1?"#7ab5ff":"#253050"),
       borderWidth:n.is_labile?4:(stage>0?2.5:1.2)
     },position:randomPointInDisk(1600)});
   });
@@ -959,7 +961,7 @@ function drawGraphSvgFallback(g){
     const c=document.createElementNS("http://www.w3.org/2000/svg","circle");
     c.setAttribute("cx",n.x);c.setAttribute("cy",n.y);c.setAttribute("r",r);
     c.setAttribute("fill",color);c.setAttribute("fill-opacity","0.85");
-    c.setAttribute("stroke",color);c.setAttribute("stroke-width","1.5");
+    c.setAttribute("stroke",n.is_labile?"#f5b942":color);c.setAttribute("stroke-width",n.is_labile?"4":"1.5");
     c.setAttribute("class","node");
     c.addEventListener("mouseenter",ev=>showTip(ev,`<b>sch_${n.schema_id}</b><br><span style="color:#7a8db5">${esc(n.status)}</span> · sal ${Number(n.salience).toFixed(2)}<br><em>${esc(n.label)}</em>`));
     c.addEventListener("mouseleave",hideTip);
@@ -990,9 +992,12 @@ async function selectGraphNode(n,el){
     ?table(["From","Rel.","Conf.","Reason"],d.incoming.map(e=>[
         `sch_${e.src_schema_id}`,e.relation,Number(e.confidence||0).toFixed(2),e.reason||"—"]))
     :"<em style='color:var(--muted)'>None.</em>";
+  const gLabileStyle=s.is_labile?';border-left:3px solid #f5b942;padding-left:8px':'';
+  const gLabileTitle=s.is_labile?' title="Labile memory: under verification. Clears with sustained use — otherwise corrected or removed during background consolidation."':'';
+
   document.getElementById("graphDetail").innerHTML=`
     <div style="margin-bottom:10px">
-      <div style="font-size:16px;font-weight:700${s.is_labile?';border-left:3px solid #f5b942;padding-left:8px':''}${s.is_labile?`" title="Labile memory: under verification. Clears with sustained use — otherwise corrected or removed during background consolidation."`:""}>sch_${s.schema_id}</div>
+      <div style="font-size:16px;font-weight:700${gLabileStyle}"${gLabileTitle}>sch_${s.schema_id}</div>
       <div style="margin-top:6px">${pill(eStat)}
         <span class="pill">sal ${Number(s.salience).toFixed(2)}</span>
         <span class="pill">conf ${Number(s.confidence).toFixed(2)}</span>
