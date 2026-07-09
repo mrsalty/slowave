@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.14.2](https://github.com/mrsalty/slowave/compare/slowave-v0.14.1...slowave-v0.14.2) (2026-07-09)
+
+
+### Bug Fixes
+
+* dashboard improvements ([28954d7](https://github.com/mrsalty/slowave/commit/28954d790126216906de8a7b27461a56dcbe4235))
+
 ## [0.14.1](https://github.com/mrsalty/slowave/compare/slowave-v0.14.0...slowave-v0.14.1) (2026-07-09)
 
 
