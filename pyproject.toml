@@ -119,3 +119,11 @@ markers = [
 "tests/unit/test_supersession_geometry.py" = ["E402"]
 "tests/unit/test_vsa.py" = ["E402"]
 "tests/unit/test_working_memory_context.py" = ["E402"]
+
+[dependency-groups]
+dev = [
+    "black",
+    "isort",
+    "mypy>=2.1.0",
+    "pytest>=9.0.3",
+]
