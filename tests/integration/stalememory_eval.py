@@ -575,7 +575,7 @@ def main() -> None:
         default="",
         help="JSON dict of GeometricJudgeConfig field overrides "
         "(plans/05-consolidation.md Threshold Ablation Matrix), e.g. "
-        '\'{"near_dup_guard_cosine": 1.01}\'.',
+        "'{\"near_dup_guard_cosine\": 1.01}'.",
     )
     parser.add_argument("--out", default="")
     args = parser.parse_args()

@@ -51,8 +51,8 @@ from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
-from slowave.latent.schema import GeometricJudgeConfig
 from slowave.latent.salience import SalienceConfig
+from slowave.latent.schema import GeometricJudgeConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
 CATEGORY_NAMES = {
@@ -733,7 +733,7 @@ def main():
         default="",
         help="JSON dict of GeometricJudgeConfig field overrides "
         "(plans/05-consolidation.md Threshold Ablation Matrix), e.g. "
-        '\'{"related_schema_cosine": 1.01}\'.',
+        "'{\"related_schema_cosine\": 1.01}'.",
     )
     parser.add_argument("--out", default="")
     args = parser.parse_args()
