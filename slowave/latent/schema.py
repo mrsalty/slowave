@@ -477,6 +477,14 @@ class GeometricJudgeConfig:
     # one to supersede. Prevents rapid toggling where two schemas
     # contradict each other within a very short window.
     min_time_delta_to_supersede_s: float = 3600.0  # 1 hour
+    # Cosine above which Consolidator._write_latent_schema's near-duplicate
+    # guard reinforces the closest active schema instead of ever reaching
+    # this judge. Set >= 1.0 to disable the guard (every candidate reaches
+    # the judge, subject to related_schema_cosine below).
+    near_dup_guard_cosine: float = 0.92
+    # Cosine above which Consolidator._best_related_schema treats an
+    # existing schema as related enough to compare via this judge.
+    related_schema_cosine: float = 0.72
 
 
 class GeometricContradictionJudge:

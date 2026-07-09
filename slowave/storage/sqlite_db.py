@@ -84,6 +84,25 @@ class SQLiteDB:
 
         conn = self.connect()
 
+        # Legacy DBs may still have the schemas table's boolean "labile" flag
+        # under its old column name, needs_review — distinct from the
+        # unrelated status='needs_review' string value on the same table
+        # (see core/08-feedback.md's "Labile State & Reconsolidation"
+        # section). Rename it to is_labile before schema.sql's CREATE INDEX
+        # on is_labile runs, or that statement fails against a DB that still
+        # has the old name. RENAME COLUMN requires SQLite >= 3.25 (2018);
+        # every supported Python's stdlib sqlite3 bundles a newer version.
+        # The ("schemas", "is_labile", ...) row in missing_columns below is
+        # a safety net for a DB old enough to have neither column at all.
+        t = conn.execute(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='schemas'"
+        ).fetchone()
+        if t is not None:
+            cols = {r["name"] for r in conn.execute("PRAGMA table_info(schemas)").fetchall()}
+            if "needs_review" in cols and "is_labile" not in cols:
+                conn.execute("ALTER TABLE schemas RENAME COLUMN needs_review TO is_labile")
+                conn.commit()
+
         missing_columns = [
             # Stage 9 (commit 777ea1d)
             ("semantic_prototypes", "scale", "TEXT NOT NULL DEFAULT 'fine'"),
@@ -100,6 +119,12 @@ class SQLiteDB:
             ("schemas", "salience", "REAL NOT NULL DEFAULT 1.0"),
             ("schemas", "embedding", "BLOB"),
             ("schemas", "dim", "INTEGER"),
+            ("schemas", "facet_axes", "BLOB"),
+            ("schemas", "facet_strengths", "BLOB"),
+            ("schemas", "n_facet_axes", "INTEGER NOT NULL DEFAULT 0"),
+            # Safety net for the needs_review -> is_labile rename above: a DB
+            # old enough to have neither column gets this added fresh.
+            ("schemas", "is_labile", "INTEGER NOT NULL DEFAULT 0"),
             ("sessions", "scope_id", "TEXT"),
             ("sessions", "scope_kind", "TEXT"),
             ("context_recall_events", "retrieval_type", "TEXT NOT NULL DEFAULT 'context'"),

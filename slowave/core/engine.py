@@ -219,7 +219,7 @@ class SlowaveEngine:
             schemas=self.schemas,
             encoder=self.encoder,
             latent_builder=LatentSchemaBuilder(),
-            geometric_judge=GeometricContradictionJudge(),
+            geometric_judge=GeometricContradictionJudge(self.cfg.judge),
         )
         # The latent consolidator needs episode embeddings + ts.
         self.consolidator._episodic_store_ref = self.episodic
@@ -393,6 +393,10 @@ class SlowaveEngine:
                     "schemas_reinforced": cstats.schemas_reinforced,
                     "schemas_contradicted": cstats.schemas_contradicted,
                     "schemas_skipped": cstats.schemas_skipped,
+                    "verdict_counts": dict(cstats.verdict_counts),
+                    "near_dup_intercepts": cstats.near_dup_intercepts,
+                    "gate_downgrades": dict(cstats.gate_downgrades),
+                    "confidence_histogram": list(cstats.confidence_histogram),
                 }
         return stats
 
@@ -540,7 +544,7 @@ class SlowaveEngine:
         #
         # Same scope:
         #   value substitution → supersede old schema immediately
-        #   ambiguous          → flag needs_review, take no irreversible action
+        #   ambiguous          → flag labile, take no irreversible action
         #   restatement        → reinforce existing (salience bump)
         #
         # Different scope:
@@ -630,9 +634,7 @@ class SlowaveEngine:
                                     )
                             elif dir_score >= DIR_REVIEW_BAND:
                                 try:
-                                    self.schemas.adjust_feedback_state(
-                                        candidate_id, needs_review=True
-                                    )
+                                    self.schemas.adjust_feedback_state(candidate_id, is_labile=True)
                                 except (KeyError, Exception) as e:
                                     log.warning(
                                         "remember: adjust_feedback_state failed for schema %d: %s",

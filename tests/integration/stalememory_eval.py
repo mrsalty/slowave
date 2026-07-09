@@ -30,10 +30,11 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 import tempfile
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -62,6 +63,7 @@ from slowave.core.engine import SlowaveEngine
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
 from slowave.latent.salience import SalienceConfig
+from slowave.latent.schema import GeometricJudgeConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
 ALL_ATTRIBUTES = [
@@ -80,15 +82,25 @@ DRIFT_PATTERNS = ["abrupt", "gradual", "noisy"]
 # ── Scoring ──────────────────────────────────────────────────────────────────
 
 
+def _word_present(text_lower: str, token_lower: str) -> bool:
+    """Word-boundary match: alnum characters immediately before/after the
+    token disqualify it. Plain substring matching (the previous behavior)
+    let short/common values like "cli" match inside unrelated words like
+    "right-click" -- confirmed on the gui->cli tool_preference scenarios,
+    see PROGRESS.md 2026-07-09."""
+    pattern = r"(?<![a-z0-9])" + re.escape(token_lower) + r"(?![a-z0-9])"
+    return re.search(pattern, text_lower) is not None
+
+
 def _value_present(text: str, value: str) -> bool:
     text_lower = text.lower()
     value_lower = value.lower()
-    if value_lower in text_lower:
+    if _word_present(text_lower, value_lower):
         return True
     if "_" in value:
-        if value.replace("_", " ").lower() in text_lower:
+        if _word_present(text_lower, value.replace("_", " ").lower()):
             return True
-        if value.replace("_", "").lower() in text_lower:
+        if _word_present(text_lower, value.replace("_", "").lower()):
             return True
     return False
 
@@ -101,6 +113,43 @@ def score_recall(hypothesis: str, post_val: str, pre_val: str) -> tuple[bool, bo
     if _value_present(hypothesis, pre_val):
         return False, True, False
     return False, False, True
+
+
+# ── Consolidation diagnostics (plans/05-consolidation.md Phase 4) ────────────
+
+
+def _new_consolidation_diag_accumulator() -> dict[str, Any]:
+    return {
+        "prototypes_processed": 0,
+        "schemas_created": 0,
+        "schemas_reinforced": 0,
+        "schemas_contradicted": 0,
+        "schemas_skipped": 0,
+        "near_dup_intercepts": 0,
+        "verdict_counts": {},
+        "gate_downgrades": {},
+        "confidence_histogram": [],
+    }
+
+
+def _accumulate_consolidation_diag(acc: dict[str, Any], diag: dict[str, Any] | None) -> None:
+    """Sum one session_end(consolidate=True) diagnostics dict into a
+    scenario- or run-level accumulator built by _new_consolidation_diag_accumulator."""
+    if not diag:
+        return
+    for key in (
+        "prototypes_processed",
+        "schemas_created",
+        "schemas_reinforced",
+        "schemas_contradicted",
+        "schemas_skipped",
+        "near_dup_intercepts",
+    ):
+        acc[key] += int(diag.get(key, 0) or 0)
+    for key in ("verdict_counts", "gate_downgrades"):
+        for k, v in (diag.get(key) or {}).items():
+            acc[key][k] = acc[key].get(k, 0) + int(v)
+    acc["confidence_histogram"].extend(diag.get("confidence_histogram") or [])
 
 
 # ── Per-scenario runner ───────────────────────────────────────────────────────
@@ -126,6 +175,15 @@ class ScenarioResult:
     latency_recall_s: float
     n_sessions_ingested: int
     error: str | None = None
+    # Consolidation diagnostics summed across every session_end(consolidate=True)
+    # call in this scenario (plans/05-consolidation.md Phase 4, Q1/Q4).
+    consolidation_diag: dict = field(default_factory=dict)
+    # Schema-only scoring variant (episodes excluded from the hypothesis) --
+    # isolates consolidation's contribution from episodic retrieval's.
+    # See PROGRESS.md 2026-07-09 "Fix the scorer" entry.
+    detected_schema_only: bool = False
+    stale_schema_only: bool = False
+    no_answer_schema_only: bool = False
 
 
 def run_scenario(
@@ -138,6 +196,7 @@ def run_scenario(
     tau_seconds: float = 86400.0,
     salience_weight: float = 0.5,
     surprise_weight: float = 0.3,
+    judge_overrides: dict[str, Any] | None = None,
 ) -> ScenarioResult:
     sid = scenario["scenario_id"]
     attribute = scenario["attribute"]
@@ -176,6 +235,7 @@ def run_scenario(
                 neighbor_top_k=6,
                 use_multi_scale=True,
             ),
+            judge=GeometricJudgeConfig(**(judge_overrides or {})),
             disable_encoder=False,
         )
         eng = SlowaveEngine(cfg, shared_encoder=shared_encoder)
@@ -195,6 +255,7 @@ def run_scenario(
             return int(_window_start + frac * (_window_end - _window_start))
 
         n_ingested = 0
+        consolidation_diag = _new_consolidation_diag_accumulator()
         t_ingest_start = time.time()
         for sess_idx, sess in enumerate(_non_probe):
             sess_ts = _session_ts(sess_idx)
@@ -206,7 +267,8 @@ def run_scenario(
                     continue
                 etype = "user_message" if role == "user" else "assistant_message"
                 eng.event_append(session_id=session_id, type=etype, content=content, ts=sess_ts)
-            eng.session_end(session_id, consolidate=consolidate, ts=sess_ts)
+            end_stats = eng.session_end(session_id, consolidate=consolidate, ts=sess_ts)
+            _accumulate_consolidation_diag(consolidation_diag, end_stats.get("consolidation"))
             n_ingested += 1
         latency_ingest = time.time() - t_ingest_start
 
@@ -221,6 +283,11 @@ def run_scenario(
         hypothesis = " ".join([schemas_text, episodes_text]).strip()
 
         detected, stale, no_answer = score_recall(hypothesis, post_val, pre_val)
+        # Schema-only variant: episodes are immutable and untouched by any
+        # Consolidator/judge threshold (see PROGRESS.md 2026-07-09), so the
+        # combined metric above can't isolate consolidation's contribution.
+        # Scored in parallel, not as a replacement.
+        detected_so, stale_so, no_answer_so = score_recall(schemas_text.strip(), post_val, pre_val)
         eng.close()
 
         return ScenarioResult(
@@ -241,6 +308,10 @@ def run_scenario(
             latency_ingest_s=round(latency_ingest, 2),
             latency_recall_s=round(latency_recall, 4),
             n_sessions_ingested=n_ingested,
+            consolidation_diag=consolidation_diag,
+            detected_schema_only=detected_so,
+            stale_schema_only=stale_so,
+            no_answer_schema_only=no_answer_so,
         )
 
     except Exception as e:
@@ -358,6 +429,9 @@ def _result_row(r: ScenarioResult) -> dict[str, Any]:
         "latency_ingest_s": r.latency_ingest_s,
         "latency_recall_s": r.latency_recall_s,
         "n_sessions_ingested": r.n_sessions_ingested,
+        "detected_schema_only": r.detected_schema_only,
+        "stale_schema_only": r.stale_schema_only,
+        "no_answer_schema_only": r.no_answer_schema_only,
         "error": r.error,
     }
 
@@ -385,6 +459,7 @@ def _build_payload(
             "no_answer_rate": round(sum(1 for r in rs if r.no_answer) / pn, 4),
         }
     by_attribute: dict[str, dict] = {}
+    by_attribute_schema_only: dict[str, dict] = {}
     for attr in ALL_ATTRIBUTES:
         rs = [r for r in valid if r.attribute == attr]
         if not rs:
@@ -396,9 +471,34 @@ def _build_payload(
             "stale_rate": round(sum(1 for r in rs if r.stale) / an, 4),
             "no_answer_rate": round(sum(1 for r in rs if r.no_answer) / an, 4),
         }
+        by_attribute_schema_only[attr] = {
+            "n": an,
+            "detection_rate": round(sum(1 for r in rs if r.detected_schema_only) / an, 4),
+            "stale_rate": round(sum(1 for r in rs if r.stale_schema_only) / an, 4),
+            "no_answer_rate": round(sum(1 for r in rs if r.no_answer_schema_only) / an, 4),
+        }
     detected = sum(1 for r in valid if r.detected)
     stale_c = sum(1 for r in valid if r.stale)
     no_ans = sum(1 for r in valid if r.no_answer)
+    detected_so = sum(1 for r in valid if r.detected_schema_only)
+    stale_so = sum(1 for r in valid if r.stale_schema_only)
+    no_ans_so = sum(1 for r in valid if r.no_answer_schema_only)
+
+    # Split consolidation diagnostics by outcome: if near_dup_intercepts is
+    # markedly higher among stale (anchor-pull) scenarios than detected ones,
+    # that's direct evidence for the Priority Finding in plans/05-consolidation.md
+    # (Q1) — the near-dup guard is absorbing post-drift updates as reinforcement
+    # of the pre-drift schema before the geometric judge ever sees them.
+    diag_all = _new_consolidation_diag_accumulator()
+    diag_stale = _new_consolidation_diag_accumulator()
+    diag_detected = _new_consolidation_diag_accumulator()
+    for r in valid:
+        _accumulate_consolidation_diag(diag_all, r.consolidation_diag)
+        if r.stale:
+            _accumulate_consolidation_diag(diag_stale, r.consolidation_diag)
+        elif r.detected:
+            _accumulate_consolidation_diag(diag_detected, r.consolidation_diag)
+
     return {
         "meta": {
             "benchmark": "StaleMemory",
@@ -410,6 +510,7 @@ def _build_payload(
             "drift_patterns": args.drift_patterns,
             "consolidate": not args.no_consolidate,
             "assignment_threshold": args.assignment_threshold,
+            "judge_overrides": args.judge_overrides,
             "top_k": args.top_k,
             "total_elapsed_s": round(total_elapsed, 2),
             "llm_calls": 0,
@@ -422,6 +523,21 @@ def _build_payload(
             "no_answer_rate": round(no_ans / max(1, n), 4),
             "by_drift_pattern": by_pattern,
             "by_attribute": by_attribute,
+            # Schema-only variant (episodes excluded from the hypothesis) --
+            # isolates consolidation's contribution. See PROGRESS.md 2026-07-09.
+            "schema_only": {
+                "detection_rate": round(detected_so / max(1, n), 4),
+                "stale_rate": round(stale_so / max(1, n), 4),
+                "no_answer_rate": round(no_ans_so / max(1, n), 4),
+                "by_attribute": by_attribute_schema_only,
+            },
+        },
+        "diagnostics": {
+            "consolidation": {
+                "all": diag_all,
+                "stale_scenarios": diag_stale,
+                "detected_scenarios": diag_detected,
+            },
         },
         "results": [_result_row(r) for r in results],
     }
@@ -454,8 +570,16 @@ def main() -> None:
     parser.add_argument("--tau-seconds", type=float, default=86400.0)
     parser.add_argument("--salience-weight", type=float, default=0.5)
     parser.add_argument("--surprise-weight", type=float, default=0.3)
+    parser.add_argument(
+        "--judge-overrides",
+        default="",
+        help="JSON dict of GeometricJudgeConfig field overrides "
+        "(plans/05-consolidation.md Threshold Ablation Matrix), e.g. "
+        "'{\"near_dup_guard_cosine\": 1.01}'.",
+    )
     parser.add_argument("--out", default="")
     args = parser.parse_args()
+    judge_overrides = json.loads(args.judge_overrides) if args.judge_overrides else {}
 
     dataset_path = Path(args.dataset)
     if not dataset_path.is_absolute():
@@ -520,6 +644,7 @@ def main() -> None:
                 tau_seconds=args.tau_seconds,
                 salience_weight=args.salience_weight,
                 surprise_weight=args.surprise_weight,
+                judge_overrides=judge_overrides,
             )
             status = "HIT " if r.detected else ("STALE" if r.stale else "NOAN")
             err = f" ERROR:{r.error[:50]}" if r.error else ""

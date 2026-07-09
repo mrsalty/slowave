@@ -52,6 +52,7 @@ from slowave.core.engine import SlowaveEngine
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
 from slowave.latent.salience import SalienceConfig
+from slowave.latent.schema import GeometricJudgeConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
 CATEGORY_NAMES = {
@@ -208,6 +209,13 @@ class QAResult:
     db_size_bytes: int = 0
     error: str | None = None
     component_scores: dict = field(default_factory=dict)
+    # Consolidation diagnostics (plans/05-consolidation.md Phase 4), stamped
+    # onto every row of a conversation the same way cost instrumentation is.
+    consolidation_diag: dict = field(default_factory=dict)
+    # Temporal anchor diagnostics (plans/07-temporal.md Phase 4) — per question,
+    # since estimate_anchor() runs once per recall() call, not per conversation.
+    anchor_fired: bool = False
+    anchor_displacement_s: int = 0
 
 
 def run_conversation(
@@ -228,10 +236,13 @@ def run_conversation(
     no_self_supervise=False,
     no_pattern_separation=False,
     no_multi_scale=False,
+    no_temporal=False,
+    temporal_weight=0.25,
     tau_seconds=86400 * 30,
     salience_weight=0.5,
     surprise_weight=0.3,
     spread_score_weight=0.90,
+    judge_overrides=None,
 ):
     conv_id = str(sample.get("sample_id", "?"))
     # Pin the global numpy RNG to a deterministic seed derived from conv_id so
@@ -271,7 +282,10 @@ def run_conversation(
                 use_transition=not no_transition,
                 use_multi_scale=not no_multi_scale,
                 spread_score_weight=spread_score_weight,
+                use_temporal=not no_temporal,
+                temporal_weight=0.0 if no_temporal else temporal_weight,
             ),
+            judge=GeometricJudgeConfig(**(judge_overrides or {})),
             disable_encoder=False,
         )
         eng = SlowaveEngine(cfg, shared_encoder=shared_encoder)
@@ -313,8 +327,10 @@ def run_conversation(
                     (session_ts, session_ts, "micro_%s_%%" % sid, "macro_%s" % sid),
                 )
                 conn.commit()
+        consolidation_diag: dict = {}
         if consolidate:
-            eng.consolidate_once(triggered_by="locomo_eval")
+            _cstats = eng.consolidate_once(triggered_by="locomo_eval")
+            consolidation_diag = _cstats.get("consolidation", {}) or {}
             # Stage 5: self-supervised retrieval rehearsal AFTER the
             # graph has been built and schemas extracted. Brain analogue:
             # sleep replay tightens the graph based on what the system
@@ -362,6 +378,8 @@ def run_conversation(
                         latency_recall_s=round(lr, 3),
                         consolidate=consolidate,
                         component_scores={"adversarial_ks": round(adv_ks, 3)},
+                        anchor_fired=r.anchor_fired,
+                        anchor_displacement_s=r.anchor_displacement_s,
                     )
                 )
                 continue
@@ -398,6 +416,8 @@ def run_conversation(
                         "f1_episodes": round(f1_score(eh, answer), 3),
                         "f1_hybrid": round(f1, 3),
                     },
+                    anchor_fired=r.anchor_fired,
+                    anchor_displacement_s=r.anchor_displacement_s,
                 )
             )
         # Cost instrumentation snapshot — taken BEFORE eng.close().
@@ -425,6 +445,7 @@ def run_conversation(
             r.llm_prompt_tokens = pt_total // n_results
             r.llm_completion_tokens = ct_total // n_results
             r.db_size_bytes = db_size_total
+            r.consolidation_diag = consolidation_diag
         if keep_debug_dbs:
             dest = REPO_ROOT / "data" / "locomo" / "debug_dbs" / "%s.db" % conv_id
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -554,6 +575,75 @@ def print_report(results, consolidate):
     print("=" * 72)
 
 
+def _aggregate_consolidation_diag(results):
+    """Sum per-conversation consolidation diagnostics into one run-level
+    summary. Dedupes by conv_id since consolidation_diag is stamped
+    identically on every QAResult row of the same conversation."""
+    seen_convs = set()
+    agg = {
+        "prototypes_processed": 0,
+        "schemas_created": 0,
+        "schemas_reinforced": 0,
+        "schemas_contradicted": 0,
+        "schemas_skipped": 0,
+        "near_dup_intercepts": 0,
+        "verdict_counts": {},
+        "gate_downgrades": {},
+        "confidence_histogram": [],
+    }
+    for r in results:
+        diag = getattr(r, "consolidation_diag", None)
+        if not diag or r.conv_id in seen_convs:
+            continue
+        seen_convs.add(r.conv_id)
+        for key in (
+            "prototypes_processed",
+            "schemas_created",
+            "schemas_reinforced",
+            "schemas_contradicted",
+            "schemas_skipped",
+            "near_dup_intercepts",
+        ):
+            agg[key] += int(diag.get(key, 0) or 0)
+        for key in ("verdict_counts", "gate_downgrades"):
+            for k, v in (diag.get(key) or {}).items():
+                agg[key][k] = agg[key].get(k, 0) + int(v)
+        agg["confidence_histogram"].extend(diag.get("confidence_histogram") or [])
+    return agg
+
+
+def _aggregate_temporal_diag(results):
+    """anchor_fired rate + mean displacement, overall and per LoCoMo category
+    (plans/07-temporal.md Q1 — is TemporalProbe firing, and where)."""
+    by_cat: dict = {}
+    for cat in set(r.category for r in results):
+        rs = [r for r in results if r.category == cat]
+        fired = [r for r in rs if r.anchor_fired]
+        by_cat[str(cat)] = {
+            "name": CATEGORY_NAMES.get(cat, "cat-%d" % cat),
+            "n": len(rs),
+            "anchor_fired_n": len(fired),
+            "anchor_fired_rate": round(len(fired) / max(1, len(rs)), 4),
+            "mean_displacement_s": (
+                round(sum(r.anchor_displacement_s for r in fired) / max(1, len(fired)), 1)
+                if fired
+                else 0.0
+            ),
+        }
+    fired_all = [r for r in results if r.anchor_fired]
+    return {
+        "n": len(results),
+        "anchor_fired_n": len(fired_all),
+        "anchor_fired_rate": round(len(fired_all) / max(1, len(results)), 4),
+        "mean_displacement_s": (
+            round(sum(r.anchor_displacement_s for r in fired_all) / max(1, len(fired_all)), 1)
+            if fired_all
+            else 0.0
+        ),
+        "by_category": by_cat,
+    }
+
+
 def _save(path, results, args, elapsed, partial):
     path.parent.mkdir(parents=True, exist_ok=True)
     by_cat = {}
@@ -580,6 +670,9 @@ def _save(path, results, args, elapsed, partial):
             "top_k": args.top_k,
             "no_salience_rerank": args.no_salience_rerank,
             "no_graph_expansion": args.no_graph_expansion,
+            "no_temporal": args.no_temporal,
+            "temporal_weight": args.temporal_weight,
+            "judge_overrides": args.judge_overrides,
             "total_elapsed_s": round(elapsed, 2),
         },
         "summary": {
@@ -587,6 +680,10 @@ def _save(path, results, args, elapsed, partial):
             "hits": th,
             "score_pct": round(100 * th / max(1, len(results)), 2),
             "by_category": by_cat,
+        },
+        "diagnostics": {
+            "consolidation": _aggregate_consolidation_diag(results),
+            "temporal": _aggregate_temporal_diag(results),
         },
         "results": [
             {
@@ -607,6 +704,8 @@ def _save(path, results, args, elapsed, partial):
                 "llm_completion_tokens": r.llm_completion_tokens,
                 "db_size_bytes": r.db_size_bytes,
                 "component_scores": r.component_scores,
+                "anchor_fired": r.anchor_fired,
+                "anchor_displacement_s": r.anchor_displacement_s,
                 "error": r.error,
             }
             for r in results
@@ -678,8 +777,30 @@ def main():
         action="store_true",
         help="Stage 9 ablation: disable CA3+CA1 dual-scale prototypes.",
     )
+    parser.add_argument(
+        "--no-temporal",
+        action="store_true",
+        help="Stage 7/10 ablation: disable temporal-proximity score bonus at "
+        "recall (use_temporal=False, temporal_weight=0.0). Does not stop "
+        "TemporalProbe.estimate_anchor() from running (see core/07-temporal.md).",
+    )
+    parser.add_argument(
+        "--temporal-weight",
+        type=float,
+        default=0.25,
+        help="Stage 7 grid search: weight of the temporal-proximity score bonus "
+        "(plans/07-temporal.md Grid Search). Ignored when --no-temporal is set.",
+    )
+    parser.add_argument(
+        "--judge-overrides",
+        default="",
+        help="JSON dict of GeometricJudgeConfig field overrides "
+        "(plans/05-consolidation.md Threshold Ablation Matrix), e.g. "
+        "'{\"related_schema_cosine\": 1.01}'.",
+    )
     parser.add_argument("--out", default="")
     args = parser.parse_args()
+    judge_overrides = json.loads(args.judge_overrides) if args.judge_overrides else {}
     dataset_path = Path(args.dataset)
     if not dataset_path.is_absolute():
         dataset_path = REPO_ROOT / dataset_path
@@ -734,10 +855,13 @@ def main():
                 no_self_supervise=args.no_self_supervise,
                 no_pattern_separation=args.no_pattern_separation,
                 no_multi_scale=args.no_multi_scale,
+                no_temporal=args.no_temporal,
+                temporal_weight=args.temporal_weight,
                 tau_seconds=args.tau_seconds,
                 salience_weight=args.salience_weight,
                 surprise_weight=args.surprise_weight,
                 spread_score_weight=args.spread_score_weight,
+                judge_overrides=judge_overrides,
             )
         except Exception as e:
             print("  ERROR:", e)

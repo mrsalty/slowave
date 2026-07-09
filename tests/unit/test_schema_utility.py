@@ -237,7 +237,7 @@ class TestDecayUnused:
             eng.close()
             _cleanup(path)
 
-    def test_flags_needs_review_below_threshold(self) -> None:
+    def test_flags_labile_below_threshold(self) -> None:
         eng, path = _tmp_engine()
         try:
             sid = _create_schema(eng, "low salience idle")
@@ -250,12 +250,12 @@ class TestDecayUnused:
             result = eng.schemas.decay_unused(
                 idle_days=30.0,
                 decay_amount=0.15,
-                review_threshold=0.30,
+                labile_threshold=0.30,
                 dry_run=False,
             )
             s = eng.schemas.get(sid)
-            assert s.needs_review is True
-            assert result["flagged_review"] >= 1
+            assert s.is_labile is True
+            assert result["flagged_labile"] >= 1
         finally:
             eng.close()
             _cleanup(path)
@@ -268,7 +268,7 @@ class TestConsolidateOnceIncludesDecay:
             result = eng.consolidate_once()
             assert "decay" in result
             assert "decayed" in result["decay"]
-            assert "flagged_review" in result["decay"]
+            assert "flagged_labile" in result["decay"]
         finally:
             eng.close()
             _cleanup(path)
