@@ -150,7 +150,9 @@ def test_contradicts_now_reachable_with_persisted_facet_axes(real_store):
     outcome, new_id = cons._write_latent_schema(prototype_id=1, schema=new_schema)
 
     assert outcome == "contradicted"
-    relations = schemas.db.connect().execute(
-        "SELECT relation FROM schema_relations WHERE src_schema_id = ?", (new_id,)
-    ).fetchall()
+    relations = (
+        schemas.db.connect()
+        .execute("SELECT relation FROM schema_relations WHERE src_schema_id = ?", (new_id,))
+        .fetchall()
+    )
     assert any(r["relation"] == "supersedes" for r in relations)
