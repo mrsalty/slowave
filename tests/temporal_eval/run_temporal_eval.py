@@ -30,7 +30,7 @@ for _n in (
     logging.getLogger(_n).setLevel(logging.ERROR)
 
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
-from tests.temporal_eval.harness import ScenarioResult, TemporalHarness
+from tests.temporal_eval.harness import TemporalHarness
 from tests.temporal_eval.scenarios import (
     chain,
     coactivation,

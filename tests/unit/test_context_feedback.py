@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import os
 import tempfile
-import time
 import uuid
 
 import numpy as np
@@ -13,9 +12,7 @@ from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.core.feedback import (
     VALID_FEEDBACK_LABELS,
-    VALID_OUTCOME_LABELS,
     FeedbackConfig,
-    FeedbackSignal,
     feedback_signal_for,
     normalize_feedback_label,
     normalize_outcome_label,

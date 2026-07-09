@@ -6,7 +6,6 @@ Tests that CompactSchema.from_schema correctly:
 3. Saturating fallback handles spike values (e.g., salience=298.6)
 """
 
-import math
 from unittest.mock import MagicMock
 
 from slowave.mcp.compact import CompactSchema

@@ -199,7 +199,7 @@ def main(
         )
         sys.exit(1)
 
-    pid_path = write_pid()
+    write_pid()
 
     # -- cleanup helpers -----------------------------------------------------
     def _cleanup() -> None:

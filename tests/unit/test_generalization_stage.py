@@ -18,9 +18,7 @@ import time
 
 import pytest
 
-from slowave.core.config import SlowaveConfig
 from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate
-from slowave.core.engine import SlowaveEngine
 from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
 from slowave.symbolic.schema_store import (
     GeneralizationConfig,
@@ -39,7 +37,6 @@ def _make_db() -> SQLiteDB:
     f = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
     f.close()
     db = SQLiteDB(SQLiteConfig(path=f.name))
-    import importlib.resources
 
     schema_path = os.path.join(
         os.path.dirname(__file__),
@@ -236,7 +233,6 @@ def _schema_obj(
     content: str = "test",
 ) -> Schema:
     """Minimal Schema object for gate tests without DB."""
-    import numpy as np
 
     return Schema(
         id=1,

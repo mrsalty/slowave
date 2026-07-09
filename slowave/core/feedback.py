@@ -9,8 +9,7 @@ Brain-inspired feedback model:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import Any
+from dataclasses import dataclass
 
 # ============================================================================
 # Feedback signal: numeric vector of learning dynamics

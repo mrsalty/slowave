@@ -595,7 +595,7 @@ def _slowave_processes() -> list[dict[str, Any]]:
         )
         if not (is_worker or is_dashboard):
             continue
-        parent_command = all_commands.get(int(ppid)) or None
+        all_commands.get(int(ppid)) or None
         rows.append(
             {
                 "pid": int(pid),

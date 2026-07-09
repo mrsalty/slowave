@@ -6,8 +6,6 @@ All tests are deterministic (no encoder, no DB).
 
 from __future__ import annotations
 
-from dataclasses import replace
-
 import numpy as np
 
 from slowave.core.context import (
@@ -70,6 +68,7 @@ def _stub_schema(
 
 # ── 1. Mode-gated eligibility ──────────────────────────────────────────────
 
+
 def test_default_mode_only_admits_active() -> None:
     """Schemas with status != 'active' are suppressed in default mode."""
     gate = WorkingMemoryGate()
@@ -78,7 +77,9 @@ def test_default_mode_only_admits_active() -> None:
     needs_review = _stub_schema(2, status="needs_review")
     superseded = _stub_schema(3, status="superseded")
 
-    state = gate.select([active, needs_review, superseded], cue=cue, policy=GatePolicy(min_activation=0.01))
+    state = gate.select(
+        [active, needs_review, superseded], cue=cue, policy=GatePolicy(min_activation=0.01)
+    )
 
     admitted_ids = {item.schema.id for item in state.items}
     assert admitted_ids == {1}, f"Expected only active, got {admitted_ids}"
@@ -93,7 +94,9 @@ def test_broad_mode_admits_active_and_needs_review() -> None:
     needs_review = _stub_schema(2, status="needs_review")
     superseded = _stub_schema(3, status="superseded")
 
-    state = gate.select([active, needs_review, superseded], cue=cue, policy=GatePolicy(min_activation=0.01))
+    state = gate.select(
+        [active, needs_review, superseded], cue=cue, policy=GatePolicy(min_activation=0.01)
+    )
 
     admitted_ids = {item.schema.id for item in state.items}
     assert 1 in admitted_ids
@@ -110,7 +113,9 @@ def test_debug_mode_admits_everything() -> None:
     needs_review = _stub_schema(2, status="needs_review")
     superseded = _stub_schema(3, status="superseded")
 
-    state = gate.select([active, needs_review, superseded], cue=cue, policy=GatePolicy(min_activation=0.01))
+    state = gate.select(
+        [active, needs_review, superseded], cue=cue, policy=GatePolicy(min_activation=0.01)
+    )
 
     admitted_ids = {item.schema.id for item in state.items}
     assert admitted_ids == {1, 2, 3}
@@ -118,6 +123,7 @@ def test_debug_mode_admits_everything() -> None:
 
 
 # ── 2. Strict scope gating ─────────────────────────────────────────────────
+
 
 def test_strict_scope_blocks_cross_scope_stage0() -> None:
     """In strict_scope mode, Stage 0 cross-scope schema is blocked."""
@@ -169,6 +175,7 @@ def test_strict_scope_admits_global() -> None:
 
 # ── 3. Multi-sentence summary gate ──────────────────────────────────────────
 
+
 def test_multi_sentence_summary_suppressed_in_default() -> None:
     """A 4-sentence, >300 char non-explicit_remember schema is suppressed."""
     gate = WorkingMemoryGate()
@@ -198,15 +205,26 @@ def test_multi_sentence_episodic_summary_not_suppressed() -> None:
         "Sentence three wraps up. "
         "Sentence four is extra."
     )
-    summary = _stub_schema(1, text=long_text, schema_class="episodic_summary",
-                           source_kind="latent")
+    summary = _stub_schema(1, text=long_text, schema_class="episodic_summary", source_kind="latent")
     # episodic_summary not in default allowed_classes — add it
     policy = GatePolicy(
         min_activation=0.01,
-        allowed_classes=("episodic_summary", "fact", "preference", "decision",
-                         "lesson", "constraint", "warning", "procedure",
-                         "open_question", "task", "artifact", "relationship",
-                         "interaction_preference", "habit"),
+        allowed_classes=(
+            "episodic_summary",
+            "fact",
+            "preference",
+            "decision",
+            "lesson",
+            "constraint",
+            "warning",
+            "procedure",
+            "open_question",
+            "task",
+            "artifact",
+            "relationship",
+            "interaction_preference",
+            "habit",
+        ),
     )
 
     state = gate.select([summary], cue=cue, policy=policy)
@@ -224,8 +242,7 @@ def test_multi_sentence_explicit_remember_not_suppressed() -> None:
         "Sentence two continues the thought. "
         "Sentence three finishes it."
     )
-    summary = _stub_schema(1, text=long_text, schema_class="fact",
-                           source_kind="explicit_remember")
+    summary = _stub_schema(1, text=long_text, schema_class="fact", source_kind="explicit_remember")
 
     state = gate.select([summary], cue=cue, policy=GatePolicy(min_activation=0.01))
 
@@ -237,8 +254,9 @@ def test_short_text_not_suppressed() -> None:
     """A short 2-sentence, <300 char schema passes the gate."""
     gate = WorkingMemoryGate()
     cue = MemoryCue(mode="default")
-    short = _stub_schema(1, text="Just two sentences. Very short indeed.",
-                         schema_class="fact", source_kind="latent")
+    short = _stub_schema(
+        1, text="Just two sentences. Very short indeed.", schema_class="fact", source_kind="latent"
+    )
 
     state = gate.select([short], cue=cue, policy=GatePolicy(min_activation=0.01))
 
@@ -260,12 +278,12 @@ def test_multi_sentence_bypasses_in_broad() -> None:
 
 # ── 4. Excluded layer / source_kind filters ────────────────────────────────
 
+
 def test_excluded_layer_suppressed() -> None:
     """raw_event layer is excluded by default GatePolicy."""
     gate = WorkingMemoryGate()
     cue = MemoryCue(mode="default")
-    raw = _stub_schema(1, memory_layer="raw_event", source_kind="latent",
-                       text="A short fact.")
+    raw = _stub_schema(1, memory_layer="raw_event", source_kind="latent", text="A short fact.")
 
     state = gate.select([raw], cue=cue, policy=GatePolicy(min_activation=0.01))
 
@@ -277,8 +295,7 @@ def test_excluded_layer_passes_in_broad() -> None:
     """Layer exclusion is bypassed in broad mode."""
     gate = WorkingMemoryGate()
     cue = MemoryCue(mode="broad")
-    raw = _stub_schema(1, memory_layer="raw_event", source_kind="latent",
-                       text="A short fact.")
+    raw = _stub_schema(1, memory_layer="raw_event", source_kind="latent", text="A short fact.")
 
     state = gate.select([raw], cue=cue, policy=GatePolicy(min_activation=0.01))
 
@@ -289,8 +306,9 @@ def test_assistant_summary_source_excluded() -> None:
     """assistant_summary source_kind is excluded in default mode."""
     gate = WorkingMemoryGate()
     cue = MemoryCue(mode="default")
-    summary = _stub_schema(1, source_kind="assistant_summary", memory_layer="workspace",
-                           text="A short summary.")
+    summary = _stub_schema(
+        1, source_kind="assistant_summary", memory_layer="workspace", text="A short summary."
+    )
 
     state = gate.select([summary], cue=cue, policy=GatePolicy(min_activation=0.01))
 
@@ -307,16 +325,23 @@ def test_assistant_summary_source_admitted_in_broad() -> None:
     noise = _make_unit(dim, seed=10)
     schema_emb = cue_emb + 0.1 * noise
     schema_emb = schema_emb / (np.linalg.norm(schema_emb) + 1e-12)
-    summary = _stub_schema(1, source_kind="assistant_summary", memory_layer="workspace",
-                           text="A short summary.", embedding=schema_emb.astype(np.float32))
+    summary = _stub_schema(
+        1,
+        source_kind="assistant_summary",
+        memory_layer="workspace",
+        text="A short summary.",
+        embedding=schema_emb.astype(np.float32),
+    )
 
-    state = gate.select([summary], cue=cue, policy=GatePolicy(min_activation=0.01),
-                        cue_embedding=cue_emb)
+    state = gate.select(
+        [summary], cue=cue, policy=GatePolicy(min_activation=0.01), cue_embedding=cue_emb
+    )
 
     assert len(state.items) == 1, f"Expected admitted, got suppressed: {state.suppressed}"
 
 
 # ── 5. Transcript summary detection ────────────────────────────────────────
+
 
 def test_transcript_summary_suppressed() -> None:
     """Schema containing 'User:' and 'Assistant:' is suppressed."""
@@ -325,7 +350,8 @@ def test_transcript_summary_suppressed() -> None:
     transcript = _stub_schema(
         1,
         text="User: What is the capital? Assistant: The capital is Paris.",
-        schema_class="fact", source_kind="latent",
+        schema_class="fact",
+        source_kind="latent",
     )
 
     state = gate.select([transcript], cue=cue, policy=GatePolicy(min_activation=0.01))
@@ -344,17 +370,20 @@ def test_transcript_summary_admitted_in_broad() -> None:
     transcript = _stub_schema(
         1,
         text="User: Question? Assistant: Answer.",
-        schema_class="fact", source_kind="latent",
+        schema_class="fact",
+        source_kind="latent",
         embedding=schema_emb,
     )
 
-    state = gate.select([transcript], cue=cue, policy=GatePolicy(min_activation=0.01),
-                        cue_embedding=cue_emb)
+    state = gate.select(
+        [transcript], cue=cue, policy=GatePolicy(min_activation=0.01), cue_embedding=cue_emb
+    )
 
     assert len(state.items) == 1
 
 
 # ── 6. Class exclusion filter ──────────────────────────────────────────────
+
 
 def test_class_exclusion_filter() -> None:
     """Schema classes not in allowed_classes are suppressed."""
@@ -375,6 +404,7 @@ def test_class_exclusion_filter() -> None:
 
 # ── 7. Cross-scope noise floor ─────────────────────────────────────────────
 
+
 def test_cross_scope_stage1_below_activation_floor_suppressed() -> None:
     """Stage 1 cross-scope schema with activation < 0.30 is suppressed."""
     dim = 8
@@ -388,14 +418,17 @@ def test_cross_scope_stage1_below_activation_floor_suppressed() -> None:
     schema_emb = cue_emb + 0.6 * noise
     schema_emb = schema_emb / (np.linalg.norm(schema_emb) + 1e-12)
     cross = _stub_schema(
-        1, text="Cross-scope fact",
+        1,
+        text="Cross-scope fact",
         embedding=schema_emb.astype(np.float32),
         schema_class="fact",
         scope_id="project:alpha",
         generalization_stage=1,
     )
 
-    state = gate.select([cross], cue=cue, policy=GatePolicy(min_activation=0.01), cue_embedding=cue_emb)
+    state = gate.select(
+        [cross], cue=cue, policy=GatePolicy(min_activation=0.01), cue_embedding=cue_emb
+    )
 
     # Should be suppressed by cross_scope_below_floor (activation < 0.30)
     assert len(state.items) == 0
@@ -415,14 +448,17 @@ def test_cross_scope_stage1_high_cosine_passes() -> None:
     schema_emb = schema_emb / (np.linalg.norm(schema_emb) + 1e-12)
 
     cross = _stub_schema(
-        1, text="Cross-scope task fact",
+        1,
+        text="Cross-scope task fact",
         embedding=schema_emb.astype(np.float32),
         schema_class="fact",
         scope_id="project:alpha",
         generalization_stage=2,
     )
 
-    state = gate.select([cross], cue=cue, policy=GatePolicy(min_activation=0.01), cue_embedding=cue_emb)
+    state = gate.select(
+        [cross], cue=cue, policy=GatePolicy(min_activation=0.01), cue_embedding=cue_emb
+    )
 
     assert len(state.items) == 1, f"Expected admission, got suppressed: {state.suppressed}"
     assert state.items[0].schema.id == 1
@@ -438,7 +474,8 @@ def test_cross_scope_stage3_exempt_from_noise_floor() -> None:
 
     schema_emb = _make_unit(dim, seed=99)
     cross = _stub_schema(
-        1, text="Global fact",
+        1,
+        text="Global fact",
         embedding=schema_emb,
         schema_class="fact",
         scope_id="project:alpha",
@@ -453,6 +490,7 @@ def test_cross_scope_stage3_exempt_from_noise_floor() -> None:
 
 # ── 8. Scope mismatch penalty grading ──────────────────────────────────────
 
+
 def test_scope_mismatch_penalty_stage0() -> None:
     """Stage 0 cross-scope pays full -0.35 penalty."""
     dim = 8
@@ -463,22 +501,24 @@ def test_scope_mismatch_penalty_stage0() -> None:
 
     # Same-scope baseline
     same_emb = _make_unit(dim, seed=10)
-    same = _stub_schema(1, text="Same scope", embedding=same_emb,
-                        scope_id="project:beta", generalization_stage=0)
+    same = _stub_schema(
+        1, text="Same scope", embedding=same_emb, scope_id="project:beta", generalization_stage=0
+    )
 
     # Cross-scope (no scope bonus, pays -0.35 penalty)
     cross_emb = _make_unit(dim, seed=10)
-    cross = _stub_schema(2, text="Cross scope", embedding=cross_emb,
-                         scope_id="project:alpha", generalization_stage=0)
+    cross = _stub_schema(
+        2, text="Cross scope", embedding=cross_emb, scope_id="project:alpha", generalization_stage=0
+    )
 
     state = gate.select([same, cross], cue=cue, cue_embedding=cue_emb, policy=policy)
 
     same_act = next((i.activation for i in state.items if i.schema.id == 1), 0)
     cross_act = next((i.activation for i in state.items if i.schema.id == 2), 0)
 
-    assert same_act > cross_act, (
-        f"Same-scope ({same_act:.3f}) should > cross-scope ({cross_act:.3f})"
-    )
+    assert (
+        same_act > cross_act
+    ), f"Same-scope ({same_act:.3f}) should > cross-scope ({cross_act:.3f})"
     # Delta ≈ 0.20 (scope bonus on same) + 0.35 (mismatch penalty on cross) = 0.55
     delta = same_act - cross_act
     assert delta > 0.35, f"Expected delta > 0.35, got {delta:.3f}"
@@ -495,24 +535,34 @@ def test_scope_mismatch_penalty_stage2_reduced() -> None:
     noise0 = _make_unit(dim, seed=10)
     emb0 = cue_emb + 0.35 * noise0
     emb0 = emb0 / (np.linalg.norm(emb0) + 1e-12)
-    s0 = _stub_schema(1, text="Stage 0", embedding=emb0.astype(np.float32),
-                      scope_id="project:alpha", generalization_stage=0)
+    s0 = _stub_schema(
+        1,
+        text="Stage 0",
+        embedding=emb0.astype(np.float32),
+        scope_id="project:alpha",
+        generalization_stage=0,
+    )
 
     noise2 = _make_unit(dim, seed=20)
     emb2 = cue_emb + 0.35 * noise2
     emb2 = emb2 / (np.linalg.norm(emb2) + 1e-12)
-    s2 = _stub_schema(2, text="Stage 2", embedding=emb2.astype(np.float32),
-                      scope_id="project:delta", generalization_stage=2)
+    s2 = _stub_schema(
+        2,
+        text="Stage 2",
+        embedding=emb2.astype(np.float32),
+        scope_id="project:delta",
+        generalization_stage=2,
+    )
 
     state = gate.select([s0, s2], cue=cue, cue_embedding=cue_emb, policy=policy)
 
-    assert len(state.items) == 2, f"Expected both admitted, got {len(state.items)}: {state.suppressed}"
+    assert (
+        len(state.items) == 2
+    ), f"Expected both admitted, got {len(state.items)}: {state.suppressed}"
     s0_act = next((i.activation for i in state.items if i.schema.id == 1), 0)
     s2_act = next((i.activation for i in state.items if i.schema.id == 2), 0)
 
-    assert s2_act > s0_act, (
-        f"Stage 2 ({s2_act:.3f}) should > Stage 0 ({s0_act:.3f})"
-    )
+    assert s2_act > s0_act, f"Stage 2 ({s2_act:.3f}) should > Stage 0 ({s0_act:.3f})"
 
 
 def test_scope_mismatch_penalty_stage3_zero() -> None:
@@ -524,8 +574,9 @@ def test_scope_mismatch_penalty_stage3_zero() -> None:
     policy = GatePolicy(min_activation=0.01)
 
     emb = _make_unit(dim, seed=10)
-    s3 = _stub_schema(1, text="Stage 3 global", embedding=emb,
-                      scope_id="project:alpha", generalization_stage=3)
+    s3 = _stub_schema(
+        1, text="Stage 3 global", embedding=emb, scope_id="project:alpha", generalization_stage=3
+    )
 
     state = gate.select([s3], cue=cue, cue_embedding=cue_emb, policy=policy)
 
@@ -534,6 +585,7 @@ def test_scope_mismatch_penalty_stage3_zero() -> None:
 
 
 # ── 9. MMR deduplication ───────────────────────────────────────────────────
+
 
 def test_mmr_deduplicates_near_identical_schemas() -> None:
     """Two schemas with cosine >= 0.92 → only the higher-activation one kept."""
@@ -592,6 +644,7 @@ def test_mmr_always_keeps_schemas_without_embeddings() -> None:
 
 # ── 10. Activation trace completeness ───────────────────────────────────────
 
+
 def test_activation_trace_includes_all_candidates() -> None:
     """Every candidate schema appears in the activation trace."""
     dim = 8
@@ -625,6 +678,7 @@ def test_activation_trace_reason_describes_suppression() -> None:
 
 # ── 11. Identity prior cap ─────────────────────────────────────────────────
 
+
 def test_identity_prior_capped_at_0_15() -> None:
     """Even with max bonuses, identity prior contribution is capped at 0.15."""
     dim = 8
@@ -637,7 +691,9 @@ def test_identity_prior_capped_at_0_15() -> None:
     emb_h = cue_emb + 0.5 * noise_h
     emb_h = emb_h / (np.linalg.norm(emb_h) + 1e-12)
     high_identity = _stub_schema(
-        1, text="High identity schema", embedding=emb_h.astype(np.float32),
+        1,
+        text="High identity schema",
+        embedding=emb_h.astype(np.float32),
         salience=20.0,
         schema_class="preference",
         memory_layer="profile",
@@ -649,7 +705,9 @@ def test_identity_prior_capped_at_0_15() -> None:
     emb_l = cue_emb + 0.5 * noise_l
     emb_l = emb_l / (np.linalg.norm(emb_l) + 1e-12)
     low_identity = _stub_schema(
-        2, text="Low identity schema", embedding=emb_l.astype(np.float32),
+        2,
+        text="Low identity schema",
+        embedding=emb_l.astype(np.float32),
         salience=0.1,
         schema_class="lesson",
         memory_layer="domain",
@@ -657,22 +715,26 @@ def test_identity_prior_capped_at_0_15() -> None:
         stability="unknown",
     )
 
-    state = gate.select([high_identity, low_identity], cue=cue,
-                        cue_embedding=cue_emb, policy=policy)
+    state = gate.select(
+        [high_identity, low_identity], cue=cue, cue_embedding=cue_emb, policy=policy
+    )
 
-    assert len(state.items) == 2, f"Expected both admitted, got {len(state.items)}: {state.suppressed}"
+    assert (
+        len(state.items) == 2
+    ), f"Expected both admitted, got {len(state.items)}: {state.suppressed}"
     high_act = next((i.activation for i in state.items if i.schema.id == 1), None)
     low_act = next((i.activation for i in state.items if i.schema.id == 2), None)
 
     assert high_act is not None and low_act is not None
     # Without the cap, high would dominate by ~0.59. With cap, delta ≤ 0.15 + epsilon.
     delta = abs(high_act - low_act)
-    assert delta <= 0.20, (
-        f"Identity delta {delta:.3f} exceeds cap tolerance; high={high_act:.3f} low={low_act:.3f}"
-    )
+    assert (
+        delta <= 0.20
+    ), f"Identity delta {delta:.3f} exceeds cap tolerance; high={high_act:.3f} low={low_act:.3f}"
 
 
 # ── 12. Scope bonus applied after identity cap ─────────────────────────────
+
 
 def test_scope_bonus_applied_after_identity_cap() -> None:
     """Scope bonus (+0.20 scope_match / +0.15 global) is NOT capped by identity."""
@@ -682,22 +744,19 @@ def test_scope_bonus_applied_after_identity_cap() -> None:
     cue_emb = _make_unit(dim, seed=1)
 
     emb = _make_unit(dim, seed=10)
-    same_scope = _stub_schema(1, text="Same scope", embedding=emb,
-                              scope_id="project:alpha")
-    global_s = _stub_schema(2, text="Global schema", embedding=emb,
-                            scope_id=None)
+    same_scope = _stub_schema(1, text="Same scope", embedding=emb, scope_id="project:alpha")
+    global_s = _stub_schema(2, text="Global schema", embedding=emb, scope_id=None)
 
     state = gate.select([same_scope, global_s], cue=cue, cue_embedding=cue_emb)
 
     same_act = next((i.activation for i in state.items if i.schema.id == 1), 0)
     global_act = next((i.activation for i in state.items if i.schema.id == 2), 0)
 
-    assert same_act > global_act, (
-        f"Scope_match ({same_act:.3f}) should > global ({global_act:.3f})"
-    )
+    assert same_act > global_act, f"Scope_match ({same_act:.3f}) should > global ({global_act:.3f})"
 
 
 # ── 13. noise penalty ─────────────────────────────────────────────────────
+
 
 def test_noise_penalty_reduces_activation() -> None:
     """context_noise_score in facets applies a -0.30×noise penalty."""
@@ -707,20 +766,23 @@ def test_noise_penalty_reduces_activation() -> None:
     cue_emb = _make_unit(dim, seed=1)
 
     clean = _stub_schema(1, text="Clean fact", embedding=_make_unit(dim, seed=10))
-    noisy = _stub_schema(2, text="Noisy fact", embedding=_make_unit(dim, seed=10),
-                         facets_extra={"context_noise_score": 0.8})
+    noisy = _stub_schema(
+        2,
+        text="Noisy fact",
+        embedding=_make_unit(dim, seed=10),
+        facets_extra={"context_noise_score": 0.8},
+    )
 
     state = gate.select([clean, noisy], cue=cue, cue_embedding=cue_emb)
 
     clean_act = next((i.activation for i in state.items if i.schema.id == 1), 0)
     noisy_act = next((i.activation for i in state.items if i.schema.id == 2), 0)
 
-    assert noisy_act < clean_act, (
-        f"Noisy ({noisy_act:.3f}) should < clean ({clean_act:.3f})"
-    )
+    assert noisy_act < clean_act, f"Noisy ({noisy_act:.3f}) should < clean ({clean_act:.3f})"
 
 
 # ── 14. Exploration slots ─────────────────────────────────────────────────
+
 
 def test_exploration_slots_populate_when_admitted_exceeds_max_items() -> None:
     """When admitted > max_items, trailing slots are filled by salience."""
@@ -728,16 +790,22 @@ def test_exploration_slots_populate_when_admitted_exceeds_max_items() -> None:
     gate = WorkingMemoryGate()
     cue = MemoryCue(query="task", scope="project:alpha")
     cue_emb = _make_unit(dim, seed=1)
-    policy = GatePolicy(min_activation=0.01, max_items=2, exploration_slots=1,
-                        allowed_classes=("fact",))
+    policy = GatePolicy(
+        min_activation=0.01, max_items=2, exploration_slots=1, allowed_classes=("fact",)
+    )
 
     schemas = []
     for i in range(4):
         noise = _make_unit(dim, seed=100 + i)
         emb = cue_emb + 0.6 * noise
         emb = emb / (np.linalg.norm(emb) + 1e-12)
-        s = _stub_schema(i + 1, text=f"Fact {i+1}", embedding=emb.astype(np.float32),
-                         salience=float(i + 1), schema_class="fact")
+        s = _stub_schema(
+            i + 1,
+            text=f"Fact {i+1}",
+            embedding=emb.astype(np.float32),
+            salience=float(i + 1),
+            schema_class="fact",
+        )
         schemas.append(s)
 
     state = gate.select(schemas, cue=cue, cue_embedding=cue_emb, policy=policy)

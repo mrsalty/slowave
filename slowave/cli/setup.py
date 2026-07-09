@@ -21,7 +21,7 @@ import platform
 import shutil
 import subprocess
 import sys
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
 from typing import Any
@@ -1388,8 +1388,8 @@ def _build_summary(client: str, worker: bool, install_hooks: bool, slowave_bin: 
                         "powershell",
                         "-NonInteractive",
                         "-Command",
-                        f"$t = Get-ScheduledTask -TaskName 'SlowaveWorker' -ErrorAction SilentlyContinue; "
-                        f"if ($t) {{ $t.Actions[0].Execute }}",
+                        "$t = Get-ScheduledTask -TaskName 'SlowaveWorker' -ErrorAction SilentlyContinue; "
+                        "if ($t) { $t.Actions[0].Execute }",
                     ],
                     capture_output=True,
                     text=True,

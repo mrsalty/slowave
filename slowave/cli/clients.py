@@ -83,7 +83,7 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             try:
                 cfg_j = _read_json(cc_json)
                 cc_has_mcp = "slowave" in cfg_j.get("mcpServers", {})
-            except:
+            except Exception:
                 pass
         if cc_settings.exists():
             try:
@@ -95,14 +95,14 @@ def get_client_statuses() -> dict[str, ClientStatus]:
                     for group in cfg.get("hooks", {}).get("UserPromptSubmit", [])
                     for h in group.get("hooks", [])
                 )
-            except:
+            except Exception:
                 pass
         if cc_md.exists():
             try:
                 cc_has_lifecycle = _MARKER_START in cc_md.read_text(
                     encoding="utf-8", errors="ignore"
                 )
-            except:
+            except Exception:
                 pass
 
         if cc_json.exists() or cc_settings.exists() or cc_md.exists():
@@ -119,7 +119,7 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             try:
                 cfg = _read_json(cd_config)
                 cd_has_mcp = "slowave" in cfg.get("mcpServers", {})
-            except:
+            except Exception:
                 pass
             statuses["claude_desktop"] = ClientStatus(
                 name="Claude Desktop",
@@ -133,14 +133,14 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             try:
                 cfg = _read_json(cline_mcp)
                 cline_has_mcp = "slowave" in cfg.get("mcpServers", {})
-            except:
+            except Exception:
                 pass
         if cline_rules.exists():
             try:
                 cline_has_lifecycle = _MARKER_START in cline_rules.read_text(
                     encoding="utf-8", errors="ignore"
                 )
-            except:
+            except Exception:
                 pass
         if cline_mcp.exists() or cline_rules.exists():
             statuses["cline"] = ClientStatus(
@@ -170,7 +170,7 @@ def get_client_statuses() -> dict[str, ClientStatus]:
             try:
                 cfg = _read_json(oc_config)
                 oc_has_mcp = "slowave" in cfg.get("mcp", {})
-            except:
+            except Exception:
                 pass
         oc_inst = _opencode_instructions_path()
         if oc_inst.exists():
@@ -178,7 +178,7 @@ def get_client_statuses() -> dict[str, ClientStatus]:
                 oc_has_lifecycle = _MARKER_START in oc_inst.read_text(
                     encoding="utf-8", errors="ignore"
                 )
-            except:
+            except Exception:
                 pass
         if oc_config.exists() or oc_inst.exists():
             statuses["opencode"] = ClientStatus(
@@ -219,13 +219,12 @@ def get_client_statuses() -> dict[str, ClientStatus]:
                 check=False,
             )
             worker_running = "SlowaveWorker" in result.stdout
-    except:
+    except Exception:
         pass
 
     statuses["worker"] = ClientStatus(name="Background worker", running=worker_running)
 
     # HTTP MCP daemon check
-    import json as _json
     import urllib.error
     import urllib.request
 

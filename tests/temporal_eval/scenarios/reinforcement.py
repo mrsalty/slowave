@@ -7,7 +7,7 @@ distinguish them; reinforcement is the only mechanism that can.
 
 from __future__ import annotations
 
-from tests.temporal_eval.harness import ScenarioResult, TemporalHarness, keyword_hit
+from tests.temporal_eval.harness import ScenarioResult, TemporalHarness
 
 
 def run_all(h: TemporalHarness) -> list[ScenarioResult]:

@@ -262,7 +262,7 @@ def _build_lexical_signature(
             corpus_df[tok] = corpus_df.get(tok, 0) + 1
 
     n_corpus = max(1, len(corpus_texts))
-    n_cluster = max(1, len(cluster_texts))
+    max(1, len(cluster_texts))
     total_cluster_terms = max(1, sum(cluster_tf.values()))
 
     scores: dict[str, float] = {}

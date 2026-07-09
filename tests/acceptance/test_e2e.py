@@ -207,7 +207,7 @@ class TestE2E:
 
     def test_phase0_register_scopes(self, cli, qdb):
         """Register all 10 scopes to freeze the generalization denominator."""
-        t0 = time.time()
+        time.time()
 
         for scope in SCOPES:
             r = cli("activate", "--query", "register scope", "--scope", scope)
@@ -224,7 +224,7 @@ class TestE2E:
 
     def test_phase1_inject_dataset(self, cli, db):
         """Inject the validation dataset into project:slowave and project:alpha."""
-        t0 = time.time()
+        time.time()
 
         r = cli("activate", "--query", "inject dataset", "--scope", "project:slowave")
         sid = r["session_id"]
@@ -265,7 +265,7 @@ class TestE2E:
 
     def test_phase2_context_ranking(self, cli, db):
         """Probe queries: T1/T5/T8 must each rank #1.  P@1 = 3/3."""
-        t0 = time.time()
+        time.time()
 
         probes = [
             (
@@ -335,7 +335,7 @@ class TestE2E:
 
     def test_phase3_recall(self, cli, db):
         """R1: T8 in top-3.  R2: T1 in top-3 via paraphrase.  R3: A2 absent cross-scope."""
-        t0 = time.time()
+        time.time()
 
         # R1
         r1 = cli(
@@ -401,7 +401,7 @@ class TestE2E:
         _detail(
             f"R3  A2 absent in project:beta  {'FAIL (leak!)' if leak else 'PASS'}  results={ids_r3}"
         )
-        assert not leak, f"R3: cross-scope leak — A2 appeared in project:beta recall"
+        assert not leak, "R3: cross-scope leak — A2 appeared in project:beta recall"
 
     # ── Phase 4 ───────────────────────────────────────────────────────────────
 
@@ -409,7 +409,7 @@ class TestE2E:
         """S1 (team retrospective) demoted to is_labile; T1 stays clean;
         S1 then recovers via an explicit useful mark (2026-07-10 labile
         lifecycle, recovery channel 1)."""
-        t0 = time.time()
+        time.time()
 
         s1_id = _schema_id_for(db, "team retrospective")
         assert s1_id is not None
@@ -449,7 +449,7 @@ class TestE2E:
                     "--outcome",
                     "unknown",
                 )
-                _detail(f"S1 already suppressed")
+                _detail("S1 already suppressed")
             cli("commit", sid, "--outcome", "unknown")
             if irrelevant_marks >= 3:
                 break
@@ -517,7 +517,7 @@ class TestE2E:
         candidate for Consolidation's reconsolidation channel (recovery
         channel 3) to examine.
         """
-        t0 = time.time()
+        time.time()
 
         d2_id = _schema_id_for(db, "must never route through an LLM call")
         assert d2_id is not None
@@ -564,7 +564,7 @@ class TestE2E:
     def test_phase5_consolidation_hygiene(self, cli, db):
         """Two consolidation passes must not create new schemas; max salience ≤ 20;
         reconsolidation examines D2 (left labile by Phase 4b)."""
-        t0 = time.time()
+        time.time()
 
         before = _query(db, "SELECT COUNT(*) as n FROM schemas WHERE status='active'")[0]["n"]
         _detail(f"schema count before: {before}")
@@ -606,7 +606,7 @@ class TestE2E:
 
     def test_phase6_promotion_ladder(self, cli, db):
         """L1 climbs stage 0→1→2→3; stage-3 global admission; kind_bonus fires."""
-        t0 = time.time()
+        time.time()
 
         l1_id = _schema_id_for(db, "exponential backoff with jitter")
         l2_id = _schema_id_for(db, "Database connection pools")
@@ -714,7 +714,7 @@ class TestE2E:
 
     def test_phase7_decay(self, cli, db):
         """Episodic-summary schemas decay; explicit_remember and recalled schemas are exempt."""
-        t0 = time.time()
+        time.time()
 
         # Build a derived schema via session events → consolidate
         r = cli("session", "start", "--scope", "project:slowave", "--agent", "decay-test")
@@ -788,7 +788,7 @@ class TestE2E:
 
     def test_relations_schema_evidence(self, db):
         """L1 has ≥8 evidence-linked scopes (one per cross-scope remember)."""
-        t0 = time.time()
+        time.time()
 
         l1_id = _schema_id_for(db, "exponential backoff with jitter")
         assert l1_id is not None
@@ -811,7 +811,7 @@ class TestE2E:
 
     def test_relations_cross_scope_isolation(self, db):
         """Stage-0 project:slowave schemas must not have evidence from project:alpha."""
-        t0 = time.time()
+        time.time()
 
         rows = _query(
             db,
@@ -843,7 +843,7 @@ class TestE2E:
         schema_relations stores (new_id → old_id, relation='supersedes') and the
         old schema is flipped to status='superseded'.
         """
-        t0 = time.time()
+        time.time()
 
         # Original fact about session timeout
         r = cli("activate", "--query", "session timeout config", "--scope", "project:slowave")
@@ -928,7 +928,7 @@ class TestE2E:
         two prototypes co-appear in the same episode. After at least one consolidation
         pass over real episodic content, the table must be non-empty.
         """
-        t0 = time.time()
+        time.time()
 
         # Build an episode with multiple events so replay has something to process
         r = cli("session", "start", "--scope", "project:slowave", "--agent", "coact-test")

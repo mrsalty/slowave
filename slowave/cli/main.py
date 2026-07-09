@@ -436,11 +436,9 @@ def context_cmd(
     situation_obj = json.loads(situation) if situation else {}
 
     # Open a session if scope is set but no session was supplied (mirrors MCP activate).
-    started_session = False
     active_session_id = session_id
     if active_session_id is None and scope is not None:
         active_session_id = eng.session_start(agent="cli", scope=scope, goal=goal)
-        started_session = True
 
     brief = eng.context_brief(
         query=query,
@@ -697,7 +695,6 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
 @click.pass_context
 def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
     """Print memory and storage statistics."""
-    import os
     from pathlib import Path
 
     from slowave.cli.output import get_renderer
@@ -1879,12 +1876,11 @@ def serve_status(as_json: bool) -> None:
     import urllib.error
     import urllib.request
 
-    from slowave import __version__
     from slowave.mcp.daemon import daemon_status
 
     status = daemon_status()
-    mcp_url = f"http://127.0.0.1:8766/mcp"
-    health_url = f"http://127.0.0.1:8766/health"
+    mcp_url = "http://127.0.0.1:8766/mcp"
+    health_url = "http://127.0.0.1:8766/health"
 
     # Try to fetch live health from running daemon
     health: dict = {}

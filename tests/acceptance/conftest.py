@@ -9,8 +9,6 @@ or simply:
     pytest tests/acceptance/test_e2e.py -v
 """
 
-import pytest
-
 
 def pytest_collection_modifyitems(config, items):
     """Re-sort acceptance tests back to definition order after any randomisation."""

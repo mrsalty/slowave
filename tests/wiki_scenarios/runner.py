@@ -35,7 +35,7 @@ for _n in (
 ):
     logging.getLogger(_n).setLevel(logging.ERROR)
 
-from slowave.symbolic.encoder import EncoderConfig, TextEncoder
+from slowave.symbolic.encoder import TextEncoder
 from tests.temporal_eval.harness import ScenarioResult
 from tests.wiki_scenarios.scenarios import SCENARIOS, run_scenario
 

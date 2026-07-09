@@ -342,7 +342,7 @@ class TestEpisodeDeduplication:
         """Episode dedup should not duplicate facts."""
         eng = engine_with_encoder
 
-        schema = eng.remember(
+        eng.remember(
             content="Unique fact to deduplicate",
             type="fact",
         )

@@ -26,7 +26,6 @@ import os
 import tempfile
 
 import numpy as np
-import pytest
 
 from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine

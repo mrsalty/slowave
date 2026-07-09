@@ -14,8 +14,6 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
-import numpy as np
-
 from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate, WorkingMemoryState
 from slowave.core.scope import normalize_scope
 from slowave.latent.episodic_store import EpisodicStore
@@ -450,11 +448,10 @@ class RetrievalService:
                 candidates_by_id[schema.id] = schema
 
         # Mode-gated status fetch: which schema statuses to include depends on mode.
-        fetch_statuses = ("active",)
         if mode in ("broad", "debug"):
-            fetch_statuses = ("active", "needs_review")
+            pass
         if mode == "debug":
-            fetch_statuses = ("active", "needs_review", "superseded")
+            pass
 
         if scope_id:
             # Fetch active schemas for scope

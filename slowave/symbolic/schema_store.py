@@ -55,8 +55,6 @@ _RECONSOLIDATION_RECOVERY_RECURRENCE = 3
 # Cross-scope generalization (Stage 11)
 # ============================================================================
 
-from dataclasses import field as _dc_field
-
 
 class GeneralizationConfig:
     """Thresholds for the 4-stage cross-scope generalization system.
