@@ -51,6 +51,7 @@ from slowave.core.config import SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.latent.replay_engine import ReplayConfig
 from slowave.latent.retrieval import RetrievalConfig
+from slowave.latent.schema import GeometricJudgeConfig
 from slowave.latent.salience import SalienceConfig
 from slowave.symbolic.encoder import EncoderConfig, TextEncoder
 
@@ -208,6 +209,9 @@ class QAResult:
     db_size_bytes: int = 0
     error: str | None = None
     component_scores: dict = field(default_factory=dict)
+    # Consolidation diagnostics (plans/05-consolidation.md Phase 4), stamped
+    # onto every row of a conversation the same way cost instrumentation is.
+    consolidation_diag: dict = field(default_factory=dict)
 
 
 def run_conversation(
@@ -232,6 +236,7 @@ def run_conversation(
     salience_weight=0.5,
     surprise_weight=0.3,
     spread_score_weight=0.90,
+    judge_overrides=None,
 ):
     conv_id = str(sample.get("sample_id", "?"))
     # Pin the global numpy RNG to a deterministic seed derived from conv_id so
@@ -272,6 +277,7 @@ def run_conversation(
                 use_multi_scale=not no_multi_scale,
                 spread_score_weight=spread_score_weight,
             ),
+            judge=GeometricJudgeConfig(**(judge_overrides or {})),
             disable_encoder=False,
         )
         eng = SlowaveEngine(cfg, shared_encoder=shared_encoder)
@@ -313,8 +319,10 @@ def run_conversation(
                     (session_ts, session_ts, "micro_%s_%%" % sid, "macro_%s" % sid),
                 )
                 conn.commit()
+        consolidation_diag: dict = {}
         if consolidate:
-            eng.consolidate_once(triggered_by="locomo_eval")
+            _cstats = eng.consolidate_once(triggered_by="locomo_eval")
+            consolidation_diag = _cstats.get("consolidation", {}) or {}
             # Stage 5: self-supervised retrieval rehearsal AFTER the
             # graph has been built and schemas extracted. Brain analogue:
             # sleep replay tightens the graph based on what the system
@@ -425,6 +433,7 @@ def run_conversation(
             r.llm_prompt_tokens = pt_total // n_results
             r.llm_completion_tokens = ct_total // n_results
             r.db_size_bytes = db_size_total
+            r.consolidation_diag = consolidation_diag
         if keep_debug_dbs:
             dest = REPO_ROOT / "data" / "locomo" / "debug_dbs" / "%s.db" % conv_id
             dest.parent.mkdir(parents=True, exist_ok=True)
@@ -554,6 +563,43 @@ def print_report(results, consolidate):
     print("=" * 72)
 
 
+def _aggregate_consolidation_diag(results):
+    """Sum per-conversation consolidation diagnostics into one run-level
+    summary. Dedupes by conv_id since consolidation_diag is stamped
+    identically on every QAResult row of the same conversation."""
+    seen_convs = set()
+    agg = {
+        "prototypes_processed": 0,
+        "schemas_created": 0,
+        "schemas_reinforced": 0,
+        "schemas_contradicted": 0,
+        "schemas_skipped": 0,
+        "near_dup_intercepts": 0,
+        "verdict_counts": {},
+        "gate_downgrades": {},
+        "confidence_histogram": [],
+    }
+    for r in results:
+        diag = getattr(r, "consolidation_diag", None)
+        if not diag or r.conv_id in seen_convs:
+            continue
+        seen_convs.add(r.conv_id)
+        for key in (
+            "prototypes_processed",
+            "schemas_created",
+            "schemas_reinforced",
+            "schemas_contradicted",
+            "schemas_skipped",
+            "near_dup_intercepts",
+        ):
+            agg[key] += int(diag.get(key, 0) or 0)
+        for key in ("verdict_counts", "gate_downgrades"):
+            for k, v in (diag.get(key) or {}).items():
+                agg[key][k] = agg[key].get(k, 0) + int(v)
+        agg["confidence_histogram"].extend(diag.get("confidence_histogram") or [])
+    return agg
+
+
 def _save(path, results, args, elapsed, partial):
     path.parent.mkdir(parents=True, exist_ok=True)
     by_cat = {}
@@ -580,6 +626,7 @@ def _save(path, results, args, elapsed, partial):
             "top_k": args.top_k,
             "no_salience_rerank": args.no_salience_rerank,
             "no_graph_expansion": args.no_graph_expansion,
+            "judge_overrides": args.judge_overrides,
             "total_elapsed_s": round(elapsed, 2),
         },
         "summary": {
@@ -587,6 +634,9 @@ def _save(path, results, args, elapsed, partial):
             "hits": th,
             "score_pct": round(100 * th / max(1, len(results)), 2),
             "by_category": by_cat,
+        },
+        "diagnostics": {
+            "consolidation": _aggregate_consolidation_diag(results),
         },
         "results": [
             {
@@ -678,8 +728,16 @@ def main():
         action="store_true",
         help="Stage 9 ablation: disable CA3+CA1 dual-scale prototypes.",
     )
+    parser.add_argument(
+        "--judge-overrides",
+        default="",
+        help="JSON dict of GeometricJudgeConfig field overrides "
+        "(plans/05-consolidation.md Threshold Ablation Matrix), e.g. "
+        '\'{"related_schema_cosine": 1.01}\'.',
+    )
     parser.add_argument("--out", default="")
     args = parser.parse_args()
+    judge_overrides = json.loads(args.judge_overrides) if args.judge_overrides else {}
     dataset_path = Path(args.dataset)
     if not dataset_path.is_absolute():
         dataset_path = REPO_ROOT / dataset_path
@@ -738,6 +796,7 @@ def main():
                 salience_weight=args.salience_weight,
                 surprise_weight=args.surprise_weight,
                 spread_score_weight=args.spread_score_weight,
+                judge_overrides=judge_overrides,
             )
         except Exception as e:
             print("  ERROR:", e)

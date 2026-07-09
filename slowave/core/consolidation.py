@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import numpy as np
 
@@ -53,6 +53,22 @@ class ConsolidationStats:
     schemas_reinforced: int
     schemas_contradicted: int
     schemas_skipped: int
+    # Diagnostics (plans/05-consolidation.md Phase 4). verdict_counts keys:
+    # "no_candidate" (Phase 3b found nothing to compare against), "missing_embedding"
+    # (related schema found but its stored embedding is unreadable), and the four
+    # GeometricContradictionJudge verdicts ("unrelated", "reinforces", "refines",
+    # "contradicts" — the last counts every judge call that said contradicts, even
+    # if a gate below downgraded the outcome to reinforcement).
+    verdict_counts: dict[str, int] = field(default_factory=dict)
+    # Prototypes absorbed by the >=0.92 near-duplicate guard before the
+    # geometric judge was ever reached (Phase 3a).
+    near_dup_intercepts: int = 0
+    # Of judge verdicts "contradicts", how many were downgraded to reinforcement
+    # by each supersession gate (Phase 4 Step 4).
+    gate_downgrades: dict[str, int] = field(default_factory=dict)
+    # Per-prototype LatentSchemaBuilder confidence values, for calibration checks
+    # against variance_floor (Q5).
+    confidence_histogram: list[float] = field(default_factory=list)
 
 
 class Consolidator:
@@ -99,6 +115,19 @@ class Consolidator:
         reinforced = 0
         contradicted = 0
         skipped = 0
+        diag: dict = {
+            "verdict_counts": {
+                "no_candidate": 0,
+                "missing_embedding": 0,
+                "unrelated": 0,
+                "reinforces": 0,
+                "refines": 0,
+                "contradicts": 0,
+            },
+            "near_dup_intercepts": 0,
+            "gate_downgrades": {"support_gate": 0, "recency_gate": 0},
+            "confidence_histogram": [],
+        }
 
         # Build global background corpus for contrastive TF-IDF.
         # Using all existing schema content texts as the background
@@ -181,10 +210,12 @@ class Consolidator:
             if schema is None:
                 skipped += 1
                 continue
+            diag["confidence_histogram"].append(float(schema.confidence))
 
             outcome, new_id = self._write_latent_schema(
                 prototype_id=pid,
                 schema=schema,
+                diag=diag,
             )
             if outcome == "created":
                 created += 1
@@ -207,6 +238,10 @@ class Consolidator:
             schemas_reinforced=reinforced,
             schemas_contradicted=contradicted,
             schemas_skipped=skipped,
+            verdict_counts=diag["verdict_counts"],
+            near_dup_intercepts=diag["near_dup_intercepts"],
+            gate_downgrades=diag["gate_downgrades"],
+            confidence_histogram=diag["confidence_histogram"],
         )
 
     def _write_latent_schema(
@@ -214,6 +249,7 @@ class Consolidator:
         *,
         prototype_id: int,
         schema,
+        diag: dict | None = None,
     ) -> tuple[str, int | None]:
         """Persist a LatentSchema. Geometric verdict against the closest
         existing schema. Mirrors `_create_and_relate_schema`."""
@@ -229,13 +265,14 @@ class Consolidator:
         scope_id = self._scope_for_episodes(schema.member_episode_ids)
 
         # Near-duplicate guard: if an existing active schema is geometrically
-        # almost identical (>= 0.92 cosine, same threshold as working-memory
-        # MMR dedup), strengthen it instead of creating another copy. Without
-        # this, every consolidation pass re-encoded each explicit remember
-        # into a duplicate summary schema.
+        # almost identical (>= near_dup_guard_cosine, same threshold as
+        # working-memory MMR dedup by default), strengthen it instead of
+        # creating another copy. Without this, every consolidation pass
+        # re-encoded each explicit remember into a duplicate summary schema.
+        near_dup_cosine = getattr(self.geometric_judge.cfg, "near_dup_guard_cosine", 0.92)
         if claim_embedding is not None:
             near = self.schemas.search_embedding(claim_embedding, limit=1)
-            if near and near[0][1] >= 0.92:
+            if near and near[0][1] >= near_dup_cosine:
                 try:
                     existing = self.schemas.get(near[0][0])
                 except KeyError:
@@ -253,6 +290,8 @@ class Consolidator:
                             self.schemas.increment_cross_scope_reinforcement(existing.id)
                         except Exception:
                             pass
+                    if diag is not None:
+                        diag["near_dup_intercepts"] += 1
                     return "reinforced", existing.id
 
         related = self._best_related_schema(
@@ -279,6 +318,8 @@ class Consolidator:
             scope_id=scope_id,
             supporting_episode_ids=schema.member_episode_ids,
             evidence=evidence_rows,
+            facet_axes=schema.facet_axes,
+            facet_strengths=schema.facet_strengths,
         )
 
         dedup_existing_id = self.schemas.last_create_reinforced_existing_id
@@ -286,6 +327,8 @@ class Consolidator:
             return "reinforced", dedup_existing_id
 
         if related is None:
+            if diag is not None:
+                diag["verdict_counts"]["no_candidate"] += 1
             return "created", new_schema_id
 
         # Re-fetch the related schema's stored embedding from the DB. We
@@ -300,12 +343,30 @@ class Consolidator:
                 related.id,
                 new_schema_id,
             )
+            if diag is not None:
+                diag["verdict_counts"]["missing_embedding"] += 1
             return "created", new_schema_id
+
+        # Real facet axes/strengths for the old schema, unpacked by
+        # SchemaStore._row_to_schema from the persisted blobs (see
+        # schema.sql). Falls back to an empty placeholder only when the
+        # related schema genuinely has none (legacy row created before
+        # this persistence was added, or it had too few members) — this
+        # used to be an unconditional placeholder regardless of the old
+        # schema's real facet data, which made "contradicts" provably
+        # unreachable (fixed 2026-07-09, see PROGRESS.md and
+        # tests/unit/test_contradicts_verdict_unreachable.py).
+        related_facet_axes = related.facet_axes
+        if not isinstance(related_facet_axes, np.ndarray) or related_facet_axes.ndim != 2:
+            related_facet_axes = np.zeros((0, claim_embedding.shape[0]), dtype=np.float32)
+        related_facet_strengths = related.facet_strengths
+        if not isinstance(related_facet_strengths, np.ndarray) or related_facet_strengths.ndim != 1:
+            related_facet_strengths = np.zeros((0,), dtype=np.float32)
 
         old_view = _LS(
             centroid=np.asarray(related_emb, dtype=np.float32),
-            facet_axes=np.zeros((0, claim_embedding.shape[0]), dtype=np.float32),
-            facet_strengths=np.zeros((0,), dtype=np.float32),
+            facet_axes=related_facet_axes,
+            facet_strengths=related_facet_strengths,
             member_episode_ids=[],
             central_episode_id=0,
             central_episode_text=related.content_text or "",
@@ -321,6 +382,8 @@ class Consolidator:
         verdict = self.geometric_judge.judge(old=old_view, new=schema)
 
         if verdict.verdict == "reinforces":
+            if diag is not None:
+                diag["verdict_counts"]["reinforces"] += 1
             self.schemas.add_relation(
                 src_schema_id=new_schema_id,
                 dst_schema_id=related.id,
@@ -339,6 +402,8 @@ class Consolidator:
                     pass
             return "reinforced", new_schema_id
         if verdict.verdict == "refines":
+            if diag is not None:
+                diag["verdict_counts"]["refines"] += 1
             self.schemas.add_relation(
                 src_schema_id=new_schema_id,
                 dst_schema_id=related.id,
@@ -347,16 +412,22 @@ class Consolidator:
             )
             return "reinforced", new_schema_id
         if verdict.verdict == "contradicts":
+            if diag is not None:
+                diag["verdict_counts"]["contradicts"] += 1
             # Gate: only supersede when the new schema has enough support
             # AND sufficient temporal distance from the old one.
             # A single episode or a near-simultaneous contradiction
             # should not bury a well-established schema.
             min_support = getattr(self.geometric_judge.cfg, "min_support_to_supersede", 2)
             if schema.support_count < min_support:
+                if diag is not None:
+                    diag["gate_downgrades"]["support_gate"] += 1
                 return "reinforced", new_schema_id
 
             min_dt = getattr(self.geometric_judge.cfg, "min_time_delta_to_supersede_s", 3600.0)
             if 0 < verdict.time_delta_s < min_dt:
+                if diag is not None:
+                    diag["gate_downgrades"]["recency_gate"] += 1
                 return "reinforced", new_schema_id
 
             relation = "supersedes" if verdict.time_delta_s > 0 else "contradicts"
@@ -374,6 +445,8 @@ class Consolidator:
             )
             return "contradicted", new_schema_id
         # unrelated
+        if diag is not None:
+            diag["verdict_counts"]["unrelated"] += 1
         return "created", new_schema_id
 
     def _record_debug(
@@ -416,9 +489,10 @@ class Consolidator:
         return unpack_f32(row["embedding"], int(row["dim"]))
 
     def _best_related_schema(self, *, claim: str, embedding: np.ndarray | None) -> Schema | None:
+        related_cosine = getattr(self.geometric_judge.cfg, "related_schema_cosine", 0.72)
         if embedding is not None:
             scored = self.schemas.search_embedding(embedding, limit=5, include_inactive=False)
-            if scored and scored[0][1] >= 0.72:
+            if scored and scored[0][1] >= related_cosine:
                 try:
                     return self.schemas.get(scored[0][0])
                 except KeyError:
