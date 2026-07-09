@@ -12,7 +12,14 @@ permissions:
   id-token: write
 
 jobs:
+  # ── Gate: run the full test suite first ──────────────────────────────
+  test:
+    uses: ./.github/workflows/tests.yml
+    secrets: inherit
+
+  # ── Release Please only after tests pass ─────────────────────────────
   release-please:
+    needs: test
     runs-on: ubuntu-latest
     steps:
       - name: Run Release Please
