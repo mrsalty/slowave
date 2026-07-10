@@ -8,7 +8,6 @@ Public API for CLI and MCP integrations.
 from __future__ import annotations
 
 import dataclasses
-import json as _json
 import logging
 import time as _time
 import uuid
