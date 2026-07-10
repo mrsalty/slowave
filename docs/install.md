@@ -40,17 +40,19 @@ To configure a single client, or to find client-specific details:
 | Cursor ¹ | [integrations/cursor/README.md](integrations/cursor/README.md) |
 | OpenCode | [integrations/opencode/README.md](integrations/opencode/README.md) |
 | Windsurf | [integrations/windsurf/README.md](integrations/windsurf/README.md) |
+| Codex ² | [integrations/codex/README.md](integrations/codex/README.md) |
 
 ¹ requires one manual paste after setup
+² also configures Codex Desktop (ChatGPT app) and the Codex IDE extension — all three share `~/.codex/config.toml`
 
 ## What `slowave setup` does
 
 | Action | Clients | Detail |
 |---|---|---|
 | MCP config | All | Patches each client's MCP config so `slowave_*` tools appear |
-| Lifecycle instructions | Claude Code, Cline, Windsurf, OpenCode | Injects the mandatory Slowave block automatically |
+| Lifecycle instructions | Claude Code, Cline, Windsurf, OpenCode, Codex | Injects the mandatory Slowave block automatically |
 | Lifecycle instructions | Claude Desktop, Cursor | Prints the block to paste — requires one manual step |
-| Enforcement hooks | Claude Code | Adds `UserPromptSubmit` + `Stop` hooks so Claude Code calls Slowave every turn |
+| Enforcement hooks | Claude Code, Codex | Adds `UserPromptSubmit` + `Stop` hooks so the client calls Slowave every turn |
 | HTTP daemon | All | Installs as launchd/systemd/Task Scheduler — auto-starts |
 | Background worker | All | Installs as launchd/systemd/Task Scheduler — consolidates events |
 | Daily backup | All | Installs as launchd/systemd/Task Scheduler — gzip snapshot of the database |
@@ -58,9 +60,9 @@ To configure a single client, or to find client-specific details:
 Options:
 
 ```
-slowave setup --client [claude-code|claude-desktop|cline|cursor|opencode|windsurf|all]
+slowave setup --client [claude-code|claude-desktop|cline|cursor|opencode|windsurf|codex|all]
               --no-worker       # skip worker service install
-              --no-hooks        # skip Claude Code hooks
+              --no-hooks        # skip Claude Code / Codex hooks
               --dry-run         # preview without writing
 ```
 
@@ -78,6 +80,7 @@ slowave setup --client [claude-code|claude-desktop|cline|cursor|opencode|windsur
 | Cursor | `~/.cursor/` exists |
 | OpenCode | `~/.config/opencode/` exists |
 | Windsurf | `~/.codeium/windsurf/` exists |
+| Codex | `~/.codex/` (or `$CODEX_HOME`) exists |
 
 Clients not detected are listed as "Not installed — skipping" in the setup output.
 
@@ -119,6 +122,8 @@ To restore: `cp ~/.claude.json.bak.20260611_142300 ~/.claude.json`
 | `~/.codeium/windsurf/memories/global_rules.md` | Windsurf global rules | Prepends lifecycle block |
 | `~/.config/opencode/opencode.json` | OpenCode MCP + instructions config | Adds `mcp.slowave` and registers instructions file |
 | `~/.config/opencode/slowave-instructions.md` | OpenCode lifecycle instructions | Creates Slowave-owned instruction file |
+| `~/.codex/config.toml` | Codex MCP config + hooks | Adds `[mcp_servers.slowave]` and `[[hooks.UserPromptSubmit/Stop]]` (single combined write) |
+| `~/.codex/AGENTS.md` | Codex instructions | Prepends lifecycle block |
 | `~/Library/LaunchAgents/com.slowave.worker.plist` | Background worker | launchd plist, loads with `launchctl` |
 | `~/Library/LaunchAgents/com.slowave.daemon.plist` | HTTP MCP daemon | launchd plist, auto-starts on load |
 | `~/Library/LaunchAgents/com.slowave.backup.plist` | Daily backup | launchd plist with `StartCalendarInterval` |
@@ -142,6 +147,8 @@ To restore: `cp ~/.claude.json.bak.20260611_142300 ~/.claude.json`
 | `~/.cursor/mcp.json` | Cursor native MCP config | Same as macOS |
 | `~/.codeium/windsurf/mcp_config.json` | Windsurf MCP config | Same as macOS |
 | `~/.codeium/windsurf/memories/global_rules.md` | Windsurf global rules | Same as macOS |
+| `~/.codex/config.toml` | Codex MCP config + hooks | Same as macOS |
+| `~/.codex/AGENTS.md` | Codex instructions | Same as macOS |
 
 ### Windows
 
@@ -161,6 +168,8 @@ To restore: `cp ~/.claude.json.bak.20260611_142300 ~/.claude.json`
 | `%USERPROFILE%\.cursor\mcp.json` | Cursor native MCP config | Same as macOS |
 | `%APPDATA%\Codeium\windsurf\mcp_config.json` | Windsurf MCP config | Same as macOS |
 | `%APPDATA%\Codeium\windsurf\memories\global_rules.md` | Windsurf global rules | Same as macOS |
+| `%USERPROFILE%\.codex\config.toml` | Codex MCP config + hooks | Same as macOS |
+| `%USERPROFILE%\.codex\AGENTS.md` | Codex instructions | Same as macOS |
 
 ---
 
@@ -271,7 +280,13 @@ All clients except Claude Desktop use this HTTP transport block:
 }
 ```
 
-Claude Desktop uses stdio transport. OpenCode uses the `mcp` key (not `mcpServers`).
+Claude Desktop uses stdio transport. OpenCode uses the `mcp` key (not `mcpServers`). Codex
+uses TOML, not JSON:
+
+```toml
+[mcp_servers.slowave]
+url = "http://127.0.0.1:8766/mcp"
+```
 
 | Client | Config file |
 |---|---|
@@ -283,6 +298,7 @@ Claude Desktop uses stdio transport. OpenCode uses the `mcp` key (not `mcpServer
 | Cursor | `~/.cursor/mcp.json` |
 | OpenCode | `~/.config/opencode/opencode.json` |
 | Windsurf | `~/.codeium/windsurf/mcp_config.json` |
+| Codex | `~/.codex/config.toml` (shared by the CLI, Codex Desktop, and the IDE extension) |
 
 ### Lifecycle instruction block
 

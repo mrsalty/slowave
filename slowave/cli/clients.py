@@ -186,6 +186,48 @@ def get_client_statuses() -> dict[str, ClientStatus]:
                 mcp_configured=oc_has_mcp,
                 lifecycle_enabled=oc_has_lifecycle,
             )
+
+        # Codex detection — TOML config, mcp_servers key, hooks + AGENTS.md
+        from slowave.cli.setup import (
+            _HOOKS_MARKER,
+            _codex_agents_md_path,
+            _codex_config_path,
+            _codex_home,
+            _read_toml,
+        )
+
+        codex_cfg_path = _codex_config_path()
+        codex_agents_md = _codex_agents_md_path()
+        codex_override = _codex_home() / "AGENTS.override.md"
+        codex_has_mcp = codex_has_hooks = codex_has_lifecycle = False
+        if codex_cfg_path.exists():
+            try:
+                ccfg = _read_toml(codex_cfg_path)
+                codex_has_mcp = "slowave" in ccfg.get("mcp_servers", {})
+                codex_has_hooks = any(
+                    _HOOKS_MARKER in h.get("command", "")
+                    for event in ("UserPromptSubmit", "Stop")
+                    for group in ccfg.get("hooks", {}).get(event, [])
+                    for h in group.get("hooks", [])
+                )
+            except Exception:
+                pass
+        if codex_agents_md.exists():
+            try:
+                codex_has_lifecycle = _MARKER_START in codex_agents_md.read_text(
+                    encoding="utf-8", errors="ignore"
+                )
+            except Exception:
+                pass
+        if codex_cfg_path.exists() or codex_agents_md.exists():
+            statuses["codex"] = ClientStatus(
+                name="Codex",
+                mcp_configured=codex_has_mcp,
+                hooks_installed=codex_has_hooks,
+                # AGENTS.override.md shadows AGENTS.md entirely at this scope — if it
+                # exists, the injected block in AGENTS.md is never read by Codex.
+                lifecycle_enabled=codex_has_lifecycle and not codex_override.exists(),
+            )
     except ImportError:
         pass
 

@@ -354,6 +354,33 @@ def _opencode_instructions_path() -> Path:
     return _opencode_config_dir() / "slowave-instructions.md"
 
 
+def _codex_home() -> Path:
+    """Codex home directory — respects CODEX_HOME."""
+    codex_home = os.environ.get("CODEX_HOME")
+    return Path(codex_home) if codex_home else _home() / ".codex"
+
+
+def _codex_config_path() -> Path:
+    """Codex global config — ~/.codex/config.toml (or $CODEX_HOME/config.toml).
+
+    Both the MCP server registry (``mcp_servers``) and lifecycle enforcement
+    hooks (``hooks``) live in this single TOML file — unlike Claude Code,
+    which splits them across ``~/.claude.json`` and ``~/.claude/settings.json``.
+    """
+    return _codex_home() / "config.toml"
+
+
+def _codex_agents_md_path() -> Path:
+    """Codex global instructions file — ~/.codex/AGENTS.md.
+
+    Directly analogous to Claude Code's CLAUDE.md: Codex reads this file (or
+    AGENTS.override.md, if present, instead) once per session and folds its
+    content into the first turn. Uses the same marker-based _inject_block()
+    mechanism as every other auto-injected client.
+    """
+    return _codex_home() / "AGENTS.md"
+
+
 # ---------------------------------------------------------------------------
 # ClientSpec — single source of truth for every supported client
 # ---------------------------------------------------------------------------
@@ -505,6 +532,22 @@ def _clients() -> list[ClientSpec]:
             require_dir_exists=True,
             restart_note="Restart OpenCode to apply changes.",
         ),
+        ClientSpec(
+            # "Codex", not "Codex CLI": ~/.codex/config.toml is shared by the CLI, the
+            # Codex Desktop app (in ChatGPT), and the IDE extension — one integration
+            # covers all three, so the label doesn't imply CLI-only.
+            key="codex",
+            label="Codex",
+            mcp_path=_codex_config_path,
+            lifecycle_path=_codex_agents_md_path,
+            lifecycle_agent="codex",
+            # Enforcement: UserPromptSubmit + Stop hooks, same TOML file as MCP config.
+            hooks_config_path=_codex_config_path,
+            hooks_patch_fn=_patch_codex_hooks,
+            hooks_cleanup_fn=_remove_codex_hooks,
+            require_dir_exists=True,
+            restart_note="Restart Codex (CLI, Desktop, or IDE extension) to apply changes.",
+        ),
     ]
 
 
@@ -637,6 +680,42 @@ def _write_json(path: Path, data: dict[str, Any]) -> None:
     path.write_text(json.dumps(data, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
+def _read_toml(path: Path) -> Any:
+    """Read a TOML file (Codex's config.toml) as a tomlkit document.
+
+    Uses tomlkit rather than stdlib tomllib because tomlkit round-trips
+    comments and formatting on write — a plain parse-then-dump would silently
+    strip every comment in the user's config.toml. Returns an empty tomlkit
+    document if the file does not exist.
+    """
+    import tomlkit
+
+    if path.exists():
+        try:
+            return tomlkit.parse(path.read_text(encoding="utf-8"))
+        except tomlkit.exceptions.TOMLKitError as exc:
+            click.echo(
+                click.style(
+                    f"  ✗  {path} contains invalid TOML and cannot be patched safely.\n"
+                    f"     Fix the file first, then re-run slowave setup.\n"
+                    f"     Error: {exc}",
+                    fg="red",
+                )
+            )
+            sys.exit(1)
+    return tomlkit.document()
+
+
+def _write_toml(path: Path, data: Any) -> None:
+    import tomlkit
+
+    path.parent.mkdir(parents=True, exist_ok=True)
+    bak = _backup_file(path)
+    if bak:
+        click.echo(click.style(f"  ↩  backup → {bak}", fg="cyan"))
+    path.write_text(tomlkit.dumps(data), encoding="utf-8")
+
+
 def _patch_mcp_servers(
     config: dict[str, Any],
     url: str = "http://127.0.0.1:8766/mcp",
@@ -731,6 +810,28 @@ def _patch_opencode_instructions(
         return config, False
     # Idempotent: only add if the path is not already present
     instructions.append(instructions_path)
+    return config, True
+
+
+def _patch_codex_mcp(
+    config: Any,
+    url: str = "http://127.0.0.1:8766/mcp",
+) -> tuple[Any, bool]:
+    """Patch MCP config for Codex (uses ``mcp_servers`` key, Streamable HTTP).
+
+    Codex natively supports Streamable HTTP MCP servers — no stdio wrapper,
+    no auth fields needed for an unauthenticated local server:
+
+        [mcp_servers.slowave]
+        url = "http://127.0.0.1:8766/mcp"
+
+    Returns (updated_config, changed).
+    """
+    servers = config.setdefault("mcp_servers", {})
+    existing = servers.get("slowave")
+    if isinstance(existing, dict) and dict(existing) == {"url": url}:
+        return config, False
+    servers["slowave"] = {"url": url}
     return config, True
 
 
@@ -965,6 +1066,60 @@ def _remove_claude_code_hooks(config: dict[str, Any]) -> tuple[dict[str, Any], b
 
     Used by cleanup.  Removes every hook group whose command contains
     ``_HOOKS_MARKER`` from the ``UserPromptSubmit`` and ``Stop`` events.
+    """
+    changed = False
+    for event in ["UserPromptSubmit", "Stop"]:
+        before = config.get("hooks", {}).get(event, [])
+        after = [
+            g
+            for g in before
+            if not any(_HOOKS_MARKER in h.get("command", "") for h in g.get("hooks", []))
+        ]
+        if after != before:
+            config.setdefault("hooks", {})[event] = after
+            changed = True
+    return config, changed
+
+
+# ---------------------------------------------------------------------------
+# Codex hooks
+# ---------------------------------------------------------------------------
+#
+# Codex's [[hooks.<Event>]] TOML array-of-tables shape parses down to the
+# same nested dict/list-of-dicts data model as Claude Code's JSON hooks, minus
+# the "matcher" field (only relevant for tool-scoped events like PreToolUse,
+# not UserPromptSubmit/Stop). _hooks_up_to_date() is structure-agnostic (only
+# calls .get() on whatever it's handed) so it is reused as-is against the
+# tomlkit document returned by _read_toml().
+
+
+def _patch_codex_hooks(config: Any) -> tuple[Any, bool]:
+    """Inject or update Codex UserPromptSubmit + Stop hooks.
+
+    Mirrors _patch_claude_code_hooks(): always writes the current command
+    text, replacing any stale Slowave hook group in-place.
+    """
+    changed = False
+    hooks = config.setdefault("hooks", {})
+    for event, cmd in [("UserPromptSubmit", _USER_PROMPT_CMD), ("Stop", _STOP_CMD)]:
+        if _hooks_up_to_date(config, event, cmd):
+            continue
+        existing = [
+            g
+            for g in hooks.get(event, [])
+            if not any(_HOOKS_MARKER in h.get("command", "") for h in g.get("hooks", []))
+        ]
+        existing.append({"hooks": [{"type": "command", "command": cmd}]})
+        hooks[event] = existing
+        changed = True
+    return config, changed
+
+
+def _remove_codex_hooks(config: Any) -> tuple[Any, bool]:
+    """Remove all Slowave enforcement hooks from a Codex config.toml document.
+
+    Used by cleanup. Same logic as _remove_claude_code_hooks(), just without
+    the "matcher" field Codex doesn't use for these events.
     """
     changed = False
     for event in ["UserPromptSubmit", "Stop"]:
@@ -1294,7 +1449,7 @@ def _build_summary(client: str, worker: bool, install_hooks: bool, slowave_bin: 
         if spec.require_dir_exists and not mcp_file.parent.exists():
             continue
 
-        cfg = _read_json(mcp_file)
+        cfg = _read_toml(mcp_file) if spec.key == "codex" else _read_json(mcp_file)
         if spec.key == "claude-desktop":
             slowave_mcp_bin = _find_mcp_binary(slowave_bin)
             _, changed_mcp = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
@@ -1302,6 +1457,8 @@ def _build_summary(client: str, worker: bool, install_hooks: bool, slowave_bin: 
             _, changed_mcp = _patch_opencode_mcp(cfg)
             # Also check instructions registration
             _, _ = _patch_opencode_instructions(cfg, str(_opencode_instructions_path().resolve()))
+        elif spec.key == "codex":
+            _, changed_mcp = _patch_codex_mcp(cfg)
         else:
             _, changed_mcp = _patch_mcp_servers(
                 cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline"
@@ -1317,7 +1474,11 @@ def _build_summary(client: str, worker: bool, install_hooks: bool, slowave_bin: 
         )
         if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None and install_hooks:
             hooks_file = spec.hooks_config_path()
-            _, changed_hooks = spec.hooks_patch_fn(_read_json(hooks_file))
+            # Codex keeps hooks in the same file as MCP config (cfg, already patched above) —
+            # re-patch that in-memory doc rather than re-reading, so the preview reflects both
+            # changes as they'd actually land in one combined write.
+            hooks_source = cfg if spec.key == "codex" else _read_json(hooks_file)
+            _, changed_hooks = spec.hooks_patch_fn(hooks_source)
             summary.add_change(
                 Change(
                     change_type=ChangeType.HOOKS,
@@ -1446,7 +1607,16 @@ def _section(title: str) -> None:
 @click.option(
     "--client",
     type=click.Choice(
-        ["claude-code", "claude-desktop", "cline", "cursor", "windsurf", "opencode", "all"],
+        [
+            "claude-code",
+            "claude-desktop",
+            "cline",
+            "cursor",
+            "windsurf",
+            "opencode",
+            "codex",
+            "all",
+        ],
         case_sensitive=False,
     ),
     default="all",
@@ -1464,14 +1634,14 @@ def _section(title: str) -> None:
     "install_hooks",
     default=True,
     show_default=True,
-    help="Inject UserPromptSubmit + Stop hooks (Claude Code only).",
+    help="Inject UserPromptSubmit + Stop hooks (Claude Code and Codex only).",
 )
 @click.option("--dry-run", is_flag=True, help="Preview changes without writing any files.")
 @click.option("--json", "as_json", is_flag=True, help="Machine-readable JSON output.")
 def setup_cmd(
     client: str, worker: bool, install_hooks: bool, dry_run: bool, as_json: bool = False
 ) -> None:
-    """One-command post-install wiring for Claude Code, Claude Desktop, Cline, Cursor, Windsurf, and OpenCode.
+    """One-command post-install wiring for Claude Code, Claude Desktop, Cline, Cursor, Windsurf, OpenCode, and Codex.
 
     Configures every detected client to connect to the Slowave HTTP MCP daemon
     at http://127.0.0.1:8766/mcp.  The daemon and background worker start
@@ -1541,47 +1711,83 @@ def setup_cmd(
             )
             continue
 
-        cfg = _read_json(mcp_file)
-        if spec.key == "claude-desktop":
-            slowave_mcp_bin = _find_mcp_binary(slowave_bin)
-            cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
-            transport_label = "stdio"
-        elif spec.key == "opencode":
-            cfg, changed = _patch_opencode_mcp(cfg)
-            transport_label = "remote"
-            # Also register the instructions file in the config
-            instructions_path = str(_opencode_instructions_path().resolve())
-            cfg, _ = _patch_opencode_instructions(cfg, instructions_path)
-        else:
-            cfg, changed = _patch_mcp_servers(
-                cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline"
-            )
-            transport_label = "HTTP"
-        if changed:
-            if dry_run:
-                _ok(f"Would set MCP server ({transport_label}) → {mcp_file}")
+        if spec.key == "codex":
+            # Codex keeps MCP config and hooks in the same TOML file (unlike Claude
+            # Code's split ~/.claude.json / ~/.claude/settings.json). Read once, apply
+            # both patches to the same in-memory doc, write once — reading it twice and
+            # writing it twice (as the generic path below does for two-file clients)
+            # would leave the retained *.bak.* as the post-MCP-patch state instead of
+            # the true pre-Slowave original.
+            cfg = _read_toml(mcp_file)
+            cfg, mcp_changed = _patch_codex_mcp(cfg)
+            if mcp_changed:
+                (
+                    _ok(f"Would set MCP server (HTTP) → {mcp_file}")
+                    if dry_run
+                    else _ok(f"MCP server set (HTTP) → {mcp_file}")
+                )
             else:
-                _write_json(mcp_file, cfg)
-                _ok(f"MCP server set ({transport_label}) → {mcp_file}")
-        else:
-            _skip(f"MCP server already configured ({transport_label}) in {mcp_file}")
+                _skip(f"MCP server already configured (HTTP) in {mcp_file}")
 
-        # Enforcement hooks — data-driven via spec.hooks_patch_fn
-        if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None:
-            hooks_file = spec.hooks_config_path()
-            cfg_hooks = _read_json(hooks_file)
-            if install_hooks:
-                cfg_hooks, changed = spec.hooks_patch_fn(cfg_hooks)
-                if changed:
-                    if dry_run:
-                        _ok(f"Would update enforcement hooks → {hooks_file}")
+            hooks_changed = False
+            if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None:
+                if install_hooks:
+                    cfg, hooks_changed = spec.hooks_patch_fn(cfg)
+                    if hooks_changed:
+                        (
+                            _ok(f"Would update enforcement hooks → {mcp_file}")
+                            if dry_run
+                            else _ok(f"Enforcement hooks updated → {mcp_file}")
+                        )
                     else:
-                        _write_json(hooks_file, cfg_hooks)
-                        _ok(f"Enforcement hooks updated → {hooks_file}")
+                        _skip(f"Enforcement hooks already up-to-date in {mcp_file}")
                 else:
-                    _skip(f"Enforcement hooks already up-to-date in {hooks_file}")
+                    _skip(f"Enforcement hooks skipped (--no-hooks) for {spec.label}")
+
+            if not dry_run and (mcp_changed or hooks_changed):
+                _write_toml(mcp_file, cfg)
+        else:
+            cfg = _read_json(mcp_file)
+            if spec.key == "claude-desktop":
+                slowave_mcp_bin = _find_mcp_binary(slowave_bin)
+                cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
+                transport_label = "stdio"
+            elif spec.key == "opencode":
+                cfg, changed = _patch_opencode_mcp(cfg)
+                transport_label = "remote"
+                # Also register the instructions file in the config
+                instructions_path = str(_opencode_instructions_path().resolve())
+                cfg, _ = _patch_opencode_instructions(cfg, instructions_path)
             else:
-                _skip(f"Enforcement hooks skipped (--no-hooks) for {spec.label}")
+                cfg, changed = _patch_mcp_servers(
+                    cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline"
+                )
+                transport_label = "HTTP"
+            if changed:
+                if dry_run:
+                    _ok(f"Would set MCP server ({transport_label}) → {mcp_file}")
+                else:
+                    _write_json(mcp_file, cfg)
+                    _ok(f"MCP server set ({transport_label}) → {mcp_file}")
+            else:
+                _skip(f"MCP server already configured ({transport_label}) in {mcp_file}")
+
+            # Enforcement hooks — data-driven via spec.hooks_patch_fn
+            if spec.hooks_config_path is not None and spec.hooks_patch_fn is not None:
+                hooks_file = spec.hooks_config_path()
+                cfg_hooks = _read_json(hooks_file)
+                if install_hooks:
+                    cfg_hooks, changed = spec.hooks_patch_fn(cfg_hooks)
+                    if changed:
+                        if dry_run:
+                            _ok(f"Would update enforcement hooks → {hooks_file}")
+                        else:
+                            _write_json(hooks_file, cfg_hooks)
+                            _ok(f"Enforcement hooks updated → {hooks_file}")
+                    else:
+                        _skip(f"Enforcement hooks already up-to-date in {hooks_file}")
+                else:
+                    _skip(f"Enforcement hooks skipped (--no-hooks) for {spec.label}")
 
         # Lifecycle block — auto-inject or print manual instruction
         if spec.lifecycle_path is not None:

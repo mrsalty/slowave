@@ -7,6 +7,8 @@ Coverage:
   - _patch_mcp_servers          idempotence, HTTP format, legacy stdio migration
   - _remove_mcp_servers_from_settings
   - _patch_claude_code_hooks    idempotence, new
+  - _patch_codex_mcp / _patch_codex_hooks / _remove_codex_hooks  (Codex, TOML)
+  - _read_toml / _write_toml    round-trips comments, backup creation
   - _inject_block               new file, idempotent update, legacy strip
   - _write_json / _backup_file  backup creation
   - malformed JSON              (SystemExit)
@@ -26,10 +28,15 @@ from slowave.cli.setup import (
     _inject_block,
     _lifecycle_block,
     _patch_claude_code_hooks,
+    _patch_codex_hooks,
+    _patch_codex_mcp,
     _patch_mcp_servers,
     _read_json,
+    _read_toml,
+    _remove_codex_hooks,
     _remove_mcp_servers_from_settings,
     _write_json,
+    _write_toml,
 )
 
 HTTP_URL = "http://127.0.0.1:8766/mcp"
@@ -179,6 +186,155 @@ class TestPatchClaudeCodeHooks:
         }
         _, changed = _patch_claude_code_hooks(cfg)
         assert changed is False
+
+
+# ===========================================================================
+# Codex — _patch_codex_mcp / _patch_codex_hooks / _remove_codex_hooks
+# ===========================================================================
+
+
+class TestPatchCodexMcp:
+    def test_adds_server_to_empty_config(self):
+        cfg, changed = _patch_codex_mcp({})
+        assert changed is True
+        assert cfg["mcp_servers"]["slowave"] == {"url": HTTP_URL}
+
+    def test_idempotent_when_present(self):
+        cfg, _ = _patch_codex_mcp({})
+        _, changed2 = _patch_codex_mcp(cfg)
+        assert changed2 is False
+
+    def test_no_auth_or_type_field(self):
+        """Codex needs only `url` for an unauthenticated local Streamable HTTP server."""
+        cfg, _ = _patch_codex_mcp({})
+        assert set(cfg["mcp_servers"]["slowave"].keys()) == {"url"}
+
+    def test_preserves_other_mcp_servers(self):
+        cfg = {"mcp_servers": {"othertool": {"command": "npx"}}}
+        cfg2, _ = _patch_codex_mcp(cfg)
+        assert "othertool" in cfg2["mcp_servers"]
+
+    def test_updates_stale_url(self):
+        cfg = {"mcp_servers": {"slowave": {"url": "http://old-host:1234/mcp"}}}
+        cfg2, changed = _patch_codex_mcp(cfg)
+        assert changed is True
+        assert cfg2["mcp_servers"]["slowave"] == {"url": HTTP_URL}
+
+    def test_round_trips_through_tomlkit(self, tmp_path):
+        """Patched config must serialize to valid, re-parseable TOML."""
+        target = tmp_path / "config.toml"
+        target.write_text('# user comment\nmodel = "gpt-5.5"\n', encoding="utf-8")
+        cfg = _read_toml(target)
+        cfg, changed = _patch_codex_mcp(cfg)
+        assert changed is True
+        _write_toml(target, cfg)
+        content = target.read_text()
+        assert "# user comment" in content
+        reparsed = _read_toml(target)
+        assert reparsed["mcp_servers"]["slowave"]["url"] == HTTP_URL
+
+
+class TestPatchCodexHooks:
+    def test_adds_hooks_to_empty_config(self):
+        cfg, changed = _patch_codex_hooks({})
+        assert changed is True
+        assert "UserPromptSubmit" in cfg["hooks"]
+        assert "Stop" in cfg["hooks"]
+
+    def test_idempotent_when_hooks_present(self):
+        cfg, _ = _patch_codex_hooks({})
+        _, changed2 = _patch_codex_hooks(cfg)
+        assert changed2 is False
+
+    def test_replaces_stale_hook_command(self):
+        stale_cmd = "echo 'SLOWAVE MANDATORY: old instructions'"
+        cfg = {
+            "hooks": {"UserPromptSubmit": [{"hooks": [{"type": "command", "command": stale_cmd}]}]}
+        }
+        cfg2, changed = _patch_codex_hooks(cfg)
+        assert changed is True
+        cmds = [h["command"] for g in cfg2["hooks"]["UserPromptSubmit"] for h in g.get("hooks", [])]
+        assert stale_cmd not in cmds
+
+    def test_preserves_unrelated_hook_events(self):
+        existing = {
+            "hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "echo hi"}]}]}
+        }
+        cfg2, _ = _patch_codex_hooks(existing)
+        assert "PreToolUse" in cfg2["hooks"]
+
+    def test_round_trips_as_array_of_tables(self, tmp_path):
+        """Written TOML must use [[hooks.Event]] array-of-tables syntax."""
+        target = tmp_path / "config.toml"
+        cfg = _read_toml(target)
+        cfg, _ = _patch_codex_hooks(cfg)
+        _write_toml(target, cfg)
+        content = target.read_text()
+        assert "[[hooks.UserPromptSubmit]]" in content
+        assert "[[hooks.Stop]]" in content
+        reparsed = _read_toml(target)
+        assert len(reparsed["hooks"]["UserPromptSubmit"]) == 1
+
+
+class TestRemoveCodexHooks:
+    def test_removes_slowave_hooks(self):
+        cfg, _ = _patch_codex_hooks({})
+        cfg2, changed = _remove_codex_hooks(cfg)
+        assert changed is True
+        assert cfg2["hooks"]["UserPromptSubmit"] == []
+        assert cfg2["hooks"]["Stop"] == []
+
+    def test_no_change_when_absent(self):
+        _, changed = _remove_codex_hooks({})
+        assert changed is False
+
+    def test_preserves_unrelated_hooks(self):
+        cfg, _ = _patch_codex_hooks(
+            {"hooks": {"PreToolUse": [{"hooks": [{"type": "command", "command": "echo hi"}]}]}}
+        )
+        cfg2, _ = _remove_codex_hooks(cfg)
+        assert "PreToolUse" in cfg2["hooks"]
+        assert cfg2["hooks"]["PreToolUse"][0]["hooks"][0]["command"] == "echo hi"
+
+
+# ===========================================================================
+# _read_toml / _write_toml
+# ===========================================================================
+
+
+class TestReadWriteToml:
+    def test_returns_empty_doc_for_missing_file(self, tmp_path):
+        cfg = _read_toml(tmp_path / "nonexistent.toml")
+        assert dict(cfg) == {}
+
+    def test_reads_valid_toml(self, tmp_path):
+        f = tmp_path / "config.toml"
+        f.write_text('key = "value"\n', encoding="utf-8")
+        assert _read_toml(f)["key"] == "value"
+
+    def test_exits_on_malformed_toml(self, tmp_path):
+        f = tmp_path / "bad.toml"
+        f.write_text("this is not [valid toml", encoding="utf-8")
+        with pytest.raises(SystemExit):
+            _read_toml(f)
+
+    def test_backup_created_before_overwrite(self, tmp_path):
+        target = tmp_path / "config.toml"
+        target.write_text("original = true\n", encoding="utf-8")
+        cfg = _read_toml(target)
+        cfg["updated"] = True
+        _write_toml(target, cfg)
+        backups = list(tmp_path.glob("config.toml.bak.*"))
+        assert len(backups) == 1
+        assert "original = true" in backups[0].read_text()
+
+    def test_preserves_comments_on_write(self, tmp_path):
+        target = tmp_path / "config.toml"
+        target.write_text('# important comment\nmodel = "gpt-5.5"\n', encoding="utf-8")
+        cfg = _read_toml(target)
+        cfg["extra"] = "value"
+        _write_toml(target, cfg)
+        assert "# important comment" in target.read_text()
 
 
 # ===========================================================================
@@ -428,6 +584,44 @@ class TestCleanupRemoveMcpConfigs:
     def test_no_op_when_no_mcp_files_exist(self, fake_home):
         count = _cleanup_mod._remove_mcp_configs(dry_run=False)
         assert count == 0
+
+    def test_removes_slowave_mcp_and_hooks_from_codex_config(self, fake_home):
+        """Codex keeps MCP entry + hooks in one TOML file — both must be removed in one write."""
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir()
+        cfg_path = codex_dir / "config.toml"
+        cfg_path.write_text(
+            'model = "gpt-5.5"\n\n'
+            "[mcp_servers.slowave]\n"
+            'url = "http://127.0.0.1:8766/mcp"\n\n'
+            "[mcp_servers.other]\n"
+            'command = "npx"\n\n'
+            "[[hooks.UserPromptSubmit]]\n"
+            "[[hooks.UserPromptSubmit.hooks]]\n"
+            'type = "command"\n'
+            f'command = "{_setup_mod._USER_PROMPT_CMD}"\n',
+            encoding="utf-8",
+        )
+
+        count = _cleanup_mod._remove_mcp_configs(dry_run=False)
+
+        assert count >= 1
+        remaining = _read_toml(cfg_path)
+        assert "slowave" not in remaining.get("mcp_servers", {})
+        assert "other" in remaining["mcp_servers"]
+        assert remaining["hooks"]["UserPromptSubmit"] == []
+        assert remaining["model"] == "gpt-5.5"
+
+    def test_dry_run_does_not_write_codex_config(self, fake_home):
+        codex_dir = fake_home / ".codex"
+        codex_dir.mkdir()
+        cfg_path = codex_dir / "config.toml"
+        original = '[mcp_servers.slowave]\nurl = "http://127.0.0.1:8766/mcp"\n'
+        cfg_path.write_text(original, encoding="utf-8")
+
+        _cleanup_mod._remove_mcp_configs(dry_run=True)
+
+        assert cfg_path.read_text() == original
 
 
 class TestCleanupRemoveSetupBackups:
