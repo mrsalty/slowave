@@ -255,7 +255,9 @@ class TestPatchOpencodeMcp:
 
 class TestPatchOpencodeInstructions:
     def test_adds_path_to_empty_config(self):
-        cfg, changed = _patch_opencode_instructions({}, "/home/user/.config/opencode/slowave-instructions.md")
+        cfg, changed = _patch_opencode_instructions(
+            {}, "/home/user/.config/opencode/slowave-instructions.md"
+        )
         assert changed is True
         assert cfg["instructions"] == ["/home/user/.config/opencode/slowave-instructions.md"]
 
@@ -275,7 +277,9 @@ class TestPatchOpencodeInstructions:
         the instructions patch must still report changed=True so the caller persists it."""
         cfg, _ = _patch_opencode_mcp({})
         _, mcp_changed_again = _patch_opencode_mcp(cfg)
-        cfg, instructions_changed = _patch_opencode_instructions(cfg, "/path/to/slowave-instructions.md")
+        cfg, instructions_changed = _patch_opencode_instructions(
+            cfg, "/path/to/slowave-instructions.md"
+        )
         assert mcp_changed_again is False
         assert instructions_changed is True
 
