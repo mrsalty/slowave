@@ -8,7 +8,9 @@ Public API for CLI and MCP integrations.
 from __future__ import annotations
 
 import dataclasses
+import json as _json
 import logging
+import time as _time
 import uuid
 from typing import Any
 
@@ -375,6 +377,16 @@ class SlowaveEngine:
         episode_ids = self._ingest.form_episodes(session_id)
         stats: dict[str, Any] = {"session_id": session_id, "episodes_formed": len(episode_ids)}
 
+        # Back-link newly-formed episodes to schemas that were created via
+        # remember() during this live session. During a live session, remember()
+        # creates schemas with empty supporting_episode_ids and stores
+        # schema_evidence rows with episode_id=NULL. The episodes are only
+        # formed now, at session end, so we must update the links retroactively.
+        # Without this, support_count stays 0 forever for agent-remembered facts,
+        # depressing stability_score and schema_utility.
+        if episode_ids:
+            self._link_session_episodes(conn=self.db.connect(), session_id=session_id, episode_ids=episode_ids)
+
         if consolidate:
             replay_stats = self.replay_engine.replay_once()
             stats["replay"] = replay_stats
@@ -397,6 +409,124 @@ class SlowaveEngine:
                     "confidence_histogram": list(cstats.confidence_histogram),
                 }
         return stats
+
+    def _link_session_episodes(
+        self, *, conn: Any, session_id: str, episode_ids: list[int]
+    ) -> None:
+        """Back-link newly-formed episodes to schemas remembered during this session.
+
+        During a live session, ``remember()`` creates schemas with empty
+        ``supporting_episode_ids`` (the episodes don't exist yet).  Now that
+        they have been formed, we walk every raw event in this session,
+        look up which episode(s) carry it, and update the schema row so
+        ``support_count`` / stability scores reflect real evidence.
+        """
+        import json
+
+        now = int(_time.time())
+        try:
+            # Build a raw_event_id → [episode_id, …] map from the just-formed
+            # episodes.  episode_text.event_ids is a JSON array of ints.
+            ep_rows = conn.execute(
+                "SELECT episode_id, event_ids FROM episode_text "
+                "WHERE session_id = ? AND episode_id IN ({})".format(
+                    ",".join("?" * len(episode_ids))
+                ),
+                [session_id, *episode_ids],
+            ).fetchall()
+
+            ev_to_ep: dict[int, list[int]] = {}
+            for r in ep_rows:
+                ep_id = int(r["episode_id"])
+                try:
+                    eids = json.loads(r["event_ids"])
+                except (json.JSONDecodeError, TypeError):
+                    continue
+                # event_ids is stored as {"ids": [1, 2, …]} (see episode_text.py:49).
+                raw_ids = eids.get("ids", []) if isinstance(eids, dict) else eids
+                for eid in raw_ids:
+                    try:
+                        ev_to_ep.setdefault(int(eid), []).append(ep_id)
+                    except (TypeError, ValueError):
+                        continue
+
+            if not ev_to_ep:
+                return
+
+            # Find schemas whose schema_evidence still has episode_id=NULL
+            # (the placeholder left by remember() during the live session)
+            # and that reference a raw event from this session.
+            key_ids = list(ev_to_ep.keys())
+            ph = ",".join("?" * len(key_ids))
+            schema_rows = conn.execute(
+                f"SELECT DISTINCT se.schema_id, se.raw_event_id "
+                f"FROM schema_evidence se "
+                f"WHERE se.raw_event_id IN ({ph}) AND se.episode_id IS NULL",
+                tuple(key_ids),
+            ).fetchall()
+
+            for sr in schema_rows:
+                schema_id = int(sr["schema_id"])
+                raw_id = sr["raw_event_id"]
+                if raw_id is None:
+                    continue
+                try:
+                    raw_id = int(raw_id)
+                except (TypeError, ValueError):
+                    continue
+                ep_ids = ev_to_ep.get(raw_id)
+                if not ep_ids:
+                    continue
+
+                # Merge into existing supporting_episode_ids.
+                cur = conn.execute(
+                    "SELECT supporting_episode_ids FROM schemas WHERE id = ?",
+                    (schema_id,),
+                ).fetchone()
+                if cur is None:
+                    continue
+                try:
+                    payload = json.loads(cur["supporting_episode_ids"])
+                except (json.JSONDecodeError, TypeError):
+                    payload = {}
+                existing = set(
+                    int(x)
+                    for x in (
+                        payload.get("ids", [])
+                        if isinstance(payload, dict)
+                        else []
+                    )
+                )
+                existing.update(ep_ids)
+                conn.execute(
+                    "UPDATE schemas SET supporting_episode_ids = ?, last_updated_ts = ? "
+                    "WHERE id = ?",
+                    (
+                        json.dumps({"ids": sorted(existing)}),
+                        now,
+                        schema_id,
+                    ),
+                )
+
+                # Update the schema_evidence row so future lookups don't
+                # re-enter this path for the same schema.
+                conn.execute(
+                    "UPDATE schema_evidence SET episode_id = ? "
+                    "WHERE schema_id = ? AND raw_event_id = ? AND episode_id IS NULL",
+                    (ep_ids[0], schema_id, raw_id),
+                )
+
+            conn.commit()
+        except Exception:
+            log.warning(
+                "_link_session_episodes failed for session %s",
+                session_id,
+                exc_info=True,
+            )
+            try:
+                conn.rollback()
+            except Exception:
+                pass
 
     # ---- ingest -----------------------------------------------------------
     def event_append(
