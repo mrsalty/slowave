@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.2](https://github.com/mrsalty/slowave/compare/slowave-v0.15.1...slowave-v0.15.2) (2026-07-10)
+
+
+### Bug Fixes
+
+* push Homebrew formula bump to main from detached HEAD ([34e2d96](https://github.com/mrsalty/slowave/commit/34e2d96316b6e7fd44a256cdbd632d8864d94dbd))
+
 ## [0.15.1](https://github.com/mrsalty/slowave/compare/slowave-v0.15.0...slowave-v0.15.1) (2026-07-10)
 
 
