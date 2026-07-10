@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.0](https://github.com/mrsalty/slowave/compare/slowave-v0.14.4...slowave-v0.15.0) (2026-07-10)
+
+
+### Features
+
+* codex integration ([f0d04be](https://github.com/mrsalty/slowave/commit/f0d04be32705b0903136693415a54934830a1792))
+
 ## [0.14.4](https://github.com/mrsalty/slowave/compare/slowave-v0.14.3...slowave-v0.14.4) (2026-07-10)
 
 
