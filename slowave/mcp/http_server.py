@@ -32,6 +32,7 @@ import logging
 import os
 import signal
 import sys
+import threading
 
 # macOS: avoid OpenMP-duplication crashes when faiss + ONNX Runtime coexist.
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
@@ -228,6 +229,24 @@ def main(
 
     # -- session reaper (closes idle open sessions) --------------------------
     session_reaper.start(build_engine=_build_engine, poll_interval_s=120)
+
+    # -- warm the engine in the background ------------------------------------
+    # _build_engine() is normally deferred to the first MCP tool call, which
+    # left the DB file (and the dashboard reading it) in limbo for however
+    # long it took some client to actually call a tool. Building it here,
+    # off the main thread, creates the DB/schema immediately without
+    # delaying /health, which must stay responsive during Windows Task
+    # Scheduler cold-starts (see _verify_daemon_health in cli/setup.py).
+    def _warm_engine() -> None:
+        try:
+            _build_engine()
+            log.info("Engine warmed up; DB ready at %s", DEFAULT_DB)
+        except Exception:
+            log.warning(
+                "Engine warm-up failed; will retry lazily on first tool call", exc_info=True
+            )
+
+    threading.Thread(target=_warm_engine, daemon=True, name="slowave-warm").start()
 
     # -- start server --------------------------------------------------------
     log.info(
