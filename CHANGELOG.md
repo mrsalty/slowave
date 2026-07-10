@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.14.4](https://github.com/mrsalty/slowave/compare/slowave-v0.14.3...slowave-v0.14.4) (2026-07-10)
+
+
+### Bug Fixes
+
+* correct release-please bootstrap-sha to on-main commit ([4c6a49e](https://github.com/mrsalty/slowave/commit/4c6a49ef5f24b45deab4f0cc12e676fc23cb1a42))
+* support ([9fdb5cd](https://github.com/mrsalty/slowave/commit/9fdb5cd1b65772ba8cb4e2c7ed33e52426d8ea6c))
+* support ([5090ac9](https://github.com/mrsalty/slowave/commit/5090ac9e4933f358e28a297cb4b823e1947b9978))
+* support ([3cb9450](https://github.com/mrsalty/slowave/commit/3cb945001a77c664f66da87c4a16597601b81269))
+* trigger release-please after tag relocation ([5b105fc](https://github.com/mrsalty/slowave/commit/5b105fc550159508fd751197cd1cd77dc0b3627f))
+
 ## [0.14.3](https://github.com/mrsalty/slowave/compare/slowave-v0.14.2...slowave-v0.14.3) (2026-07-10)
 
 
