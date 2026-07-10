@@ -174,11 +174,10 @@ Work in progress — suggest more integrations or report broken ones with setup 
 | Windsurf (Devin)    | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
 | Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
 | OpenCode       | ✅ | ⬜ | ⬜ | `slowave setup --client opencode`        |
-| Codex ²        | ✅ | ⬜ | ⬜ | `slowave setup --client codex`           |
+| Codex.         | ✅ | ⬜ | ⬜ | `slowave setup --client codex`           |
 | All the above  |  |  |  | `slowave setup`                          |
 
 ¹ requires one manual paste after setup
-² also covers Codex Desktop (ChatGPT app) and the Codex IDE extension — all three share the same `~/.codex/config.toml`
 
 ---
 
