@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.1](https://github.com/mrsalty/slowave/compare/slowave-v0.15.0...slowave-v0.15.1) (2026-07-10)
+
+
+### Bug Fixes
+
+* trigger release for release-please checkout race fix ([cb08d5b](https://github.com/mrsalty/slowave/commit/cb08d5b2719d066dcbd662b5a4f6320d4ffb74be))
+
 ## [0.15.0](https://github.com/mrsalty/slowave/compare/slowave-v0.14.4...slowave-v0.15.0) (2026-07-10)
 
 
