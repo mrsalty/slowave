@@ -384,7 +384,9 @@ class SlowaveEngine:
         # Without this, support_count stays 0 forever for agent-remembered facts,
         # depressing stability_score and schema_utility.
         if episode_ids:
-            self._link_session_episodes(conn=self.db.connect(), session_id=session_id, episode_ids=episode_ids)
+            self._link_session_episodes(
+                conn=self.db.connect(), session_id=session_id, episode_ids=episode_ids
+            )
 
         if consolidate:
             replay_stats = self.replay_engine.replay_once()
@@ -409,9 +411,7 @@ class SlowaveEngine:
                 }
         return stats
 
-    def _link_session_episodes(
-        self, *, conn: Any, session_id: str, episode_ids: list[int]
-    ) -> None:
+    def _link_session_episodes(self, *, conn: Any, session_id: str, episode_ids: list[int]) -> None:
         """Back-link newly-formed episodes to schemas remembered during this session.
 
         During a live session, ``remember()`` creates schemas with empty
@@ -489,12 +489,7 @@ class SlowaveEngine:
                 except (json.JSONDecodeError, TypeError):
                     payload = {}
                 existing = set(
-                    int(x)
-                    for x in (
-                        payload.get("ids", [])
-                        if isinstance(payload, dict)
-                        else []
-                    )
+                    int(x) for x in (payload.get("ids", []) if isinstance(payload, dict) else [])
                 )
                 existing.update(ep_ids)
                 conn.execute(
