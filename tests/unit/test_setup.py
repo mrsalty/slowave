@@ -31,6 +31,8 @@ from slowave.cli.setup import (
     _patch_codex_hooks,
     _patch_codex_mcp,
     _patch_mcp_servers,
+    _patch_opencode_instructions,
+    _patch_opencode_mcp,
     _read_json,
     _read_toml,
     _remove_codex_hooks,
@@ -232,6 +234,50 @@ class TestPatchCodexMcp:
         assert "# user comment" in content
         reparsed = _read_toml(target)
         assert reparsed["mcp_servers"]["slowave"]["url"] == HTTP_URL
+
+
+class TestPatchOpencodeMcp:
+    def test_adds_server_to_empty_config(self):
+        cfg, changed = _patch_opencode_mcp({})
+        assert changed is True
+        assert cfg["mcp"]["slowave"] == {"type": "remote", "url": HTTP_URL, "enabled": True}
+
+    def test_idempotent_when_present(self):
+        cfg, _ = _patch_opencode_mcp({})
+        _, changed2 = _patch_opencode_mcp(cfg)
+        assert changed2 is False
+
+    def test_preserves_other_mcp_entries(self):
+        cfg = {"mcp": {"othertool": {"type": "local", "command": ["npx"]}}}
+        cfg2, _ = _patch_opencode_mcp(cfg)
+        assert "othertool" in cfg2["mcp"]
+
+
+class TestPatchOpencodeInstructions:
+    def test_adds_path_to_empty_config(self):
+        cfg, changed = _patch_opencode_instructions({}, "/home/user/.config/opencode/slowave-instructions.md")
+        assert changed is True
+        assert cfg["instructions"] == ["/home/user/.config/opencode/slowave-instructions.md"]
+
+    def test_idempotent_when_present(self):
+        cfg, _ = _patch_opencode_instructions({}, "/path/to/instructions.md")
+        _, changed2 = _patch_opencode_instructions(cfg, "/path/to/instructions.md")
+        assert changed2 is False
+
+    def test_preserves_other_instructions_entries(self):
+        cfg = {"instructions": [".claude/CLAUDE.md"]}
+        cfg2, changed = _patch_opencode_instructions(cfg, "/path/to/slowave-instructions.md")
+        assert changed is True
+        assert cfg2["instructions"] == [".claude/CLAUDE.md", "/path/to/slowave-instructions.md"]
+
+    def test_changed_independent_of_mcp_patch(self):
+        """Regression: MCP entry already present but instructions not yet registered —
+        the instructions patch must still report changed=True so the caller persists it."""
+        cfg, _ = _patch_opencode_mcp({})
+        _, mcp_changed_again = _patch_opencode_mcp(cfg)
+        cfg, instructions_changed = _patch_opencode_instructions(cfg, "/path/to/slowave-instructions.md")
+        assert mcp_changed_again is False
+        assert instructions_changed is True
 
 
 class TestPatchCodexHooks:
