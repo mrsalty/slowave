@@ -130,6 +130,7 @@ To configure a single client, or to find client-specific details:
 | Cursor ¹ | [integrations/cursor/README.md](integrations/cursor/README.md) |
 | OpenCode | [integrations/opencode/README.md](integrations/opencode/README.md) |
 | Windsurf | [integrations/windsurf/README.md](integrations/windsurf/README.md) |
+| Codex | [integrations/codex/README.md](integrations/codex/README.md) |
 
 ¹ requires one manual paste after setup
 
@@ -173,9 +174,11 @@ Work in progress — suggest more integrations or report broken ones with setup 
 | Windsurf (Devin)    | ✅ | ✅ | ⬜ | `slowave setup --client windsurf`        |
 | Claude Desktop | ✅ | ✅ | ✅ | `slowave setup --client claude-desktop` ¹ |
 | OpenCode       | ✅ | ⬜ | ⬜ | `slowave setup --client opencode`        |
+| Codex ²        | ✅ | ⬜ | ⬜ | `slowave setup --client codex`           |
 | All the above  |  |  |  | `slowave setup`                          |
 
 ¹ requires one manual paste after setup
+² also covers Codex Desktop (ChatGPT app) and the Codex IDE extension — all three share the same `~/.codex/config.toml`
 
 ---
 

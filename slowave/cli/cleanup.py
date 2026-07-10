@@ -18,11 +18,13 @@ from slowave.cli.setup import (
     _ok,
     _opencode_instructions_path,
     _read_json,
+    _read_toml,
     _section,
     _skip,
     _strip_legacy_slowave_section,
     _warn,
     _write_json,
+    _write_toml,
 )
 
 SYSTEM = platform.system()
@@ -307,6 +309,40 @@ def _remove_mcp_configs(dry_run: bool) -> int:
     count = 0
 
     for spec in _clients():
+        if spec.key == "codex":
+            # Codex keeps the MCP entry and enforcement hooks in the same TOML
+            # file — patch both against one loaded doc and write once, same
+            # reasoning as the combined read/write in setup.py's setup loop.
+            mcp_file = spec.mcp_path()
+            if not mcp_file.exists():
+                _skip(f"{spec.label}: {mcp_file} not found")
+                continue
+            cfg = _read_toml(mcp_file)
+            changed = False
+            if "mcp_servers" not in cfg or "slowave" not in cfg["mcp_servers"]:
+                _skip(f"{spec.label}: no slowave entry in {mcp_file}")
+            else:
+                if dry_run:
+                    _ok(f"Would remove slowave MCP entry from: {mcp_file}")
+                else:
+                    del cfg["mcp_servers"]["slowave"]
+                    changed = True
+                    _ok(f"Removed slowave MCP entry from: {mcp_file}")
+            if spec.hooks_cleanup_fn is not None:
+                cfg, hooks_changed = spec.hooks_cleanup_fn(cfg)
+                if hooks_changed:
+                    if dry_run:
+                        _ok(f"Would remove slowave enforcement hooks from: {mcp_file}")
+                    else:
+                        changed = True
+                        _ok(f"Removed slowave enforcement hooks from: {mcp_file}")
+                else:
+                    _skip(f"{spec.label}: no slowave enforcement hooks in {mcp_file}")
+            if changed and not dry_run:
+                _write_toml(mcp_file, cfg)
+                count += 1
+            continue
+
         # MCP entry
         mcp_file = spec.mcp_path()
         if not mcp_file.exists():

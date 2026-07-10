@@ -424,7 +424,7 @@ tr.expandable:hover td{background:var(--panel3)}
         <option>active</option><option>needs_review</option>
         <option>contradicted</option><option>superseded</option><option>archived</option>
       </select>
-      <input id="schemaScope" placeholder="scope filter" style="width:160px"/>
+      <select id="schemaScope" style="width:180px"><option value="">(all scopes)</option></select>
       <input id="schemaQ" placeholder="search content…" style="flex:1;min-width:160px"/>
       <input id="schemaLimit" type="number" value="100" min="1" max="500" style="width:70px"/>
       <button class="btn primary" onclick="loadSchemas()">Load</button>

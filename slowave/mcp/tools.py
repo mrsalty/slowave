@@ -158,7 +158,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                     f"[cold start] No memories found for scope '{scope_label}'.\n"
                     "Recommended on cold start:\n"
                     "  1. Check for these files (in order, stop at first found): "
-                    "CLAUDE.md, README.md, AGENTS.md. Read the first one that exists.\n"
+                    "CLAUDE.md, README.md, AGENTS.override.md, AGENTS.md. Read the first one that exists.\n"
                     "  2. For each fact in that document, ask: would this be useful in any future "
                     "interaction within this scope? Can it be inferred as durable and critical — "
                     "something a future session could not assume without it? "
@@ -172,7 +172,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
                 result["suggested_actions"] = ["remember_project_facts"]
                 result["cold_start_hints"] = (
                     "Memory is empty for this scope. "
-                    "Consider reading CLAUDE.md, README.md, or AGENTS.md (whichever exists first). "
+                    "Consider reading CLAUDE.md, README.md, AGENTS.override.md, or AGENTS.md (whichever exists first). "
                     "For each fact ask: would this be useful in any future interaction within this scope? "
                     "Can it be inferred as durable and critical — something a future session could not assume without it? "
                     "If yes to both, call slowave_remember() — one call per fact, not one call per group. "

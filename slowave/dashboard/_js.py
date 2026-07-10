@@ -91,13 +91,15 @@ async function loadStatus(){
   // Init salience slider once we have data
   if(!window.salienceSliderInitialized){initSalienceSlider(d);}
 
-  // Populate scope dropdown
-  const scopeSel=document.getElementById("graphScope");
-  if(scopeSel&&d.scopes){
-    const val=scopeSel.value;
-    scopeSel.innerHTML='<option value="">(all scopes)</option>'+d.scopes.map(s=>`<option value="${esc(s.scope)}">${esc(s.scope)} (${s.sessions})</option>`).join("");
-    scopeSel.value=val;
-  }
+  // Populate scope dropdowns
+  ["graphScope","schemaScope"].forEach(id=>{
+    const scopeSel=document.getElementById(id);
+    if(scopeSel&&d.scopes){
+      const val=scopeSel.value;
+      scopeSel.innerHTML='<option value="">(all scopes)</option>'+d.scopes.map(s=>`<option value="${esc(s.scope)}">${esc(s.scope)} (${s.sessions})</option>`).join("");
+      scopeSel.value=val;
+    }
+  });
 
   const s=d.stats||{}, h=d.schema_health||{};
   const maxSal=Number(h?.active_salience?.max||1);
