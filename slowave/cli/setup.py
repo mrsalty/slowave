@@ -1418,7 +1418,15 @@ def _install_daemon_windows(slowave_bin: str) -> tuple[bool, str]:
     return _register_windows_task("SlowaveDaemon", execute, argument)
 
 
-def _verify_daemon_health(timeout: float = 15.0) -> bool:
+# Windows Task Scheduler dispatch is asynchronous (Start-ScheduledTask returns
+# before the process is actually spawned), and the daemon's first import of
+# faiss/numpy is commonly slowed further by antivirus/Defender scanning the
+# freshly-installed DLLs. 15s is routinely too short there even though the
+# daemon comes up fine a little later, so give Windows more room.
+_DAEMON_HEALTH_TIMEOUT = 45.0 if SYSTEM == "Windows" else 15.0
+
+
+def _verify_daemon_health(timeout: float = _DAEMON_HEALTH_TIMEOUT) -> bool:
     """Poll the daemon /health endpoint until it responds or *timeout* elapses.
 
     Setup previously claimed success as soon as the service files were written;
@@ -1454,9 +1462,12 @@ def _build_summary(client: str, worker: bool, install_hooks: bool, slowave_bin: 
             slowave_mcp_bin = _find_mcp_binary(slowave_bin)
             _, changed_mcp = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
         elif spec.key == "opencode":
-            _, changed_mcp = _patch_opencode_mcp(cfg)
+            cfg, changed_mcp_only = _patch_opencode_mcp(cfg)
             # Also check instructions registration
-            _, _ = _patch_opencode_instructions(cfg, str(_opencode_instructions_path().resolve()))
+            _, changed_instructions = _patch_opencode_instructions(
+                cfg, str(_opencode_instructions_path().resolve())
+            )
+            changed_mcp = changed_mcp_only or changed_instructions
         elif spec.key == "codex":
             _, changed_mcp = _patch_codex_mcp(cfg)
         else:
@@ -1753,11 +1764,12 @@ def setup_cmd(
                 cfg, changed = _patch_mcp_servers_stdio(cfg, command=slowave_mcp_bin)
                 transport_label = "stdio"
             elif spec.key == "opencode":
-                cfg, changed = _patch_opencode_mcp(cfg)
+                cfg, mcp_changed = _patch_opencode_mcp(cfg)
                 transport_label = "remote"
                 # Also register the instructions file in the config
                 instructions_path = str(_opencode_instructions_path().resolve())
-                cfg, _ = _patch_opencode_instructions(cfg, instructions_path)
+                cfg, instructions_changed = _patch_opencode_instructions(cfg, instructions_path)
+                changed = mcp_changed or instructions_changed
             else:
                 cfg, changed = _patch_mcp_servers(
                     cfg, include_type=spec.key == "claude-code", use_sse=spec.key == "cline"
@@ -1843,8 +1855,16 @@ def setup_cmd(
             if _verify_daemon_health():
                 _ok("Daemon is live: http://127.0.0.1:8766/health")
             else:
-                _err("Daemon did not respond on http://127.0.0.1:8766/health within 15s.")
+                _err(
+                    f"Daemon did not respond on http://127.0.0.1:8766/health "
+                    f"within {_DAEMON_HEALTH_TIMEOUT:g}s."
+                )
                 if SYSTEM == "Windows":
+                    _warn(
+                        "It may still come up — Task Scheduler retries this task every "
+                        "5 minutes if it isn't already running. Check: "
+                        "Get-ScheduledTask -TaskName SlowaveDaemon"
+                    )
                     _warn("Check logs: ~/.slowave/logs/pythonw-serve.log")
                 elif SYSTEM == "Linux":
                     _warn("Check logs: journalctl --user -u slowave-daemon")
