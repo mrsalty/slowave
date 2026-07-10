@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.14.3](https://github.com/mrsalty/slowave/compare/slowave-v0.14.2...slowave-v0.14.3) (2026-07-10)
+
+
+### Bug Fixes
+
+* bump manifest to 0.14.2 and fix bootstrap-sha ([f3a1183](https://github.com/mrsalty/slowave/commit/f3a118376f32d8a9c504d43bbd463106e553dba3))
+* restore missing 0.14.x CHANGELOG entries wiped by force-push ([cf9cd59](https://github.com/mrsalty/slowave/commit/cf9cd592b97772e605b9fc156e4be82cef3bfdc0))
+* set bootstrap-sha to recent commit to avoid scanning old history ([7883b77](https://github.com/mrsalty/slowave/commit/7883b77c7ecc9d6482fc23f48d9465b859ce1c4a))
+* trigger release-please for 0.14.3 ([60aa595](https://github.com/mrsalty/slowave/commit/60aa59552990fbfac9985c08cbb7858e6d5a31b0))
+
 ## [0.14.2](https://github.com/mrsalty/slowave/compare/slowave-v0.14.1...slowave-v0.14.2) (2026-07-09)
 
 
