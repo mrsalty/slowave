@@ -4,6 +4,11 @@ on:
   push:
     branches:
       - main
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing release tag to (re)publish to PyPI, e.g. slowave-v0.15.0"
+        required: true
 
 permissions:
   contents: write
@@ -25,6 +30,7 @@ jobs:
     steps:
       - name: Run Release Please
         id: release
+        if: ${{ github.event_name == 'push' }}
         uses: googleapis/release-please-action@v4
         with:
           config-file: release-please-config.json
@@ -32,22 +38,31 @@ jobs:
 
       # When a Release Please PR is merged, the action creates the tag and
       # GitHub release. Build artifacts here and attach them to that release.
-      # The existing tag-triggered release.yml remains useful for manually
-      # pushed tags; tags created by GITHUB_TOKEN do not trigger another run.
+      # `ref` is pinned to the release commit's own SHA rather than the
+      # default github.sha: a push landing on main around the same time as
+      # the release-please merge can trigger this job against a sibling
+      # commit that doesn't include the version bump yet, which fails the
+      # version-verify step below and strands the release without a PyPI
+      # publish (see slowave-v0.15.0 incident, 2026-07-10).
+      # `workflow_dispatch` with a `tag` input lets us manually (re)publish
+      # an existing tag when that happens.
       - name: Checkout repository
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || steps.release.outputs.sha }}
 
       - name: Set up Python
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
 
       - name: Verify release version
-        if: ${{ steps.release.outputs.release_created }}
+        id: verify
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
-          TAG="${{ steps.release.outputs.tag_name }}"
+          TAG="${{ github.event_name == 'workflow_dispatch' && inputs.tag || steps.release.outputs.tag_name }}"
           TAG_VERSION="${TAG#slowave-}"
           TAG_VERSION="${TAG_VERSION#v}"
           TOML_VERSION=$(python -c "import tomllib; d=tomllib.load(open('pyproject.toml','rb')); print(d['project']['version'])")
@@ -55,32 +70,34 @@ jobs:
             echo "Release tag $TAG does not match pyproject.toml version $TOML_VERSION"
             exit 1
           fi
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "version=$TAG_VERSION" >> "$GITHUB_OUTPUT"
 
       - name: Build package
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
           python -m pip install --upgrade pip build
           python -m build
 
       - name: Publish package to PyPI
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
           pip install "twine>=6.1"
-          twine upload dist/* --non-interactive
+          twine upload dist/* --non-interactive --skip-existing
         env:
           TWINE_USERNAME: __token__
           TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
 
       - name: Upload artifacts to GitHub release
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: gh release upload "${{ steps.release.outputs.tag_name }}" dist/* --clobber
+        run: gh release upload "${{ steps.verify.outputs.tag }}" dist/* --clobber
 
       - name: Update Homebrew formula
-        if: ${{ steps.release.outputs.release_created }}
+        if: ${{ steps.release.outputs.release_created == 'true' || github.event_name == 'workflow_dispatch' }}
         run: |
-          VERSION="${{ steps.release.outputs.version }}"
+          VERSION="${{ steps.verify.outputs.version }}"
           URL="https://files.pythonhosted.org/packages/source/s/slowave/slowave-${VERSION}.tar.gz"
           SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
           sed -i "s|url \".*\"|url \"$URL\"|"       Formula/slowave.rb
