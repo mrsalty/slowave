@@ -242,7 +242,9 @@ def main(
             _build_engine()
             log.info("Engine warmed up; DB ready at %s", DEFAULT_DB)
         except Exception:
-            log.warning("Engine warm-up failed; will retry lazily on first tool call", exc_info=True)
+            log.warning(
+                "Engine warm-up failed; will retry lazily on first tool call", exc_info=True
+            )
 
     threading.Thread(target=_warm_engine, daemon=True, name="slowave-warm").start()
 
