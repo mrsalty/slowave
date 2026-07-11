@@ -6,8 +6,10 @@ Install once. Your AI tools share a persistent local memory across sessions and 
 
 Slowave continuously adapts to your work — capturing decisions, preferences, and context over time.
 
-- No additional LLM calls for memory operations
-- No data leaves your machine
+- **Latent-space memory—not another vector store**
+- **Lifelong learning through consolidation and decay**
+- **No LLM API key required**
+- **100% local. €0 forever.**
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
@@ -202,15 +204,10 @@ Full benchmark methodology and reproducibility details:
 
 ## Honest limits
 
-Slowave is useful in practice but intentionally constrained by its design.
-
 - It recalls stored information; it does not infer missing preferences.
-- It retrieves relevant memories; it does not perform reasoning over memory graphs.
+- It retrieves relevant memories; it does not perform reasoning.
 - Contradiction handling is heuristic and may not always resolve conflicts correctly.
-- It is not designed for safety-critical or compliance-critical memory use cases.
 - Memory quality depends on the quality and consistency of prior interactions.
-
-These limitations are a direct consequence of the zero-LLM memory design rather than implementation gaps.
 
 See: [docs/limitations.md](docs/limitations.md)
 
