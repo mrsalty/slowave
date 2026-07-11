@@ -6,10 +6,10 @@ Install once. Your AI tools share a persistent local memory across sessions and 
 
 Slowave continuously adapts to your work — capturing decisions, preferences, and context over time.
 
-- **Latent-space evolving memory, not yet another LLM summarizer or static vector store**
-- **Lifelong learning through consolidation and decay**
-- **No LLM API key required. €0 token cost**
-- **100% local. No data leaves your machine**
+- Latent-space evolving memory, not yet another LLM summarizer or static vector store.
+- Lifelong learning through consolidation and decay.
+- No LLM API key required. €0 token cost.
+- 100% local. No data leaves your machine.
 
 [![PyPI](https://img.shields.io/pypi/v/slowave?color=2f6f4e)](https://pypi.org/project/slowave/)
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
