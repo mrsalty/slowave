@@ -15,7 +15,6 @@ Slowave continuously adapts to your work — capturing decisions, preferences, a
 [![Python](https://img.shields.io/badge/python-3.11%2B-4c6f91)](https://pypi.org/project/slowave/)
 [![PyPI Status](https://img.shields.io/pypi/status/slowave?color=orange)](https://pypi.org/project/slowave/)
 [![License: AGPL-3.0-or-later](https://img.shields.io/badge/license-AGPL--3.0--or--later-blue.svg)](LICENSE)
-[![Downloads](https://static.pepy.tech/badge/slowave)](https://pepy.tech/project/slowave)
 
 ---
 
