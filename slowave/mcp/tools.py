@@ -18,6 +18,7 @@ from typing import Any, Callable
 from mcp.server.fastmcp import FastMCP
 
 import slowave.ops as ops
+from slowave.core.config import DEFAULT_RECALL_TOP_K
 from slowave.mcp import session_resolver
 
 log = logging.getLogger(__name__)
@@ -195,7 +196,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
     @mcp.tool(name="slowave_recall")
     async def slowave_recall(
         query: str,
-        top_k: int = 5,
+        top_k: int = DEFAULT_RECALL_TOP_K,
         evidence: bool = False,
         scope: str | None = None,
         mode: str = "default",
@@ -207,7 +208,7 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         scope=\"project:<name>\" when working within a specific project.
         Args:
             query: natural-language query.
-            top_k: max memories returned (default 5).
+            top_k: max memories returned (default 20).
             evidence: if true, include source raw events for provenance.
             scope: optional scope filter (e.g. \"project:myrepo\"). Recommended.
             mode: \"default\" (active only), \"strict_scope\" (scope-hard-filtered),

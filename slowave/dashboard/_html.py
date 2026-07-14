@@ -491,7 +491,7 @@ tr.expandable:hover td{background:var(--panel3)}
     <textarea id="recallQuery" rows="3" style="width:100%;margin-bottom:10px" placeholder="Enter a query — what should Slowave remember about this?"></textarea>
     <div class="controls">
       <label style="font-size:13px;color:var(--muted)">Top-K</label>
-      <input id="recallTopK" type="number" value="5" min="1" max="20" style="width:60px"/>
+      <input id="recallTopK" type="number" value="20" min="1" max="50" style="width:60px"/>
       <label class="pill"><input id="recallEvidence" type="checkbox" checked> evidence</label>
       <button class="btn primary" onclick="runRecall()">Run recall</button>
     </div>

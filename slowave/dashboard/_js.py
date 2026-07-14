@@ -1020,7 +1020,7 @@ async function selectGraphNode(n,el){
 async function runRecall(){
   const query=document.getElementById("recallQuery").value.trim();
   if(!query)return;
-  const top_k=parseInt(document.getElementById("recallTopK").value)||5;
+  const top_k=parseInt(document.getElementById("recallTopK").value)||20;
   const evidence=document.getElementById("recallEvidence").checked;
   const ld=document.getElementById("recallLoading");
   const res=document.getElementById("recallResults");

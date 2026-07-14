@@ -70,16 +70,6 @@ One optional component has English-only defaults and falls back gracefully:
 
 - **Temporal anchor probe** — compares query embeddings against pre-embedded English landmark phrases ("last month", "two weeks ago"). For non-English queries the probe does not fire and the system defaults to "now", which is correct for atemporal queries and slightly suboptimal for past-anchored ones.
 
-**Multi-language support** (per-language temporal probes, multilingual embedding model selection) is planned for a future release.
-
----
-
-## Deployment limits
-
-- **Single-user, local only.** Slowave is designed for one user on one machine. The SQLite storage layer is not designed for concurrent multi-user writes or cloud deployment.
-- **English-first embeddings.** The default embedding model (`sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2`) is trained primarily on English text. Non-English memory quality depends on the chosen embedding model.
-- **No reasoning layer.** Slowave is a retrieval system. It surfaces relevant memories; it does not reason about them, synthesize answers, or draw conclusions.
-
 ---
 
 ## Alpha status

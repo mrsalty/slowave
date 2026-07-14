@@ -292,7 +292,7 @@ class ReplayEngine:
             losses.append(self.transition_model.train_batch(e_t[idx], e_next[idx]))
         return float(np.mean(losses))
 
-    def replay_once(self) -> dict[str, float]:
+    def replay_once(self) -> dict[str, Any]:
         # Apply time decay before sampling.
         now = int(time.time())
         conn = self.db.connect()
@@ -311,7 +311,7 @@ class ReplayEngine:
         sampled_ids = self.salience.sample_proportional(ids_and_salience, self.cfg.sample_size)
         X = self.episodic.load_embeddings(sampled_ids)
         if X.shape[0] == 0:
-            return {"replay_sampled": 0, "transition_loss": 0.0}
+            return {"replay_sampled": 0, "transition_loss": 0.0, "touched_prototype_ids": []}
 
         # consolidation: create/update prototypes + mapping
         # Stage 9: assign at both scales in parallel. The two graphs
@@ -397,6 +397,7 @@ class ReplayEngine:
         return {
             "replay_sampled": float(len(sampled_ids)),
             "prototypes_touched": float(len(touched)),
+            "touched_prototype_ids": list(touched),
             "transition_loss": float(transition_loss),
         }
 

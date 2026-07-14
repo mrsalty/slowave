@@ -68,7 +68,13 @@ class ConsolidationService:
             consolidation: dict[str, Any] = {}
             reconsolidation: dict[str, Any] = {}
             if self.consolidator is not None:
-                protos = self._ingest.prototypes_for_episodes([])
+                # Consolidate only the prototypes this replay pass actually
+                # touched (new/updated episode assignments), not every
+                # prototype in the store — reprocessing untouched prototypes
+                # every tick re-triggers their near-duplicate "reinforces"
+                # verdict against an unchanged schema, inflating salience
+                # indefinitely with no new evidence behind it.
+                protos = replay_stats.get("touched_prototype_ids", [])
                 cs = self.consolidator.consolidate(prototype_ids=protos)
                 consolidation = dataclasses.asdict(cs)
                 # Reconsolidation (2026-07-10): re-examine labile schemas
