@@ -14,6 +14,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any
 
+from slowave.core.config import DEFAULT_RECALL_TOP_K
 from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate, WorkingMemoryState
 from slowave.core.scope import normalize_scope
 from slowave.latent.episodic_store import EpisodicStore
@@ -131,15 +132,24 @@ class RetrievalService:
         self,
         query: str,
         *,
-        top_k: int = 5,
+        top_k: int = DEFAULT_RECALL_TOP_K,
         evidence: bool = False,
         mode: str = "default",
         scope: str | None = None,
         diagnose: bool = False,
+        refresh: bool = True,
     ) -> RecallResult:
+        """
+        refresh: rebuild the in-memory FAISS indices from SQLite before
+        retrieving. This is an O(N) full-table scan (see refresh_indices),
+        so callers who know no episodes/schemas were added since their last
+        recall() on this engine (e.g. probing the same query at several
+        top_k values back-to-back) can pass False to skip the redundant work.
+        """
         if self.encoder is None:
             raise RuntimeError("recall requires an encoder; cfg.disable_encoder=True")
-        self.refresh_indices()
+        if refresh:
+            self.refresh_indices()
         q = self.encoder.encode(query)
 
         retrieval_pipeline = self.retrieval

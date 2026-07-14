@@ -39,7 +39,7 @@ import click
 import slowave.ops as ops
 from slowave.cli.output import safe_emoji
 from slowave.cli.setup import setup_cmd
-from slowave.core.config import SlowaveConfig
+from slowave.core.config import DEFAULT_RECALL_TOP_K, SlowaveConfig
 from slowave.core.engine import SlowaveEngine
 from slowave.core.paths import default_db_path
 from slowave.symbolic.encoder import EncoderConfig
@@ -205,7 +205,7 @@ def remember_cmd(
     show_default=True,
     type=click.Choice(["default", "strict_scope", "broad", "debug"]),
 )
-@click.option("--top-k", default=5, show_default=True)
+@click.option("--top-k", default=DEFAULT_RECALL_TOP_K, show_default=True)
 @click.option("--evidence", is_flag=True, help="Include raw event citations.")
 @click.pass_context
 def recall_cmd(

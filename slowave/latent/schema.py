@@ -352,9 +352,18 @@ class LatentSchemaBuilder:
             mean_ts = int(time.time())
             ts_span = 0
 
-        # central member (closest to centroid)
-        sims = embs @ cen / (np.linalg.norm(embs, axis=1) * (np.linalg.norm(cen) + 1e-12) + 1e-12)
-        central_idx = int(np.argmax(sims))
+        # central member — prefer the most recent episode (highest timestamp)
+        # so schema content_text reflects the latest information, not a
+        # geometrically-average episode that can surface stale values when
+        # old and new facts cluster together (e.g. knowledge updates).
+        # Falls back to centroid-closest when timestamps are unavailable.
+        if member_timestamps:
+            central_idx = int(np.argmax(ts_arr))
+        else:
+            sims = (
+                embs @ cen / (np.linalg.norm(embs, axis=1) * (np.linalg.norm(cen) + 1e-12) + 1e-12)
+            )
+            central_idx = int(np.argmax(sims))
         central_episode_id = int(member_episode_ids[central_idx])
         # Prefer source_content (raw, no role prefix) as the schema claim.
         # Falls back to content_text for legacy rows that predate source_content.

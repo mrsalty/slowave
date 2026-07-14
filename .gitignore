@@ -51,7 +51,7 @@ htmlcov/
 tests/wiki_scenarios/results/
 # Benchmark run outputs (keep datasets, not results)
 data/*/runs/
-data/runs/
+data/suite_runs/
 data/benchmark_regression_test/
 data/longmemeval/debug_dbs/
 data/dmr_original/
@@ -68,6 +68,7 @@ data/dmr_original/msc_self_instruct.jsonl
 data/stalememory/scenarios.jsonl
 data/stalememory/manifest.json
 data/locomo/locomo10.json
+data/beam/beam_*
 
 # Private working docs
 

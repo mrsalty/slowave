@@ -131,17 +131,10 @@ class IngestService:
         return made
 
     def prototypes_for_episodes(self, episode_ids: list[int]) -> list[int]:
-        """Return prototype IDs that have any of the given episodes mapped to them.
-
-        When episode_ids is empty, returns all prototypes that have any mapping
-        (used by consolidate_once to process all current prototypes).
-        """
-        conn = self.db.connect()
+        """Return prototype IDs that have any of the given episodes mapped to them."""
         if not episode_ids:
-            rows = conn.execute(
-                "SELECT DISTINCT prototype_id FROM episode_prototype_map"
-            ).fetchall()
-            return [int(r["prototype_id"]) for r in rows]
+            return []
+        conn = self.db.connect()
         ph = ",".join(["?"] * len(episode_ids))
         rows = conn.execute(
             f"SELECT DISTINCT prototype_id FROM episode_prototype_map "

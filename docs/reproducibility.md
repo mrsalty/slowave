@@ -8,9 +8,8 @@ This document describes how to reproduce the benchmark numbers in [docs/benchmar
 |---|---|
 | Python | 3.11+ |
 | Slowave | latest (`pip install slowave`) |
-| Hardware | Mac M-series CPU; x86-64 Linux should work |
 | RAM | ≥ 8 GB recommended |
-| LLM required | No |
+| LLM required | No (LLM-judge scoring is optional, requires API key) |
 
 Run `slowave doctor` after installing to verify all dependencies load correctly.
 
@@ -32,39 +31,43 @@ bash scripts/download_datasets.sh stalememory  # 13 MB synthetic
 ### LongMemEval
 - **Source:** https://github.com/xiaowu0162/LongMemEval (check license before redistributing)
 - **Files after download:**
-  - `data/longmemeval/longmemeval_oracle.json` — 500 questions, evidence-only sessions, fast regression guard
+  - `data/longmemeval/longmemeval_oracle.json` — 500 questions, evidence-only sessions
   - `data/longmemeval/longmemeval_s_cleaned.json` — 500 questions, ~48 sessions/question with distractors, full haystack
 
 ### LoCoMo
 - **Source:** https://snap-stanford.github.io/locomo/ (ACL 2024, public)
-- **File after download:** `data/locomo/locomo10.json` — 1986 questions, 5 categories, 10 conversations
+- **File after download:** `data/locomo/locomo10.json` — 1,986 questions, 5 categories, 10 conversations
 
 ### DMR (MSC-Self-Instruct)
 - **Source:** https://huggingface.co/datasets/MemGPT/MSC-Self-Instruct (Apache-2.0)
 - **File after download:** `data/dmr_original/msc_self_instruct.jsonl` — 500 records
 
 ### StaleMemory
-- **Source:** Synthetically generated benchmark (EMNLP 2026, under review)
+- **Source:** Synthetically generated benchmark
 - **File after download:** `data/stalememory/scenarios.jsonl` — 1,200 scenarios, 8 attributes × 3 drift patterns
 - Deterministically generated; no LLM required to reproduce it.
 
 ## Running benchmarks
 
-Evaluation harnesses are in `tests/integration/`. The currently reported headline suite uses `--no-consolidate` for the zero-LLM episodic/latent retrieval path; omit it only when intentionally testing consolidation variants.
+Evaluation harnesses are in `tests/benchmarks/`. All benchmarks use **engine defaults** with consolidation enabled — no `--top-k`, `--assignment-threshold`, or `RetrievalConfig` overrides. This matches production behavior.
 
-### Run the full suite (all four benchmarks)
+### Run the full suite (keyword-overlap, no LLM judge)
 
 ```bash
-# Full run (~40 min, all datasets must be present)
-python tests/integration/run_full_benchmark.py
+
+# Full run no llm-judge (all datasets but BEAM must be present)
+python tests/benchmarks/run_full_benchmark.py --no-llm
+
+# Full run (needs `OPENROUTER_API_KEY` for llm-judge, all datasets must be present)
+python tests/benchmarks/run_full_benchmark.py
 
 # Quick smoke across all benchmarks (~5 min)
-python tests/integration/run_full_benchmark.py --limit 5
+python tests/benchmarks/run_full_benchmark.py --limit 1
 
 # Skip a specific benchmark
-python tests/integration/run_full_benchmark.py --skip stalememory
+python tests/benchmarks/run_full_benchmark.py --skip stalememory
 
-# Results saved to data/runs/<timestamp>/summary.json
+# Results saved to data/suite_runs/<timestamp>/summary.json
 ```
 
 ### Smoke test (no dataset required)
@@ -75,158 +78,91 @@ pytest tests/unit -q
 # Expected: 100+ tests pass in < 60 seconds
 ```
 
-### LongMemEval — episode-only baseline (~2-3 min)
+### LongMemEval (keyword-overlap)
 
 ```bash
-python tests/integration/longmemeval_eval.py \
-  --dataset data/longmemeval/longmemeval_oracle.json \
-  --no-consolidate \
-  --out data/longmemeval/runs/my_lme_episode_only.json
+# Full haystack with consolidation (canonical run, ~10 min)
+python tests/benchmarks/longmemeval_eval.py   --dataset data/longmemeval/longmemeval_s_cleaned.json   --consolidate   --out data/longmemeval/runs/my_lme.json
 ```
 
-Expected: **~60.2%** overall, 0 LLM calls.
+Expected: **~87.8%** keyword-overlap, 0 LLM calls.
 
-### LongMemEval — oracle canonical run (~8 min)
+### LongMemEval (LLM-judge)
 
 ```bash
-python tests/integration/longmemeval_eval.py \
-  --dataset data/longmemeval/longmemeval_oracle.json \
-  --assignment-threshold 0.85 \
-  --top-k 10 \
-  --no-consolidate \
-  --out data/longmemeval/runs/my_lme_oracle.json
+# Semantic grading with deepseek-v4-flash (~5 min + API time)
+python tests/benchmarks/longmemeval_eval.py   --dataset data/longmemeval/longmemeval_s_cleaned.json   --consolidate   --judge-model deepseek-v4-flash   --out data/longmemeval/runs/my_lme_judge.json
 ```
 
-Expected: **~87.8%** overall, 0 LLM calls.
-Per-category: knowledge-update ~94.9%, multi-session ~79.7%, temporal ~87.2%, single-session-pref ~76.7%.
+Expected: **~55.8%** LLM-judge, 500 API calls. Requires `OPENROUTER_API_KEY`.
 
-### LongMemEval — fullhaystack canonical run (~2.3 h)
+### LoCoMo (keyword-overlap)
 
 ```bash
-python tests/integration/longmemeval_eval.py \
-  --dataset data/longmemeval/longmemeval_s_cleaned.json \
-  --assignment-threshold 0.85 --top-k 10 \
-  --out data/longmemeval/runs/my_lme_fullhaystack.json
+# With consolidation (canonical run, ~3 min)
+python tests/benchmarks/locomo_eval.py   --dataset data/locomo/locomo10.json   --consolidate   --out data/locomo/runs/my_locomo.json
 ```
 
-Expected: **~93.4%** overall, 0 LLM calls.
-Per-category: knowledge-update ~94.9%, multi-session ~86.5%, temporal ~96.2%, single-session-pref **~100% (windfall artefact — treat oracle 76.7% as the conservative number for this category)**.
-Ingest: ~16.4 s/question, ~14.7 MB DB/question. Total: ~2.3 h for n=500.
+Expected: **~85.75%** keyword-overlap, 0 LLM calls.
 
-> Requires `longmemeval_s_cleaned.json`. Download from https://github.com/xiaowu0162/LongMemEval and place at `data/longmemeval/longmemeval_s_cleaned.json`.
-
-### LoCoMo — episode-only baseline (~1 min)
+### LoCoMo (LLM-judge)
 
 ```bash
-python tests/integration/locomo_eval.py \
-  --dataset data/locomo/locomo10.json \
-  --no-consolidate \
-  --out data/locomo/runs/my_locomo_episode_only.json
+python tests/benchmarks/locomo_eval.py   --dataset data/locomo/locomo10.json   --consolidate   --judge-model deepseek-v4-flash   --out data/locomo/runs/my_locomo_judge.json
 ```
 
-Expected: **~74.6%** overall, 0 LLM calls.
+Expected: **~69.3%** LLM-judge, 1,540 API calls. Requires `OPENROUTER_API_KEY`.
 
-### LoCoMo — canonical run (~3 min)
+### DMR
 
 ```bash
-python tests/integration/locomo_eval.py \
-  --dataset data/locomo/locomo10.json \
-  --assignment-threshold 0.85 \
-  --no-consolidate \
-  --out data/locomo/runs/my_locomo.json
+python tests/benchmarks/dmr_original_eval.py   --dataset data/dmr_original/msc_self_instruct.jsonl   --consolidate   --out data/dmr_original/runs/my_dmr.json
 ```
 
-Expected: **~81%** total, adversarial ~91%, multi-session ~86%, 0 LLM calls.
+Expected: **~99.0%** keyword-overlap, 0 LLM calls. Near-ceiling retrieval benchmark.
 
-### StaleMemory -- implicit belief staleness
+### StaleMemory
 
 ```bash
-# Sample run (120 scenarios, ~80s on M-series)
-python tests/integration/stalememory_eval.py \
-  --limit 5 \
-  --out data/stalememory/runs/my_stale_sample.json
-
-# Full run (1,200 scenarios, ~15 min)
-python tests/integration/stalememory_eval.py \
-  --out data/stalememory/runs/my_stale_full.json
+python tests/benchmarks/stalememory_eval.py   --dataset data/stalememory/scenarios.jsonl   --consolidate   --out data/stalememory/runs/my_stalememory.json
 ```
 
-Expected (sample, 120 scenarios with synthetic timestamp injection):
-- **Detection rate: ~37–43%** (post-drift value recalled correctly), 0 LLM calls
-- Stale persistence: ~38% (pre-drift anchor recalled instead)
-- No answer: ~19–25%
+Expected: **~39.5%** detection overall, 0 LLM calls.
+Per-attribute range: 0% (`explanation_approach`, `example_scope`, `error_handling`) to 100% (`programming_language`).
+Timestamps are injected automatically (sessions spread over 180-day window) to activate salience decay and temporal recency.
 
-Full run (1 200 scenarios) expected: **~46% detection**, 0 LLM calls.
-
-Timestamps are injected automatically (sessions spread over 180-day window). This activates salience decay and the temporal recency bonus. Per-attribute range: 0% (`explanation_approach`, `example_scope`) to 100% (`programming_language`, `naming_convention`).
-
-### Original MemGPT DMR source candidate — retrieval-context metric
-
-Download source data from Hugging Face:
+### BEAM (LLM-judge only)
 
 ```bash
-mkdir -p data/dmr_original
-curl -L -o data/dmr_original/token_efficiency.md \
-  https://huggingface.co/datasets/MemGPT/MSC-Self-Instruct/resolve/main/README.md
-curl -L -o data/dmr_original/msc_self_instruct.jsonl \
-  https://huggingface.co/datasets/MemGPT/MSC-Self-Instruct/resolve/main/msc_self_instruct.jsonl
+# Full run (~2 h, requires OPENROUTER_API_KEY)
+python tests/benchmarks/beam_eval.py   --consolidate   --judge-model deepseek-v4-flash   --workers 6   --out data/beam/runs/my_beam.json
 ```
 
-Run the retrieval-context evaluator:
+Expected: **~41.6%** LLM-judge with ≤4.1% parse-error rate. BEAM measures retrieval + answer-generation as a compound score — Recall@20 is 97–100% across all categories. See [docs/benchmarks.md](benchmarks.md) for the retrieval-vs-reasoning distinction.
 
-```bash
-python tests/integration/dmr_original_eval.py \
-  --dataset data/dmr_original/msc_self_instruct.jsonl \
-  --out data/dmr_original/runs/my_dmr_original_retrieval.json
-```
+## Configuration
 
-Expected: **~86–87%** retrieval-context keyword hit-rate over 500 records in the latest full-suite runs (older standalone runs reached ~91%), 0 LLM calls, ~6–18 ms recall. This is **not** the published MemGPT/Zep generated-answer + LLM-judge protocol.
+All benchmarks use **engine defaults** — no `--top-k`, `--assignment-threshold`, or `RetrievalConfig` overrides. The engine is tested as a black box, matching production behavior. BEAM uses its own sanctioned overrides (`assignment_threshold=0.65`, `max_prototypes_per_replay=64`) for dense 1,700-message conversations.
 
-### Cosine-only ablation (disables all brain mechanisms)
-
-```bash
-python tests/integration/longmemeval_eval.py \
-  --dataset data/longmemeval/longmemeval_oracle.json \
-  --no-graph-expansion \
-  --no-salience-rerank \
-  --out data/longmemeval/runs/my_cosine_ablation.json
-```
-
-Expected: approximately equal to episode-only baseline (~60%).
-
-## Configuration used for reported numbers
-
-Default `SlowaveConfig` with all retrieval parameters at defaults:
+Core retrieval parameters at defaults:
 
 | Parameter | Value |
 |---|---|
-| `use_spreading` | `True` |
-| `spread_steps` | 2 |
-| `use_multi_scale` | `True` |
-| `use_temporal` | `True` |
-| `temporal_weight` | 0.25 |
-| `use_transition` | `True` |
+| `episodic_top_k` | 10 |
+| `spread_episodic_top_k` | 10 |
+| `semantic_top_k` | 6 |
+| `neighbor_top_k` | 6 |
+| `episodes_per_prototype` | 6 |
+| `use_spreading` | True |
+| `use_temporal` | True |
+| `use_transition` | True |
 
 ## Reproducibility caveats
 
 1. **FAISS tie-breaks** may differ on different hardware, affecting <1% of questions.
 2. **Embedding model version**: if `sentence-transformers` downloads a different model revision the scores may shift slightly. Pin to a specific commit if exact reproduction is required.
 3. **Dataset version**: numbers are for LongMemEval and LoCoMo as of April–May 2026.
-4. **consolidation=True runs are per-question**: each question gets its own fresh DB; the consolidation step runs inline. This matches how an agent would actually use Slowave in production.
-
-## Expected numbers at a glance
-
-| Benchmark | Config | Expected score |
-|---|---|---|
-| LongMemEval (oracle) | episode-only, `--no-consolidate` | ~60.2% |
-| LongMemEval (oracle) | default (`--assignment-threshold 0.85 --top-k 10`) | **~87.8%** |
-| LongMemEval (full haystack) | `--assignment-threshold 0.85 --top-k 10` | not maintained† |
-| LoCoMo | `--no-consolidate` (episode-only) | ~74.6% |
-| LoCoMo | `--assignment-threshold 0.85` (with consolidation) | **~74.6%** |
-| DMR | default | **~93–94%** |
-| StaleMemory | full, ts-injected | **~45% detection overall; 86–99% concrete prefs** |
-
-† Full haystack runs were previously used to produce the 93.4% headline figure, but are not part of the standard CI run (takes ~2.3 h) and results were affected by a consolidation artefact in some categories. The oracle split (87.8%) is the canonical reproducible number.
+4. **Consolidation runs are per-question**: each question gets its own fresh DB; the consolidation step runs inline. This matches how an agent would actually use Slowave in production.
 
 ---
 

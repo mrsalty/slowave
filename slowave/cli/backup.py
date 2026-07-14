@@ -294,6 +294,21 @@ def restore_cmd(
     except Exception:
         pass
 
+    # WAL/SHM sidecars are keyed by the main db file's path, not its content.
+    # Leftovers from the pre-restore DB would otherwise get replayed against
+    # the just-restored file — a structural mismatch SQLite reports as
+    # "database disk image is malformed". Clear them before touching dest.
+    sidecars = [Path(str(dest) + suf) for suf in ("-wal", "-shm", "-journal")]
+
+    def _clear_sidecars() -> None:
+        for p in sidecars:
+            try:
+                p.unlink()
+            except FileNotFoundError:
+                pass
+
+    _clear_sidecars()
+
     # Backup current DB before overwriting.
     bak_path = Path(str(dest) + ".bak")
     if dest.exists():
@@ -313,7 +328,12 @@ def restore_cmd(
             shutil.move(str(bak_path), str(dest))
         elif bak_path.exists() and dest.exists():
             shutil.move(str(bak_path), str(dest))
+        _clear_sidecars()
         raise click.ClickException(f"Restore failed: {exc}")
+
+    # The restored file starts fresh — any sidecars written mid-copy (or
+    # still lingering from the pre-restore DB) must not carry over.
+    _clear_sidecars()
 
     # Verify the restored file is a valid SQLite database.
     try:
@@ -323,6 +343,7 @@ def restore_cmd(
     except sqlite3.Error as exc:
         if bak_path.exists():
             shutil.move(str(bak_path), str(dest))
+        _clear_sidecars()
         raise click.ClickException(f"Restored file is not a valid SQLite database: {exc}")
 
     elapsed_ms = int((time.monotonic() - started) * 1000)

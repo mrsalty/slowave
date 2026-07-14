@@ -70,6 +70,7 @@ slowave = ["storage/schema.sql"]
 
 [tool.black]
 line-length = 100
+target-version = ["py311"]
 
 [tool.isort]
 profile = "black"
@@ -113,9 +114,7 @@ markers = [
 "slowave/mcp/http_server.py" = ["E402"]
 "slowave/mcp/server.py" = ["E402"]
 "tests/experiments/*.py" = ["E402"]
-"tests/integration/*.py" = ["E402"]
-"tests/temporal_eval/*.py" = ["E402"]
-"tests/wiki_scenarios/*.py" = ["E402"]
+"tests/benchmarks/*.py" = ["E402"]
 "tests/unit/test_setup.py" = ["E402"]
 "tests/unit/test_supersession_geometry.py" = ["E402"]
 "tests/unit/test_vsa.py" = ["E402"]
@@ -127,4 +126,6 @@ dev = [
     "isort",
     "mypy>=2.1.0",
     "pytest>=9.0.3",
+    "openai>=1.0",
+    "pyarrow>=14.0",
 ]

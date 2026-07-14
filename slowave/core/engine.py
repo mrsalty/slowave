@@ -15,7 +15,7 @@ from typing import Any
 
 import numpy as np
 
-from slowave.core.config import SlowaveConfig
+from slowave.core.config import DEFAULT_RECALL_TOP_K, SlowaveConfig
 from slowave.core.consolidation import Consolidator
 from slowave.core.context import WorkingMemoryGate, WorkingMemoryState
 from slowave.core.scope import normalize_scope, scope_kind
@@ -838,14 +838,21 @@ class SlowaveEngine:
         self,
         query: str,
         *,
-        top_k: int = 5,
+        top_k: int = DEFAULT_RECALL_TOP_K,
         evidence: bool = False,
         scope: str | None = None,
         mode: str = "default",
         diagnose: bool = False,
+        refresh: bool = True,
     ) -> RecallResult:
         return self._retrieval.recall(
-            query, top_k=top_k, evidence=evidence, scope=scope, mode=mode, diagnose=diagnose
+            query,
+            top_k=top_k,
+            evidence=evidence,
+            scope=scope,
+            mode=mode,
+            diagnose=diagnose,
+            refresh=refresh,
         )
 
     def context(self, *, scope: str | None = None, limit: int = 10) -> list[Schema]:

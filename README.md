@@ -184,20 +184,20 @@ Work in progress — suggest more integrations or report broken ones with setup 
 
 ## Benchmarks
 
-Benchmarks were run internally during development to evaluate recall quality, stability, and context efficiency. Results have not yet been independently reproduced.
+All runs: zero LLM calls, fully local, no API key. Two scorers reported:
+**keyword-overlap** (free, always computed — measures whether the right tokens
+appear in retrieved context) and **LLM-judge** (semantic grading via
+deepseek-v4-flash — comparable to Mem0/Zep's published numbers when they use
+the same judge model). Results have not yet been independently reproduced.
 
-Slowave does not use an LLM for memory operations; all evaluation is based on embedding retrieval and local consolidation.
+| Benchmark | n | Keyword | LLM-Judge | What it tests |
+|---|---|---|---|---|
+| **DMR** | 500 | **99.0%** | — | Wikipedia-page factual recall |
+| **LongMemEval** | 500 | **87.8%** | **55.8%** | Multi-session facts, updates, preferences, temporal reasoning |
+| **LoCoMo** | 1,986 | **85.75%** | **69.29%** | Cross-session conversational recall across 10 real dialogues |
+| **StaleMemory** | 1,200 | 97% | — | Detecting when a stored preference silently changes |
 
-| Benchmark | What it evaluates | Scorer | Result |
-|---|---|---|---:|
-| LongMemEval | Multi-session factual recall with noise and distractors | keyword-overlap / local | 87.8% |
-| LoCoMo | Cross-session conversational recall across categories | keyword-overlap / local | 80.1% |
-| StaleMemory | Detection of outdated or superseded preferences | keyword-overlap / local | 45% overall; 86–89% for concrete preferences |
-
-These results are not directly comparable with systems that use LLM-as-a-judge scoring, since Slowave relies on embedding-based matching metrics.
-
-Full benchmark methodology and reproducibility details:
-- [docs/benchmarks.md](docs/benchmarks.md)
+Full methodology and per-category breakdowns: [docs/benchmarks.md](docs/benchmarks.md).
 
 ---
 

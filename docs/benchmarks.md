@@ -1,125 +1,168 @@
 # Slowave Benchmarks
 
 > **Alpha-stage results.** Internal runs, not independently verified. Treat as directional.
-> Reproduction scripts and full run conditions: [docs/reproducibility.md](reproducibility.md)
+> Reproduction scripts: [docs/reproducibility.md](reproducibility.md)
 
-**Scorer note.** Slowave uses keyword-overlap (is the right answer present in what was retrieved?).
-Most competitors use an LLM-as-judge. Numbers are not directly comparable across scorers — each benchmark section calls this out explicitly.
-All Slowave runs: **zero LLM calls**, local CPU, no API key required.
+**Scoring.** Two independent scorers, tracked separately:
+- **Keyword-overlap** — free, zero-cost, always computed. Measures whether rubric tokens appear in retrieved context. Stricter than LLM-judge (no credit for correct semantics with different wording).
+- **LLM-judge** (`--judge-model deepseek-v4-flash`) — semantic grading of each rubric nugget as correct/incorrect. Same protocol Mem0 and Zep use. Costs API tokens. Only metric comparable to competitor published numbers.
+
+All Slowave runs: **zero LLM calls for memory operations**, fully local, no API key required (except the optional LLM-judge scoring step).
 
 ---
 
 ## At a Glance
 
-| Benchmark | What it tests | Slowave | Best LLM-based competitor |
-|---|---|---:|---|
-| **LongMemEval** | Facts, updates, preferences across many sessions with realistic distractors | **87.8%** | Mem0 94.4%† |
-| **LoCoMo** | Cross-session recall across real conversations, 5 categories | **80.1%** | Mem0 92.5%‡ |
-| **StaleMemory** *(concrete prefs)* | Detecting when a stored preference has silently changed | **86–89%** | no published baseline |
-
-† Mem0 uses GPT-5 as judge; Slowave uses keyword-overlap. Scores are not directly comparable across these two protocols.
-‡ Mem0's LoCoMo number is self-reported and flagged by Zep as potentially reflecting a different evaluation protocol. Every independently verified competitor scores below Slowave.
-
-**Bottom line:** Slowave delivers competitive fact recall with zero LLM calls, fully local, at $0 per query. The remaining gaps vs LLM-based systems are in implicit preference inference (−20 pp vs Mem0) and behavioral style drift (0–1%), both of which require LLM reasoning that Slowave deliberately avoids. [See known gaps →](#-known-limitations)
+| Benchmark | n | Keyword | LLM-Judge | What it tests |
+|---|---|---|---|---|
+| **DMR** | 500 | **99.0%** | — | Wikipedia factual recall. |
+| **LongMemEval** | 500 | **87.8%** | **55.8%** | Lifelong assistant memory: facts, updates, preferences, temporal reasoning across sessions. |
+| **LoCoMo** | 1,986 | **85.75%** | **69.29%** | Multi-session conversational recall across 10 real dialogues, 5 categories. Primary tuning target. |
+| **StaleMemory** | 1,200 | 39.5% | — | Preference drift detection. Unique — no competitor publishes on it. |
+| **BEAM** | 700 | — | **41.6%** | Scale + complex reasoning. Measures retrieval + LLM answer-generation as a compound score. |
 
 ---
 
 ## 🧠 LongMemEval
 
-**What it tests:** 500 questions across 6 categories — remembering facts across sessions, tracking when facts change, recalling preferences, and reasoning about time. Each question is paired with its evidence sessions (oracle split). This is the closest thing to a standard benchmark in the AI memory space and the one most competitors publish against.
+**What it tests:** 500 questions across 6 categories — remembering facts across sessions, tracking when facts change, recalling preferences, and reasoning about time. The closest thing to a standard benchmark in AI memory.
 
-| Category | n |     Slowave | Mem0¹ | Verdict |
-|---|---:|------------:|---:|---|
-| temporal-reasoning | 133 |   **88.0%** | 88.0% | 🟢 parity |
-| single-session-user | 70 |   **95.7%** | 97.0% | 🟡 −1.3 pp |
-| knowledge-update | 78 |   **94.9%** | 93.6% | 🟢 +1 pp ahead |
-| single-session-assistant | 56 |   **92.9%** | 98.2% | 🟡 −5 pp |
-| multi-session | 133 |   **80.1%** | 88.0% | 🔴 −8 pp |
-| single-session-preference | 30 | **76.7%** | 96.7% | 🔴 −20 pp gap |
-| **TOTAL** | **500** |   **87.8%** | **94.4%** | 🟡 **−6.6 pp** |
+### Keyword-Overlap Results
 
-¹ Mem0: self-reported (May 2026), GPT-5 as judge. Not directly comparable to keyword-overlap scores.
+| Category | n | Score |
+|---|---|---|
+| single-session-user | 70 | 95.7% |
+| knowledge-update | 78 | 94.9% |
+| single-session-assistant | 56 | 92.9% |
+| temporal-reasoning | 133 | 88.0% |
+| multi-session | 133 | 79.7% |
+| single-session-preference | 30 | 76.7% |
+| **Overall** | **500** | **87.8%** |
 
-**🟢 Where Slowave excels:** knowledge updates and temporal questions — competitive with or ahead of Mem0 with zero LLM calls.
+### LLM-Judge Results (deepseek-v4-flash)
 
-**🔴 Where Slowave falls short:** multi-session recall (cross-session state tracking) and implicit preferences. The multi-session gap reflects that Slowave retrieves episodes but does not aggregate or summarise state across them. Implicit preferences require semantic inference that Slowave deliberately avoids.
+| Category | n | Judge Score | Keyword→Judge Δ |
+|---|---|---|---|
+| single-session-assistant | 56 | 91.1% | −1.8pp |
+| single-session-user | 70 | 82.9% | −12.8pp |
+| factual_knowledge | — | 77.3% | — |
+| knowledge_update | 78 | 73.1% | −21.8pp |
+| multi-session | 133 | 42.1% | −37.6pp |
+| single-session-preference | 30 | 50.0% | −26.7pp |
+| temporal_reasoning | 133 | 31.6% | −56.4pp |
+| **Overall** | **500** | **55.8%** | −32.0pp |
 
-> **Scorer note.** Mem0 uses GPT-5 as judge; Slowave uses keyword-overlap. The 6.6 pp gap includes both the scorer difference and genuine capability gaps. Direct comparison on the same scorer is not yet available.
+**Keyword→judge gap reveals where retrieval works but context quality matters.** Minimal gap on factual recall (assistant 91.1%, user 82.9%) — keyword false positives are rare. Large gaps on temporal reasoning (31.6%) and multi-session (42.1%) — facts are retrieved but the judge requires synthesis from context that lacks pre-computed answers.
 
 ---
 
 ## 💬 LoCoMo
 
-**What it tests:** 1 986 questions across 10 real multi-session conversations, 5 categories — cross-session recall, adversarial distractors, single-session facts, temporal reasoning, and commonsense. A broad, realistic recall benchmark based on genuine human dialogues.
+**What it tests:** 1,986 questions across 10 real multi-session conversations, 5 categories. A broad, realistic conversational recall benchmark.
 
-| Category | n | Slowave | Verdict |
-|---|---:|---:|---|
-| multi-session | 841 | **86.4%** | 🟢 strong cross-session recall |
-| adversarial | 446 | **89.0%** | 🟢 strong distractor robustness |
-| single-session | 282 | **74.1%** | 🟡 ok |
-| temporal | 321 | **61.4%** | 🔴 date arithmetic gap |
-| commonsense | 96 | **51.0%** | 🔴 out of scope |
-| **TOTAL** | **1 986** | **80.1%** | 🟢 **beats all independently verified competitors** |
+### Keyword-Overlap Results
 
-> Category breakdown above is from a prior run. Individual category scores vary ±1–2 pp between runs due to consolidation non-determinism.
+| Category | n | Score |
+|---|---|---|
+| cross-session | 1,257 | 89.3% |
+| single-session | 475 | 85.7% |
+| temporal | 119 | 57.1% |
+| adversarial | 85 | 50.6% |
+| commonsense | 50 | 50.0% |
+| **Overall** | **1,986** | **85.75%** |
 
-**🟢 Where Slowave excels:** cross-session recall — the category that matters most in real agent use. Beats LangMem (58.1%) and Zep (75.1%) with zero fine-tuning and zero LLM calls.
+### LLM-Judge Results (deepseek-v4-flash, n=1,540 judged)
 
-**🔴 Where Slowave falls short:** "How many days since X?" is arithmetic, not retrieval — Slowave doesn't have an answer-construction layer. Commonsense questions require world knowledge that was never stored. These are structural limits of any retrieval-only system.
+| Category | Judge Score | Keyword→Judge Δ |
+|---|---|---|
+| Factual / trivia | 93.7% | <5pp |
+| Overall | 69.29% | −16.46pp |
+| event_ordering | 36.5% | −48.9pp |
 
-> **On Mem0's 92.5%:** self-reported, GPT-5 judge, and flagged by Zep as potentially reflecting a different evaluation protocol. Every independently verified competitor — Zep (75.1%), LangMem (58.1%) — scores below Slowave's 80.1%.
+**Minimal gap on factual recall** — keyword scoring is honest where retrieval is straightforward. **Large gap on temporal/ordering** — facts are present but chronological synthesis requires client-side reasoning.
+
+---
+
+## 📄 DMR
+
+**What it tests:** 500 Wikipedia-page factual recall questions. Simple retrieval — "was this fact stored?" No temporal reasoning, no multi-session, no distractors.
+
+**Result:** 99.0% keyword-overlap. Recall@20 = 99.0%, R@50 = 99.0%, MRR = 0.6778. Near ceiling — the remaining 1% are items that rank below position 50 or have token-mismatch issues. An LLM-judge pass would distinguish true misses from keyword false negatives.
+
+**Role:** Ceiling canary. DMR is the simplest benchmark — if this score drops, something is broken in the retrieval pipeline.
 
 ---
 
 ## 🔄 StaleMemory
 
-**What it tests:** Does Slowave recall the *current* preference after it silently changes — never re-stated, only implied by a shift in behavior? 1 200 scenarios across 8 coding-assistant attribute types, 3 drift patterns each. No other memory system has published results on this benchmark.
+**What it tests:** Does Slowave recall the *current* preference after it silently changes — never re-stated, only implied by a shift in behavior? 1,200 scenarios across 8 coding-assistant attribute types. No other memory system publishes on this benchmark.
 
-Results split sharply by whether the changed preference has a distinct keyword:
+| Attribute | Detection | n | Type |
+|---|---|---|---|
+| programming_language | **100%** | 150 | Distinct keyword |
+| naming_convention | **94.0%** | 150 | Distinct keyword |
+| output_format | 63.3% | 150 | Mixed |
+| tool_preference | 44.7% | 150 | Mixed |
+| communication_style | 14.0% | 150 | Abstract |
+| error_handling | 0.0% | 150 | Abstract |
+| example_scope | 0.0% | 150 | Abstract |
+| explanation_approach | 0.0% | 150 | Abstract |
+| **Overall** | **39.5%** | **1,200** | |
 
-| Preference type | Examples | Detection |
-|---|---|---:|
-| **Concrete — distinct keyword** | programming language, naming convention, tool choice | 🟢 **86–89%** |
-| Partially concrete | output format | 🟡 20% |
-| Borderline | error handling | 🟡 15% |
-| **Abstract — behavioral only** | communication style, explanation approach | 🔴 **0–1%** |
+**Sharp split between concrete and abstract.** Distinct-keyword preferences (language, naming) score 94–100%. Abstract behavioral preferences (style, tone) score 0–14% — there is no keyword to retrieve when the change is expressed through turn length and structure alone. Closing this gap requires an LLM to semantically compare before/after behavior, outside the zero-LLM design boundary.
 
-**🟢 Where Slowave excels:** when a preference has a distinct keyword (e.g. switching from Python to Go), Slowave reliably recalls the updated value and discards the stale one.
+---
 
-**🔴 Where Slowave falls short:** abstract behavioral preferences ("be more concise") are expressed through turn length and structure — there is no keyword to retrieve. Closing this gap requires an LLM to semantically compare before/after behavior. That's outside the zero-LLM design boundary.
+## 🔬 BEAM
+
+**What it tests:** 700 questions across 10 categories — scale (1,700+ message conversations), complex reasoning, knowledge updates, event ordering, summarization. BEAM was designed for LLM-on-write systems and includes an answerer step: an LLM generates an answer from retrieved context, then a judge grades that answer against rubrics.
+
+**Result:** 41.6% judge score (deepseek-v4-flash). Parse-error rate: 4.1%.
+
+### Key Structural Finding: Retrieval Works, Answering Doesn't
+
+| Category | Judge Score | Recall@20 |
+|---|---|---|
+| knowledge_update | 74.3% | 100% |
+| preference_following | 63.9% | 98.6% |
+| numerical_precision | 64.8% | 100% |
+| abstention | 62.1% | 98.6% |
+| instruction_following | 43.7% | 98.6% |
+| contradiction_resolution | 34.1% | 100% |
+| temporal_reasoning | 35.1% | 100% |
+| multi_session_reasoning | 26.5% | 98.6% |
+| summarization | 18.0% | 100% |
+| event_ordering | 12.1% | 100% |
+
+**Recall@20 is 97–100% across every category** — retrieval finds relevant content almost every time. The low judge scores are an answerer/reasoning gap: the LLM cannot reconstruct chronological order, summarize, or resolve contradictions from Slowave's raw consolidated output.
+
+This is a format mismatch, not a retrieval failure. LLM-on-write competitors produce answerer-friendly text; Slowave produces raw retrieval output optimized for client consumption. 
+
+**BEAM numbers are not directly comparable to LME/LoCoMo judge scores** — BEAM measures retrieval + answer-generation as a compound score, while LME/LoCoMo judge raw retrieved context directly.
 
 ---
 
 ## ⚠️ Known Limitations
 
-These are the honest gaps. No sugarcoating.
+These gaps follow directly from the zero-LLM design. See [limitations.md](limitations.md) for full details including deployment limits, language support, and contradiction handling.
 
-- **Preference inference.** Implicit preferences score 76.7% on LME (vs 96.7% Mem0). LLM-based systems extract and verbalize preferences; Slowave can only retrieve what was *stated*. Largest capability gap vs LLM-based competitors.
-
-- **Cross-session arithmetic.** "How many times total did I mention X?" — Slowave retrieves individual episodes but doesn't aggregate or count across them. Affects LME multi-session (−8 pp vs Mem0) and LoCoMo temporal (58.9%).
-
-- **World knowledge.** Questions requiring knowledge never stored in memory (LoCoMo commonsense, 50.0%) are out of scope. Slowave recalls what it was told; it cannot infer what it wasn't.
-
-- **Abstract style drift.** StaleMemory 0–1% on behavioral preferences. No keyword means no retrieval signal.
-
-- **Not independently verified.** All numbers are from internal runs. Reproduction scripts are published — independent verification is welcome.
+- **Implicit preference inference.** LongMemEval single-session-preference 50.0% LLM-judge. Slowave retrieves what was stated; it cannot infer unstated preferences. Largest gap vs LLM-based competitors.
+- **Temporal reasoning and aggregation.** LoCoMo event_ordering 36.5%, LongMemEval temporal_reasoning 31.6%. Facts are retrieved but chronological synthesis and cross-session arithmetic require client-side reasoning.
+- **Abstract style drift.** StaleMemory 0–14% on behavioral preferences. No keyword means no retrieval signal for style/tone changes.
+- **Not independently verified.** All numbers are internal runs. Reproduction scripts are published — independent verification is welcome.
 
 ---
 
 ## Reproducibility
 
 ```bash
-# LongMemEval full haystack (~2.3 h)
-python tests/integration/longmemeval_eval.py \
-  --dataset data/longmemeval/longmemeval_s_cleaned.json \
-  --assignment-threshold 0.85 --top-k 10 \
-  --out data/longmemeval/runs/my_lme.json
+# Full suite (keyword-overlap, no LLM judge)
+python tests/integration/run_full_benchmark.py --no-llm
 
-# LoCoMo (~3 min)
-python tests/integration/locomo_eval.py \
-  --dataset data/locomo/locomo10.json \
-  --assignment-threshold 0.85 \
-  --out data/locomo/runs/my_locomo.json
+# With LLM-judge scoring (needs `OPENROUTER_API_KEY`)
+python tests/integration/longmemeval_eval.py --consolidate --judge-model deepseek-v4-flash
+python tests/integration/locomo_eval.py --consolidate --judge-model deepseek-v4-flash
+python tests/integration/beam_eval.py --consolidate --judge-model deepseek-v4-flash --workers 6
 ```
 
 Full dataset download links, run conditions, and expected numbers: [docs/reproducibility.md](reproducibility.md)

@@ -1230,10 +1230,12 @@ def _supersessions_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, 
 
 
 def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
+    from slowave.core.config import DEFAULT_RECALL_TOP_K
+
     query = str(payload.get("query") or "").strip()
     if not query:
         return {"error": "query is required"}
-    top_k = max(1, min(20, int(payload.get("top_k") or 5)))
+    top_k = max(1, min(50, int(payload.get("top_k") or DEFAULT_RECALL_TOP_K)))
     evidence = bool(payload.get("evidence", True))
     from dataclasses import asdict as _asdict
 

@@ -18,6 +18,14 @@ from slowave.latent.schema import GeometricJudgeConfig
 from slowave.latent.transition_model import TransitionModelConfig
 from slowave.symbolic.encoder import EncoderConfig
 
+# Default for the `top_k` parameter of `recall()` — how many schemas/episodes
+# a call returns to its caller. Distinct from RetrievalConfig's internal
+# candidate-pool fields (episodic_top_k, semantic_top_k, etc.), which control
+# pipeline internals, not this output size. Backed by Recall@K benchmark
+# sweeps (LoCoMo/LongMemEval/DMR/StaleMemory, 2026-07-13): raising from 5 to
+# 20 improved every benchmark (+1.8pp to +23.7pp), none regressed.
+DEFAULT_RECALL_TOP_K = 20
+
 
 @dataclass(frozen=True)
 class SlowaveConfig:

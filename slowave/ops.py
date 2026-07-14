@@ -14,6 +14,7 @@ import uuid
 from dataclasses import asdict
 from typing import Any
 
+from slowave.core.config import DEFAULT_RECALL_TOP_K
 from slowave.core.engine import SlowaveEngine
 
 
@@ -163,7 +164,7 @@ def recall(
     query: str,
     scope: str | None = None,
     mode: str = "default",
-    top_k: int = 5,
+    top_k: int = DEFAULT_RECALL_TOP_K,
     evidence: bool = False,
 ) -> dict[str, Any]:
     """Semantic retrieval.

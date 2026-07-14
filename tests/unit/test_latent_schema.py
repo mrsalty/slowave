@@ -214,6 +214,31 @@ class TestLatentSchemaBuilder:
         assert schema.facet_axes.shape[0] > 0  # facets built for n >= 3
         assert schema.mean_ts == int(np.array(timestamps).mean())
 
+    def test_central_member_most_recent_with_timestamps(self):
+        """With timestamps, picks the most recent episode even when another
+        episode is geometrically closer to the centroid."""
+        # e0 = [1.0, 0.0] is closest to centroid [1.0, 0.1]
+        # e2 = [0.1, 1.0] is farthest from centroid
+        # But e2 has the highest timestamp, so it should win.
+        e0 = _unit(np.array([1.0, 0.0]))
+        e1 = _unit(np.array([0.5, 0.5]))
+        e2 = _unit(np.array([0.1, 1.0]))
+        centroid = _unit(np.array([1.0, 0.1]))
+        schema = self.builder.build(
+            centroid=centroid,
+            member_embeddings=np.array([e0, e1, e2]),
+            member_episodes=[
+                _ET("old value"),
+                _ET("middle value"),
+                _ET("updated value"),
+            ],
+            member_episode_ids=[10, 11, 12],
+            member_timestamps=[1000, 2000, 3000],
+        )
+        assert schema is not None
+        assert schema.central_episode_id == 12
+        assert schema.central_episode_text == "updated value"
+
     def test_build_empty_returns_none(self):
         """Empty input returns None."""
         schema = self.builder.build(
@@ -224,8 +249,8 @@ class TestLatentSchemaBuilder:
         )
         assert schema is None
 
-    def test_central_member_is_closest_to_centroid(self):
-        """The central member is the one geometrically closest to the centroid."""
+    def test_central_member_fallback_no_timestamps(self):
+        """Without timestamps, falls back to geometrically closest episode."""
         e0 = _unit(np.array([1.0, 0.5, 0.0, 0.0]))
         e1 = _unit(np.array([1.0, 1.0, 0.0, 0.0]))  # closest to centroid
         e2 = _unit(np.array([0.5, 1.0, 1.0, 0.0]))
