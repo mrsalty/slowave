@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.3](https://github.com/mrsalty/slowave/compare/slowave-v0.15.2...slowave-v0.15.3) (2026-07-14)
+
+
+### Bug Fixes
+
+* trigger release ([dacf012](https://github.com/mrsalty/slowave/commit/dacf012461a6046d4d52826a2d09e032f70b446b))
+
 ## [0.15.2](https://github.com/mrsalty/slowave/compare/slowave-v0.15.1...slowave-v0.15.2) (2026-07-10)
 
 
