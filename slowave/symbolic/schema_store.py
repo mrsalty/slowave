@@ -11,7 +11,7 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass
-from typing import Any, Iterable
+from typing import Any, Iterable, List
 
 import numpy as np
 
@@ -26,7 +26,16 @@ from slowave.utils.vec import (
 )
 
 VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archived")
-VALID_RELATIONS = ("reinforces", "refines", "contradicts", "supersedes", "related_to", "part_of")
+# "contradicts" and "related_to" were removed (2026-07-14): contradicts was
+# unreachable in practice (it required an exact time_delta_s<=0 tie, and every
+# call site now writes "supersedes" for that case too -- see
+# Consolidator._write_latent_schema / reconsolidate_labile_schemas), and
+# related_to was only ever add_relation()'s own fallback for an invalid
+# relation string, never triggered by any real caller. Both sat at 0 edges in
+# production. The "contradicted" schema *status* (VALID_STATUS above) is
+# unrelated and unaffected -- it still distinguishes a same-instant clash from
+# an ordinary update, just no longer via a separate relation edge label.
+VALID_RELATIONS = ("reinforces", "refines", "supersedes", "part_of")
 DEDUP_ACTIVE_STATUSES = ("active", "needs_review")
 
 # Shared salience ceiling for every reinforcement/feedback write path. The
@@ -654,7 +663,10 @@ class SchemaStore:
         confidence: float = 1.0,
         reason: str | None = None,
     ) -> None:
-        relation = relation if relation in VALID_RELATIONS else "related_to"
+        if relation not in VALID_RELATIONS:
+            raise ValueError(
+                f"add_relation: invalid relation {relation!r}, must be one of {VALID_RELATIONS}"
+            )
         conn = self.db.connect()
         conn.execute(
             "INSERT INTO schema_relations "
@@ -672,6 +684,26 @@ class SchemaStore:
             ),
         )
         conn.commit()
+
+    def get_relations(self, schema_id: int) -> list[tuple[int, str, float]]:
+        """Return `schema_id`'s schema_relations edges in EITHER direction as
+        `(neighbor_id, relation, confidence)` tuples.
+
+        A schema_relations edge is directed (src/dst), but for spreading
+        activation (WorkingMemoryGate.expand_via_relations) the direction only
+        ever mattered for who was created from whom -- activation should
+        still spread along the edge regardless of which side `schema_id` is.
+        """
+        conn = self.db.connect()
+        rows = conn.execute(
+            "SELECT dst_schema_id AS neighbor_id, relation, confidence FROM schema_relations "
+            "WHERE src_schema_id = ? "
+            "UNION ALL "
+            "SELECT src_schema_id AS neighbor_id, relation, confidence FROM schema_relations "
+            "WHERE dst_schema_id = ?",
+            (int(schema_id), int(schema_id)),
+        ).fetchall()
+        return [(int(r["neighbor_id"]), str(r["relation"]), float(r["confidence"])) for r in rows]
 
     def reinforce(
         self,
@@ -1502,6 +1534,280 @@ class SchemaStore:
             "flagged_labile": flagged,
             "dry_run": dry_run,
         }
+
+    def backfill_facet_axes(
+        self,
+        *,
+        min_members: int = 3,
+        n_facet_axes: int = 4,
+        limit: int = 100,
+    ) -> dict[str, Any]:
+        """Retroactively compute and persist facet axes for schemas that have
+        accumulated enough supporting episodes but lack facet data.
+
+        ``engine.remember()`` creates schemas from single episodes, so facet
+        axes (PCA of supporting episode embeddings) cannot be computed at
+        creation time.  As schemas accumulate evidence via reinforces, they
+        cross the ``min_members`` threshold but the axes are never backfilled.
+        This method closes that gap by loading supporting-episode embeddings,
+        running SVD, and persisting the top *n_facet_axes* components.
+
+        Returns a dict with keys ``backfilled``, ``skipped_no_embeddings``,
+        ``skipped_svd_failed``, ``backfilled_ids`` (schema ids that gained
+        facet axes this call -- used by callers, e.g. backfill_part_of_edges,
+        to check only the schemas that just became eligible for a subspace-
+        containment comparison instead of re-scanning the whole pool).
+        """
+        conn = self.db.connect()
+        rows = conn.execute(
+            """
+            SELECT id, supporting_episode_ids
+            FROM schemas
+            WHERE (n_facet_axes IS NULL OR n_facet_axes = 0)
+              AND json_array_length(supporting_episode_ids, '$.ids') >= ?
+              AND status IN ('active', 'needs_review')
+            ORDER BY json_array_length(supporting_episode_ids, '$.ids') DESC
+            LIMIT ?
+            """,
+            (min_members, limit),
+        ).fetchall()
+
+        backfilled = 0
+        skipped_no_embeddings = 0
+        skipped_svd_failed = 0
+        backfilled_ids: list[int] = []
+
+        for row in rows:
+            schema_id = int(row["id"])
+            supp = loads_json(row["supporting_episode_ids"])
+            episode_ids = [int(x) for x in supp.get("ids", [])]
+            if len(episode_ids) < min_members:
+                continue
+
+            # Load embeddings for supporting episodes
+            ph = ",".join(["?"] * len(episode_ids))
+            ep_rows = conn.execute(
+                f"SELECT embedding, dim FROM episodic_memories WHERE id IN ({ph})",
+                tuple(episode_ids),
+            ).fetchall()
+
+            embs = []
+            for er in ep_rows:
+                try:
+                    d = int(er["dim"])
+                    emb = unpack_f32(er["embedding"], d)
+                    embs.append(emb.astype(np.float32))
+                except Exception:
+                    pass
+
+            if len(embs) < min_members:
+                skipped_no_embeddings += 1
+                continue
+
+            embs_arr = np.stack(embs, axis=0)
+            centroid = embs_arr.mean(axis=0)
+
+            # Centre and run SVD (same as LatentSchemaBuilder.build)
+            try:
+                _, s, vh = np.linalg.svd(embs_arr - centroid, full_matrices=False)
+                k = min(n_facet_axes, vh.shape[0])
+                axes = vh[:k].astype(np.float32)
+                strengths = s[:k].astype(np.float32)
+            except np.linalg.LinAlgError:
+                skipped_svd_failed += 1
+                continue
+
+            axes_blob = pack_f32_matrix(axes)
+            strengths_blob = pack_f32(strengths)
+
+            conn.execute(
+                """
+                UPDATE schemas
+                SET facet_axes = ?, facet_strengths = ?, n_facet_axes = ?,
+                    last_updated_ts = ?
+                WHERE id = ?
+                """,
+                (axes_blob, strengths_blob, k, int(time.time()), schema_id),
+            )
+            backfilled += 1
+            backfilled_ids.append(schema_id)
+
+        conn.commit()
+        return {
+            "backfilled": backfilled,
+            "skipped_no_embeddings": skipped_no_embeddings,
+            "skipped_svd_failed": skipped_svd_failed,
+            "backfilled_ids": backfilled_ids,
+        }
+
+    def backfill_part_of_edges(
+        self,
+        *,
+        min_cos: float = 0.70,
+        max_cos: float = 0.92,
+        containment_threshold: float = 0.55,
+        asymmetry_margin: float = 0.10,
+        cross_scope_containment_threshold: float = 0.75,
+        restrict_ids: List[int] | None = None,
+    ) -> dict[str, int]:
+        """Retrospectively detect and create ``part_of`` edges between all
+        schemas that have facet axes.
+
+        Compares every pair of active/needs_review schemas with
+        ``n_facet_axes > 0``, applies the subspace containment test,
+        and inserts ``part_of`` edges for hierarchical containment
+        relationships. Idempotent — ON CONFLICT on the PK prevents
+        duplicate edges.
+
+        Cross-scope pairs are not blocked (the brain generalises schemas
+        across contexts once they've earned it — see generalization_stage/
+        GeneralizationConfig.compute_stage), but require a higher containment
+        score than same-scope pairs, mirroring how reinforces already treats
+        cross-scope evidence as weaker (increment_cross_scope_reinforcement's
+        half-weight discount) rather than either blocking it outright or
+        trusting it exactly as much as same-scope evidence.
+
+        ``restrict_ids``, when given, skips any pair where NEITHER side's id
+        is in the set — i.e. it still compares each newly-eligible schema
+        against the whole facet-bearing pool, but doesn't re-compare
+        already-checked pairs against each other. This turns the full O(N^2)
+        sweep (every schema in the DB) into O(len(restrict_ids) * N), which
+        matters once the facet-bearing pool grows beyond a few hundred
+        schemas — callers doing an incremental pass (e.g. right after
+        backfill_facet_axes reports which ids just gained facets) should
+        always pass this; a bare, unrestricted call is for one-off/manual
+        full-graph backfills only.
+
+        Returns a dict with keys ``compared``, ``created``, ``skipped_no_facets``.
+        """
+        conn = self.db.connect()
+
+        # Load all schemas with embeddings + facet axes
+        rows = conn.execute("""
+            SELECT id, embedding, dim, facet_axes, n_facet_axes,
+                   supporting_episode_ids, content_text, scope_id
+            FROM schemas
+            WHERE status IN ('active', 'needs_review')
+              AND embedding IS NOT NULL
+              AND n_facet_axes > 0
+            """).fetchall()
+
+        schemas = []
+        for r in rows:
+            dim = int(r["dim"])
+            emb = unpack_f32(r["embedding"], dim)
+            emb = emb / (np.linalg.norm(emb) + 1e-12)
+            n_facets = int(r["n_facet_axes"])
+            axes = unpack_f32_matrix(r["facet_axes"], n_facets, dim)
+            supp = loads_json(r["supporting_episode_ids"])
+            schemas.append(
+                {
+                    "id": int(r["id"]),
+                    "emb": emb,
+                    "axes": axes,
+                    "support": len(supp.get("ids", [])),
+                    "scope_id": r["scope_id"],
+                }
+            )
+
+        if len(schemas) < 2:
+            return {"compared": 0, "created": 0, "skipped_no_facets": 0}
+
+        # Pre-compute cosine matrix
+        N = len(schemas)
+        emb_matrix = np.stack([s["emb"] for s in schemas])
+        cos_matrix = emb_matrix @ emb_matrix.T
+
+        created = 0
+        compared = 0
+        now = int(time.time())
+        restrict_set = set(restrict_ids) if restrict_ids is not None else None
+
+        for i in range(N):
+            for j in range(i + 1, N):
+                if restrict_set is not None and (
+                    schemas[i]["id"] not in restrict_set and schemas[j]["id"] not in restrict_set
+                ):
+                    continue
+                cos = float(cos_matrix[i, j])
+                if not (min_cos <= cos < max_cos):
+                    continue
+                compared += 1
+
+                sa = schemas[i]
+                sb = schemas[j]
+
+                # Cross-scope pairs aren't blocked, but need stronger evidence
+                # than same-scope pairs (same reasoning as reinforces' half-
+                # weight cross-scope discount, not a hard scope wall).
+                cross_scope = (
+                    sa["scope_id"] is not None
+                    and sb["scope_id"] is not None
+                    and sa["scope_id"] != sb["scope_id"]
+                )
+                pair_threshold = (
+                    max(containment_threshold, cross_scope_containment_threshold)
+                    if cross_scope
+                    else containment_threshold
+                )
+
+                # Subspace containment: A within B
+                diff_ab = sa["emb"] - sb["emb"]
+                dn_ab = float(np.dot(diff_ab, diff_ab))
+                if dn_ab < 1e-12:
+                    continue
+                c_ab = 0.0
+                for axis in sb["axes"]:
+                    p = float(np.dot(diff_ab, axis))
+                    c_ab += p * p
+                c_ab /= dn_ab
+
+                # Reverse: B within A
+                diff_ba = sb["emb"] - sa["emb"]
+                dn_ba = float(np.dot(diff_ba, diff_ba))
+                c_ba = 0.0
+                for axis in sa["axes"]:
+                    p = float(np.dot(diff_ba, axis))
+                    c_ba += p * p
+                c_ba /= dn_ba + 1e-12
+
+                if c_ab > c_ba + asymmetry_margin and c_ab >= pair_threshold:
+                    # A is part of B
+                    confidence = round(0.5 * cos + 0.5 * c_ab, 3)
+                    conn.execute(
+                        """INSERT INTO schema_relations
+                           (src_schema_id, dst_schema_id, relation, confidence, reason, created_ts)
+                           VALUES (?, ?, 'part_of', ?, ?, ?)
+                           ON CONFLICT(src_schema_id, dst_schema_id, relation) DO NOTHING""",
+                        (
+                            sa["id"],
+                            sb["id"],
+                            confidence,
+                            f"subspace containment cos={cos:.3f} c={c_ab:.3f}",
+                            now,
+                        ),
+                    )
+                    created += 1
+                elif c_ba > c_ab + asymmetry_margin and c_ba >= pair_threshold:
+                    # B is part of A
+                    confidence = round(0.5 * cos + 0.5 * c_ba, 3)
+                    conn.execute(
+                        """INSERT INTO schema_relations
+                           (src_schema_id, dst_schema_id, relation, confidence, reason, created_ts)
+                           VALUES (?, ?, 'part_of', ?, ?, ?)
+                           ON CONFLICT(src_schema_id, dst_schema_id, relation) DO NOTHING""",
+                        (
+                            sb["id"],
+                            sa["id"],
+                            confidence,
+                            f"subspace containment cos={cos:.3f} c={c_ba:.3f}",
+                            now,
+                        ),
+                    )
+                    created += 1
+
+        conn.commit()
+        return {"compared": compared, "created": created, "skipped_no_facets": 0}
 
     def count(self) -> int:
         conn = self.db.connect()

@@ -20,12 +20,15 @@ from typing import Any
 from urllib.parse import parse_qs, urlparse
 
 VALID_SCHEMA_STATUSES = ("active", "needs_review", "superseded", "contradicted", "archived")
+# "contradicts" and "related_to" were removed from schema_store.py's VALID_RELATIONS
+# (2026-07-14): contradicts required an unreachable time_delta_s<=0 tie (every call
+# site now writes "supersedes" for that case too), related_to was only add_relation()'s
+# own silent fallback for invalid input, never a real caller. Kept in sync here since
+# the dashboard is a standalone stdlib server with its own copy of this list.
 VALID_SCHEMA_RELATIONS = (
     "reinforces",
     "refines",
-    "contradicts",
     "supersedes",
-    "related_to",
     "part_of",
 )
 
@@ -106,6 +109,8 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                     self._send_json(_daemon_health())
                 elif path == "/api/pulse":
                     self._send_json(_pulse_payload(db_path, qs))
+                elif path == "/api/histogram":
+                    self._send_json(_histogram_payload(db_path, qs))
                 elif path == "/api/db/health":
                     self._send_json(_db_health(db_path))
                 elif path == "/api/schemas":
@@ -132,24 +137,8 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                 elif path.startswith("/api/events/"):
                     event_id = int(path.split("/")[-1])
                     self._send_json(_event_detail(db_path, event_id))
-                elif path == "/api/supersessions":
-                    self._send_json(_supersessions_payload(db_path, qs))
-                else:
-                    self._send_json(
-                        {"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND
-                    )
-            except Exception as e:
-                self._send_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
-
-        def do_POST(self) -> None:  # noqa: N802
-            parsed = urlparse(self.path)
-            path = parsed.path.rstrip("/") or "/"
-            try:
-                length = int(self.headers.get("Content-Length") or 0)
-                body = self.rfile.read(length).decode("utf-8") if length else "{}"
-                payload = json.loads(body or "{}")
-                if path == "/api/recall":
-                    self._send_json(_recall_payload(db_path, payload))
+                elif path == "/api/relations":
+                    self._send_json(_relations_payload(db_path, qs))
                 else:
                     self._send_json(
                         {"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND
@@ -378,7 +367,7 @@ def _status_payload(db_path: str) -> dict[str, Any]:
             "recent_sessions": recent_sessions,
             "daemon": daemon,
             "processes": processes,
-            "warnings": _warnings(schema_health, daemon),
+            "warnings": _warnings(daemon),
             "last_consolidation_ts": last_consolidation_ts,
             "now_ts": int(time.time()),
         }
@@ -471,6 +460,113 @@ def _qs_int(qs: dict[str, list[str]], key: str, default: int) -> int:
         return default
 
 
+_HISTOGRAM_RANGES = {
+    "1w": (7 * 86400, 86400),
+    "1m": (30 * 86400, 86400),
+    "1y": (365 * 86400, 7 * 86400),
+}
+
+
+def _earliest_activity_ts(conn: sqlite3.Connection) -> int | None:
+    """Earliest timestamp across the three channels backing the histogram."""
+    earliest: int | None = None
+    for table, col in (
+        ("raw_events", "ts"),
+        ("episodic_memories", "ts"),
+        ("schemas", "first_formed_ts"),
+    ):
+        try:
+            row = conn.execute(f"SELECT MIN({col}) AS m FROM {table}").fetchone()
+        except sqlite3.Error:
+            continue
+        if row and row["m"] is not None:
+            m = int(row["m"])
+            earliest = m if earliest is None else min(earliest, m)
+    return earliest
+
+
+def _histogram_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Return stacked, zero-filled bucket series for the Overview histogram.
+
+    Same three channels as `/api/pulse` (raw_events, episodes, schemas) but
+    bucketed over a much longer, user-selectable window so it can show the
+    creation timeline rather than the live short-term pulse.
+
+    Query params:
+        - range: one of "1w", "1m", "1y", "all" (default "1w")
+    """
+    range_key = qs.get("range", ["1w"])[0]
+    if range_key not in _HISTOGRAM_RANGES and range_key != "all":
+        range_key = "1w"
+    now = int(time.time())
+
+    conn = _connect(db_path)
+    try:
+        if range_key == "all":
+            earliest = _earliest_activity_ts(conn)
+            window_s = max(now - earliest, 86400) if earliest is not None else 86400
+            if window_s <= 60 * 86400:
+                bucket_s = 86400
+            elif window_s <= 2 * 365 * 86400:
+                bucket_s = 7 * 86400
+            else:
+                bucket_s = 30 * 86400
+        else:
+            window_s, bucket_s = _HISTOGRAM_RANGES[range_key]
+
+        window_start = now - window_s
+        first_bucket = (window_start // bucket_s) * bucket_s
+
+        all_ts: list[int] = []
+        t = first_bucket
+        while t <= now:
+            all_ts.append(t)
+            t += bucket_s
+
+        def _bucketize(rows: list) -> list[dict[str, int]]:
+            counts = {int(r["bucket_ts"]): int(r["n"]) for r in rows}
+            return [{"ts": ts, "n": counts.get(ts, 0)} for ts in all_ts]
+
+        raw_rows = conn.execute(
+            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM raw_events WHERE ts >= ? AND ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+        epi_rows = conn.execute(
+            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM episodic_memories WHERE ts >= ? AND ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+        sch_rows = conn.execute(
+            """SELECT (first_formed_ts / ?) * ? AS bucket_ts, COUNT(*) AS n
+               FROM schemas WHERE first_formed_ts >= ? AND first_formed_ts <= ?
+               GROUP BY bucket_ts ORDER BY bucket_ts""",
+            (bucket_s, bucket_s, first_bucket, now),
+        ).fetchall()
+
+        channels = {
+            "raw_events": _bucketize(raw_rows),
+            "episodes": _bucketize(epi_rows),
+            "schemas": _bucketize(sch_rows),
+        }
+        stacked_max = max(
+            (sum(channels[k][i]["n"] for k in channels) for i in range(len(all_ts))),
+            default=0,
+        )
+        return {
+            "channels": channels,
+            "stacked_max": stacked_max,
+            "range": range_key,
+            "bucket_seconds": bucket_s,
+            "window_start": first_bucket,
+            "now_ts": now,
+        }
+    finally:
+        conn.close()
+
+
 def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
     total = _table_count(conn, "schemas")
     by_status = {
@@ -519,14 +615,10 @@ def _schema_health(conn: sqlite3.Connection) -> dict[str, Any]:
     }
 
 
-def _warnings(schema_health: dict[str, Any], daemon: dict[str, Any]) -> list[str]:
+def _warnings(daemon: dict[str, Any]) -> list[str]:
     out: list[str] = []
     if not daemon.get("running"):
         out.append("HTTP MCP daemon is not running. Run: slowave serve start")
-    if schema_health.get("active_exact_duplicate_rows", 0):
-        out.append(
-            f"{schema_health['active_exact_duplicate_rows']} active duplicate schema rows detected."
-        )
     return out
 
 
@@ -738,9 +830,7 @@ def _schema_graph_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, A
         limit = 120
     scope = (qs.get("scope") or [""])[0]
     statuses_raw = (qs.get("statuses") or ["active,needs_review,contradicted,superseded"])[0]
-    relations_raw = (
-        qs.get("relations") or ["reinforces,refines,contradicts,supersedes,related_to,part_of"]
-    )[0]
+    relations_raw = (qs.get("relations") or ["reinforces,refines,supersedes,part_of"])[0]
     statuses = [s for s in statuses_raw.split(",") if s in VALID_SCHEMA_STATUSES]
     relations = [r for r in relations_raw.split(",") if r in VALID_SCHEMA_RELATIONS]
     if not statuses:
@@ -1022,37 +1112,6 @@ def _worker_runs_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, An
         conn.close()
 
 
-# Cached engine instance — created lazily on first recall request.
-# Avoids creating a new SlowaveEngine (with FAISS + encoder) per request.
-_cached_engine: Any = None
-_cached_engine_lock: Any = None
-
-
-def _get_cached_engine(db_path: str) -> Any:
-    import threading
-
-    global _cached_engine, _cached_engine_lock
-    if _cached_engine_lock is None:
-        _cached_engine_lock = threading.Lock()
-    if _cached_engine is not None:
-        return _cached_engine
-    with _cached_engine_lock:
-        if _cached_engine is not None:
-            return _cached_engine
-        from slowave.core.config import SlowaveConfig
-        from slowave.core.engine import SlowaveEngine
-        from slowave.symbolic.encoder import EncoderConfig
-
-        _cached_engine = SlowaveEngine(
-            SlowaveConfig(
-                db_path=db_path,
-                dim=384,
-                encoder=EncoderConfig(),
-            )
-        )
-        return _cached_engine
-
-
 def _episodes_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
     """Return paginated episode list."""
     if not os.path.exists(db_path):
@@ -1199,55 +1258,148 @@ def _session_timeline(db_path: str, session_id: str) -> dict[str, Any]:
         conn.close()
 
 
-def _supersessions_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
-    """Return supersession chains: schemas that superseded others."""
-    if not os.path.exists(db_path):
-        return {"supersessions": [], "total": 0}
-    limit = max(1, min(200, int((qs.get("limit") or [50])[0])))
+def _relation_pairs_payload(db_path: str, relation: str, limit: int) -> dict[str, Any]:
+    """Return pair-shaped relation edges (supersedes/refines): one row per edge,
+    with both sides' full identifying info so the UI can render a two-column
+    detail on click instead of just truncated content.
+
+    `src` is always the schema `add_relation` recorded as the "acting" side
+    (the newer/winning schema for supersedes, the newly-formed schema for
+    refines); `dst` is the "acted upon" side (the older/superseded schema for
+    supersedes, the existing schema being refined for refines). Both sides'
+    own `confidence` (schema-level) are aliased away from the relation's own
+    `confidence` to avoid a name collision.
+    """
     conn = _connect(db_path)
     try:
         total_row = conn.execute(
-            "SELECT COUNT(*) AS n FROM schema_relations WHERE relation = 'supersedes'"
+            "SELECT COUNT(*) AS n FROM schema_relations WHERE relation = ?", (relation,)
         ).fetchone()
         rows = conn.execute(
-            "SELECT sr.src_schema_id, sr.dst_schema_id, sr.confidence, sr.reason, "
-            "sr.created_ts, "
+            "SELECT sr.src_schema_id, sr.dst_schema_id, sr.confidence AS rel_confidence, "
+            "sr.reason, sr.created_ts, "
             "src.content_text AS src_content, src.status AS src_status, "
-            "dst.content_text AS dst_content, dst.status AS dst_status "
+            "src.salience AS src_salience, src.confidence AS src_confidence, "
+            "src.scope_id AS src_scope_id, src.generalization_stage AS src_stage, "
+            "src.first_formed_ts AS src_formed_ts, "
+            "dst.content_text AS dst_content, dst.status AS dst_status, "
+            "dst.salience AS dst_salience, dst.confidence AS dst_confidence, "
+            "dst.scope_id AS dst_scope_id, dst.generalization_stage AS dst_stage, "
+            "dst.first_formed_ts AS dst_formed_ts "
             "FROM schema_relations sr "
             "JOIN schemas src ON src.id = sr.src_schema_id "
             "JOIN schemas dst ON dst.id = sr.dst_schema_id "
-            "WHERE sr.relation = 'supersedes' "
+            "WHERE sr.relation = ? "
             "ORDER BY sr.created_ts DESC LIMIT ?",
+            (relation, limit),
+        ).fetchall()
+        return {"pairs": [dict(r) for r in rows], "total": int(total_row["n"]) if total_row else 0}
+    finally:
+        conn.close()
+
+
+def _relation_part_of_payload(db_path: str, limit: int) -> dict[str, Any]:
+    """Return part_of edges grouped by parent (dst), each with its children
+    (src) nested underneath -- a tree, not a flat pair list, since part_of is
+    a hierarchy: backfill_part_of_edges writes (src=part/child, dst=whole/parent).
+    """
+    conn = _connect(db_path)
+    try:
+        total_row = conn.execute(
+            "SELECT COUNT(*) AS n FROM schema_relations WHERE relation = 'part_of'"
+        ).fetchone()
+        rows = conn.execute(
+            "SELECT sr.src_schema_id, sr.dst_schema_id, sr.confidence AS rel_confidence, "
+            "sr.reason, sr.created_ts, "
+            "child.content_text AS child_content, child.status AS child_status, "
+            "child.scope_id AS child_scope_id, "
+            "parent.content_text AS parent_content, parent.status AS parent_status, "
+            "parent.scope_id AS parent_scope_id "
+            "FROM schema_relations sr "
+            "JOIN schemas child ON child.id = sr.src_schema_id "
+            "JOIN schemas parent ON parent.id = sr.dst_schema_id "
+            "WHERE sr.relation = 'part_of' "
+            "ORDER BY sr.dst_schema_id, sr.confidence DESC "
+            "LIMIT ?",
             (limit,),
         ).fetchall()
+        parents: dict[int, dict[str, Any]] = {}
+        for r in rows:
+            pid = int(r["dst_schema_id"])
+            if pid not in parents:
+                parents[pid] = {
+                    "id": pid,
+                    "content": r["parent_content"],
+                    "status": r["parent_status"],
+                    "scope_id": r["parent_scope_id"],
+                    "children": [],
+                }
+            parents[pid]["children"].append(
+                {
+                    "id": int(r["src_schema_id"]),
+                    "content": r["child_content"],
+                    "status": r["child_status"],
+                    "scope_id": r["child_scope_id"],
+                    "confidence": r["rel_confidence"],
+                    "reason": r["reason"],
+                    "created_ts": r["created_ts"],
+                }
+            )
         return {
-            "supersessions": [dict(r) for r in rows],
+            "parents": sorted(parents.values(), key=lambda p: len(p["children"]), reverse=True),
             "total": int(total_row["n"]) if total_row else 0,
         }
     finally:
         conn.close()
 
 
-def _recall_payload(db_path: str, payload: dict[str, Any]) -> dict[str, Any]:
-    from slowave.core.config import DEFAULT_RECALL_TOP_K
+def _relation_reinforces_leaderboard_payload(db_path: str, limit: int) -> dict[str, Any]:
+    """Return the top-N most-reinforced schemas (grouped by target, counted),
+    not raw edges -- reinforces sits at 700+ edges and each one is the same
+    content restated, so a browsable edge list is noise; a leaderboard of
+    "which facts have accumulated the most repeat evidence" is the useful
+    signal.
+    """
+    conn = _connect(db_path)
+    try:
+        total_row = conn.execute(
+            "SELECT COUNT(*) AS n FROM schema_relations WHERE relation = 'reinforces'"
+        ).fetchone()
+        rows = conn.execute(
+            "SELECT sr.dst_schema_id AS id, COUNT(*) AS n, "
+            "s.content_text AS content, s.status AS status, s.salience AS salience, "
+            "s.scope_id AS scope_id "
+            "FROM schema_relations sr "
+            "JOIN schemas s ON s.id = sr.dst_schema_id "
+            "WHERE sr.relation = 'reinforces' "
+            "GROUP BY sr.dst_schema_id "
+            "ORDER BY n DESC LIMIT ?",
+            (limit,),
+        ).fetchall()
+        return {
+            "leaderboard": [dict(r) for r in rows],
+            "total": int(total_row["n"]) if total_row else 0,
+        }
+    finally:
+        conn.close()
 
-    query = str(payload.get("query") or "").strip()
-    if not query:
-        return {"error": "query is required"}
-    top_k = max(1, min(50, int(payload.get("top_k") or DEFAULT_RECALL_TOP_K)))
-    evidence = bool(payload.get("evidence", True))
-    from dataclasses import asdict as _asdict
 
-    eng = _get_cached_engine(db_path)
-    r = eng.recall(query, top_k=top_k, evidence=evidence)
-    return {
-        "query": query,
-        "schemas": [_asdict(s) for s in r.schemas],
-        "episodes": r.episode_texts,
-        "raw_events": r.raw_events,
-        "expanded_neighbors": {str(k): v for k, v in r.expanded_neighbors.items()},
-    }
+def _relations_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
+    """Dispatch on `type` -- supersedes/refines are pair-shaped, part_of is a
+    parent/children tree, reinforces is a leaderboard (see each payload
+    function's docstring for why each shape fits its relation semantics).
+    """
+    if not os.path.exists(db_path):
+        return {"error": "db not found"}
+    relation = (qs.get("type") or ["supersedes"])[0]
+    limit = max(1, min(200, int((qs.get("limit") or [50])[0])))
+    if relation in ("supersedes", "refines"):
+        return _relation_pairs_payload(db_path, relation, limit)
+    if relation == "part_of":
+        return _relation_part_of_payload(db_path, limit)
+    if relation == "reinforces":
+        return _relation_reinforces_leaderboard_payload(db_path, limit)
+    return {"error": f"unknown relation type {relation!r}"}
 
 
 from slowave.dashboard._html import _INDEX_HTML  # noqa: E402

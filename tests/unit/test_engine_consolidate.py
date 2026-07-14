@@ -78,6 +78,12 @@ def test_consolidate_once_returns_required_keys(eng):
     assert "decay" in result
 
 
+def test_consolidate_once_returns_part_of_backfill_key(eng):
+    result = eng.consolidate_once()
+    assert "part_of_backfill" in result
+    assert set(result["part_of_backfill"]) == {"compared", "created", "skipped_no_facets"}
+
+
 def test_consolidate_once_records_worker_run_row(eng):
     _run_session(eng)
     eng.consolidate_once()
