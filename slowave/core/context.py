@@ -11,7 +11,7 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field, replace
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 import numpy as np
 
@@ -144,6 +144,22 @@ _IDENTITY_BONUS_CAP = 0.15
 # but never marked used loses up to 0.30 activation — the feedback loop that
 # actually cleans ranking (salience deltas alone move activation by ~0.0004).
 _NOISE_PENALTY_WEIGHT = 0.30
+
+# Relation-graph spreading activation (expand_via_relations): a schema_relations
+# edge from an admitted schema injects activation into its neighbor, the same
+# way a directly-matched cosine hit does, so genuinely useful but only
+# indirectly-cued memories ("sparks") can still surface. reinforces is
+# excluded — it's the same content restated (an evidence-count signal, not a
+# distinct association) and floods the graph with no informational gain.
+# Decay per hop and a hard cap on total injected schemas are engineering
+# bounds with no brain equivalent: unlike biological spreading activation,
+# every extra hop is a real query and every extra schema is real context-
+# window tokens, so depth/breadth must be bounded rather than left to decay
+# alone (see private/docs' relation-retrieval design discussion, 2026-07-14).
+_GRAPH_EXCLUDED_RELATIONS = ("reinforces",)
+_GRAPH_HOP_DECAY = 0.6
+_GRAPH_MAX_HOPS = 2
+_GRAPH_MAX_EXTRA = 3
 
 
 @dataclass(frozen=True)
@@ -349,6 +365,93 @@ class WorkingMemoryGate:
             activation_trace=traces,
         )
 
+    def expand_via_relations(
+        self,
+        state: WorkingMemoryState,
+        *,
+        fetch_relations: Callable[[int], list[tuple[int, str, float]]],
+        fetch_schema: Callable[[int], Schema | None],
+        cue: MemoryCue,
+        policy: GatePolicy | None = None,
+    ) -> WorkingMemoryState:
+        """Spread activation from admitted schemas to their schema_relations
+        neighbors, appending any that clear the same admission bar as a
+        direct hit. See `spread_relation_activation` for the algorithm --
+        this is the WorkingMemoryState-shaped wrapper around it.
+
+        `fetch_relations(schema_id)` must return that schema's relation edges
+        in EITHER direction as `(neighbor_id, relation, confidence)` tuples
+        (a schema_relations edge is directed, but activation spreads along it
+        regardless of which side is src/dst). `fetch_schema(schema_id)`
+        resolves a neighbor id to its full Schema.
+
+        A schema_relations edge (especially part_of, which
+        backfill_part_of_edges allows across scopes at a stricter containment
+        bar) is NOT itself a scope boundary, so a graph-propagated neighbor
+        must clear the exact same bar a direct candidate would: `_eligible()`
+        (mode-aware -- e.g. its strict_scope hard wall, status, class/layer
+        exclusions) gates admission, and `_cross_scope_penalty()` discounts
+        its activation the same way `_activation()` already discounts a
+        direct cross-scope candidate. Reusing both means a graph-propagated
+        candidate is never MORE permissively scoped than a direct one just
+        because it arrived via a relation edge instead of cosine/lexical match.
+        """
+        policy = policy or GatePolicy()
+        seed_activations = {item.schema.id: item.activation for item in state.items}
+        winners = spread_relation_activation(
+            seed_activations,
+            fetch_relations=fetch_relations,
+            min_activation=policy.min_activation,
+        )
+        if not winners:
+            return state
+
+        extra_items = []
+        for neighbor_id, (activation, via) in winners.items():
+            schema = fetch_schema(neighbor_id)
+            if schema is None:
+                continue
+            ok, _reason = self._eligible(schema, cue=cue, policy=policy)
+            if not ok:
+                continue
+            penalty, _penalty_reason = self._cross_scope_penalty(schema, cue)
+            activation += penalty
+            if activation < policy.min_activation:
+                continue
+            extra_items.append(
+                WorkingMemoryItem(
+                    schema=schema,
+                    activation=round(min(1.0, activation), 4),
+                    reason="graph:" + "+".join(sorted(via)),
+                    text=_compact(schema.content_text, policy.max_item_chars),
+                    peripheral=True,
+                )
+            )
+        if not extra_items:
+            return state
+
+        all_items = list(state.items) + extra_items
+        return replace(state, items=all_items, rendered=_render(all_items))
+
+    def _cross_scope_penalty(self, schema: Schema, cue: MemoryCue) -> tuple[float, str]:
+        """Graduated cross-scope activation penalty, shared by `_activation`
+        (direct candidates) and `expand_via_relations` (graph-propagated
+        candidates) so there is exactly one place this rule lives.
+
+        Stage 3 (global) gets no penalty; Stage 2 (contextual) gets a reduced
+        penalty; Stage 0/1 keep the full penalty (Stage 1 is already gated by
+        scope_kind in `_eligible`). Returns (0.0, "") when scope doesn't apply
+        (no cue.scope, no schema.scope_id, or they already match).
+        """
+        if not (cue.scope and schema.scope_id and schema.scope_id != cue.scope):
+            return 0.0, ""
+        gen_stage = getattr(schema, "generalization_stage", 0)
+        if gen_stage >= 3:
+            return 0.0, ""  # global — no mismatch penalty
+        if gen_stage == 2:
+            return -0.12, "scope_mismatch:stage2"  # contextual — reduced penalty
+        return -0.35, "scope_mismatch"
+
     def _eligible(
         self,
         schema: Schema,
@@ -532,20 +635,10 @@ class WorkingMemoryGate:
             activation += 0.15
             reasons.append("global")
 
-        if cue.scope and schema.scope_id and schema.scope_id != cue.scope:
-            # Stage 11: graduated penalty for cross-scope generalization.
-            # Stage 2 (contextual) gets a reduced mismatch penalty.
-            # Stage 3 (global) gets no mismatch penalty at all.
-            # Stage 0/1 keep the full penalty (stage 1 is already gated by scope_kind in _eligible).
-            _gs = getattr(schema, "generalization_stage", 0)
-            if _gs >= 3:
-                pass  # global — no mismatch penalty
-            elif _gs == 2:
-                activation -= 0.12  # contextual — reduced penalty (~1/3 of normal)
-                reasons.append("scope_mismatch:stage2")
-            else:
-                activation -= 0.35
-                reasons.append("scope_mismatch")
+        penalty, penalty_reason = self._cross_scope_penalty(schema, cue)
+        if penalty_reason:
+            activation += penalty
+            reasons.append(penalty_reason)
 
         if len(schema.content_text or "") > 500:
             activation -= 0.12
@@ -715,3 +808,73 @@ def _render(items: list[WorkingMemoryItem]) -> str:
         f"- [sch_{item.schema.id}] {'(peripheral) ' if item.peripheral else ''}{item.text}"
         for item in items
     )
+
+
+def spread_relation_activation(
+    seed_activations: dict[int, float],
+    *,
+    fetch_relations: Callable[[int], list[tuple[int, str, float]]],
+    min_activation: float,
+) -> dict[int, tuple[float, set[str]]]:
+    """Spreading-activation core shared by WorkingMemoryGate.expand_via_relations
+    (context_brief) and RetrievalService.recall(): propagate activation from a
+    set of already-admitted schemas to their schema_relations neighbors.
+
+    `seed_activations` maps an admitted schema id to its own activation/score.
+    `fetch_relations(schema_id)` returns that schema's edges in EITHER
+    direction as `(neighbor_id, relation, confidence)` tuples -- direction only
+    ever mattered for who was created from whom; activation spreads along the
+    edge regardless of which side is src/dst. `reinforces` edges are excluded
+    (same-content restatement, not a distinct association).
+
+    Contributions converge: a neighbor reachable from more than one seed gets
+    the SUM of every path's injected activation before being compared to
+    `min_activation` -- this is what lets a schema only weakly linked to
+    several seeds still surface, even though no single link would clear the
+    bar alone (the "sparks"/insight case: convergence, not chain length).
+
+    Depth is bounded at _GRAPH_MAX_HOPS with a visited set (cycle-safe --
+    schema_relations can have cycles, e.g. bidirectional refines pairs), and
+    the result is capped at _GRAPH_MAX_EXTRA winners -- both are engineering
+    bounds with no brain equivalent (every hop is a real query, every surfaced
+    schema is real context-window tokens), analogous to working-memory
+    capacity rather than the brain's cost-free spreading.
+
+    Returns `{neighbor_id: (summed_activation, {relation_types_it_arrived_via})}`
+    for winners only, already sorted by activation descending and truncated to
+    _GRAPH_MAX_EXTRA -- iteration order is the ranking.
+    """
+    admitted_ids = set(seed_activations)
+    if not admitted_ids:
+        return {}
+
+    injected: dict[int, float] = {}
+    injected_via: dict[int, set[str]] = {}
+    visited = set(admitted_ids)
+    frontier = dict(seed_activations)
+
+    for hop in range(1, _GRAPH_MAX_HOPS + 1):
+        touched_this_hop: set[int] = set()
+        for source_id, source_activation in frontier.items():
+            for neighbor_id, relation, confidence in fetch_relations(source_id):
+                if relation in _GRAPH_EXCLUDED_RELATIONS or neighbor_id in visited:
+                    continue
+                contribution = source_activation * confidence * (_GRAPH_HOP_DECAY**hop)
+                injected[neighbor_id] = injected.get(neighbor_id, 0.0) + contribution
+                injected_via.setdefault(neighbor_id, set()).add(relation)
+                touched_this_hop.add(neighbor_id)
+        if not touched_this_hop:
+            break
+        visited |= touched_this_hop
+        frontier = {nid: injected[nid] for nid in touched_this_hop}
+
+    winners = sorted(
+        (
+            (nid, act)
+            for nid, act in injected.items()
+            if act >= min_activation and nid not in admitted_ids
+        ),
+        key=lambda pair: pair[1],
+        reverse=True,
+    )[:_GRAPH_MAX_EXTRA]
+    return {nid: (act, injected_via.get(nid, set())) for nid, act in winners}

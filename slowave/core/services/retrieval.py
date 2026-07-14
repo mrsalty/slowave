@@ -15,7 +15,13 @@ from datetime import datetime, timezone
 from typing import Any
 
 from slowave.core.config import DEFAULT_RECALL_TOP_K
-from slowave.core.context import GatePolicy, MemoryCue, WorkingMemoryGate, WorkingMemoryState
+from slowave.core.context import (
+    GatePolicy,
+    MemoryCue,
+    WorkingMemoryGate,
+    WorkingMemoryState,
+    spread_relation_activation,
+)
 from slowave.core.scope import normalize_scope
 from slowave.latent.episodic_store import EpisodicStore
 from slowave.latent.graph_manager import GraphManager
@@ -29,6 +35,16 @@ from slowave.symbolic.encoder import TextEncoder
 from slowave.symbolic.episode_text import EpisodeTextStore
 from slowave.symbolic.raw_log import RawLog
 from slowave.symbolic.schema_store import Schema, SchemaStore
+
+# Minimum injected activation (recall()'s own schema_scores scale -- cosine +
+# a fixed bonus per candidate source, roughly 0.15-1.25, not the 0-1 scale
+# WorkingMemoryGate uses) for a schema_relations-propagated neighbor to be
+# worth surfacing. A single hop from a typical FTS-level match (~0.35) already
+# loses ~40% to confidence*decay, so this is set proportionately lower than
+# the direct-hit floor rather than reusing it verbatim -- see
+# spread_relation_activation's docstring for why decay makes deep/weak paths
+# self-limiting without needing this floor to also do that work.
+_RECALL_GRAPH_MIN_ACTIVATION = 0.15
 
 
 @dataclass(frozen=True)
@@ -49,6 +65,18 @@ class RecallResult:
     # regardless of RetrievalConfig.use_temporal (core/07-temporal.md Invariant 7).
     anchor_fired: bool = False  # True when estimate_anchor() returned something other than now_ts
     anchor_displacement_s: int = 0  # anchor_ts - now_ts; 0 when not fired
+    # schema_relations-propagated schemas (spread_relation_activation) that
+    # were NOT among the top_k direct hits. Deliberately kept OUT of `schemas`:
+    # every benchmark script (retrieval_metrics.compute_recall_at_k_and_mrr,
+    # dmr_original_eval.py, etc.) concatenates `schemas` assuming its length
+    # is bounded by the `top_k` passed to this call -- merging graph winners
+    # into that list would silently inflate recall@k/MRR/keyword-score by
+    # smuggling in more than k schemas' worth of context.
+    related_schemas: list[Schema] = field(default_factory=list)
+    # schema_id -> relation type(s) it arrived via (e.g. ["part_of"]), for
+    # related_schemas entries only -- lets callers show/verify *why* a related
+    # schema surfaced instead of just that it did.
+    related_schema_relations: dict[int, list[str]] = field(default_factory=dict)
 
 
 def _prefix_date(text: str, ts: int) -> str:
@@ -281,45 +309,15 @@ class RetrievalService:
             recall_statuses = ("active",)
 
         filtered_schemas = []
-        from slowave.core.scope import scope_kind as _scope_kind
 
         for s in schemas_all:
             if s.status not in recall_statuses:
                 continue
 
-            # Scope filter: in strict_scope mode apply the generalization-stage
-            # aware gate — mirrors WorkingMemoryGate._eligible exactly.
-            #
-            # Stage 0 (scoped)     : hard-blocked if scope doesn't match.
-            # Stage 1 (portable)   : allowed only within the same scope_kind.
-            # Stage 2 (contextual) : always admitted; score discounted below.
-            # Stage 3 (global)     : admitted without restriction or penalty.
-            if mode == "strict_scope" and scope_id:
-                if s.scope_id and s.scope_id != scope_id and s.scope_id not in ("global", "user"):
-                    _gs = getattr(s, "generalization_stage", 0)
-                    _gen_cfg = getattr(self.schemas, "_gen_cfg", None)
-                    if _gs >= 3:
-                        pass  # global — no restriction, no score penalty
-                    elif _gs == 2:
-                        # contextual — apply score discount so Stage 2 schemas
-                        # rank below same-scope matches unless strongly relevant.
-                        _mult = _gen_cfg.stage2_cross_scope_score_multiplier if _gen_cfg else 0.70
-                        schema_scores[s.id] = schema_scores.get(s.id, 0.0) * _mult
-                        # Noise floor: drop Stage 2 schemas whose final score falls
-                        # below cross_scope_min_score — prevents low-overlap memories
-                        # from surfacing on unrelated queries in foreign scopes.
-                        _min = _gen_cfg.cross_scope_min_score if _gen_cfg else 0.30
-                        if schema_scores[s.id] < _min:
-                            continue
-                    elif _gs == 1:
-                        # portable — only within same scope_kind; apply noise floor too
-                        if _scope_kind(s.scope_id) != _scope_kind(scope_id):
-                            continue
-                        _min = _gen_cfg.cross_scope_min_score if _gen_cfg else 0.30
-                        if schema_scores.get(s.id, 0.0) < _min:
-                            continue
-                    else:
-                        continue  # stage 0: hard block
+            if not self._cross_scope_gate(
+                s, scope_id=scope_id, mode=mode, schema_scores=schema_scores
+            ):
+                continue
 
             # Belt-and-suspenders: apply score multiplier for labile schemas
             if s.is_labile and s.status == "active":
@@ -335,6 +333,47 @@ class RetrievalService:
         )[:top_k]
         for s in schemas:
             self.schemas.reinforce(s.id, amount=0.05)
+
+        # Relation-graph spreading activation: schemas linked to one of the
+        # above via schema_relations (part_of/refines/supersedes) can still be
+        # worth surfacing even though they didn't directly match the query —
+        # see spread_relation_activation's docstring for the algorithm.
+        # Kept OUT of `schemas`/`schema_scores`'s role as top_k results:
+        # retrieval_metrics.compute_recall_at_k_and_mrr and every benchmark
+        # script concatenate `schemas` assuming its length is bounded by the
+        # top_k passed to this call; merging graph winners into that list
+        # would silently inflate recall@k/MRR/keyword-score by smuggling in
+        # more than k schemas' worth of context.
+        graph_winners = spread_relation_activation(
+            {s.id: schema_scores.get(s.id, 0.0) for s in schemas},
+            fetch_relations=self.schemas.get_relations,
+            min_activation=_RECALL_GRAPH_MIN_ACTIVATION,
+        )
+        related_schemas: list[Schema] = []
+        related_schema_relations: dict[int, list[str]] = {}
+        for neighbor_id, (activation, via) in graph_winners.items():
+            try:
+                neighbor_schema = self.schemas.get(neighbor_id)
+            except KeyError:
+                continue
+            # Same status bar as the direct-hit candidates above (recall_statuses)
+            # -- a graph-propagated neighbor is a bonus, not itself vetted by the
+            # status/scope filtering loop, so a stale edge can't leak a
+            # superseded/contradicted schema back into results.
+            if neighbor_schema.status not in recall_statuses:
+                continue
+            # schema_relations is not a scope boundary (backfill_part_of_edges
+            # allows cross-scope part_of pairs at a stricter containment bar), so
+            # reuse the exact same cross-scope gate direct candidates go through
+            # above -- not a separate rule, and not more permissive just because
+            # this candidate arrived via a relation edge instead of FTS/embedding.
+            schema_scores[neighbor_id] = activation
+            if not self._cross_scope_gate(
+                neighbor_schema, scope_id=scope_id, mode=mode, schema_scores=schema_scores
+            ):
+                continue
+            related_schemas.append(neighbor_schema)
+            related_schema_relations[neighbor_id] = sorted(via)
 
         prior_boost, silence_factor = self._schema_priors(
             candidate_episode_ids=[int(m.id) for m in retrieved.episodic],
@@ -427,11 +466,68 @@ class RetrievalService:
             query_diagnostics=retrieved.query_diagnostics,
             anchor_fired=anchor_fired,
             anchor_displacement_s=anchor_displacement_s,
+            related_schemas=related_schemas,
+            related_schema_relations=related_schema_relations,
         )
 
     def context(self, *, scope: str | None = None, limit: int = 10) -> list[Schema]:
         """Return top active schemas, optionally scope-filtered."""
         return self.schemas.list(limit=limit, scope_id=scope, status="active")
+
+    def _fetch_schema_or_none(self, schema_id: int) -> Schema | None:
+        try:
+            return self.schemas.get(schema_id)
+        except KeyError:
+            return None
+
+    def _cross_scope_gate(
+        self, schema: Schema, *, scope_id: str | None, mode: str, schema_scores: dict[int, float]
+    ) -> bool:
+        """Cross-scope admission gate, shared by recall()'s direct-candidate
+        filtering AND its schema_relations graph-expansion step -- a single
+        source of truth instead of two independently-drifting rules.
+
+        Mirrors WorkingMemoryGate._eligible's stage-graduated rule exactly:
+          Stage 0 (scoped)     : hard-blocked.
+          Stage 1 (portable)   : allowed only within the same scope_kind.
+          Stage 2 (contextual) : always admitted; score discounted + floored.
+          Stage 3 (global)     : admitted without restriction or penalty.
+
+        Cross-scope is only ever earned in strict_scope mode: every other
+        mode's candidate-gathering above (embedding/FTS/prototype scoring)
+        already scope-filters unconditionally when scope_id is set, so there
+        is no cross-scope exception to grant outside strict_scope mode either
+        -- a schema_relations neighbor doesn't get a more permissive rule just
+        because it arrived via a different path.
+
+        Mutates schema_scores[schema.id] in place for the Stage 2 discount;
+        the id must already be present for the mutation and floor check to
+        mean anything (callers set it before this check).
+        """
+        if not scope_id or not schema.scope_id or schema.scope_id == scope_id:
+            return True
+        if schema.scope_id in ("global", "user"):
+            return True
+        if mode != "strict_scope":
+            return False
+
+        from slowave.core.scope import scope_kind as _scope_kind
+
+        gen_stage = getattr(schema, "generalization_stage", 0)
+        gen_cfg = getattr(self.schemas, "_gen_cfg", None)
+        if gen_stage >= 3:
+            return True
+        if gen_stage == 2:
+            mult = gen_cfg.stage2_cross_scope_score_multiplier if gen_cfg else 0.70
+            schema_scores[schema.id] = schema_scores.get(schema.id, 0.0) * mult
+            floor = gen_cfg.cross_scope_min_score if gen_cfg else 0.30
+            return schema_scores[schema.id] >= floor
+        if gen_stage == 1:
+            if _scope_kind(schema.scope_id) != _scope_kind(scope_id):
+                return False
+            floor = gen_cfg.cross_scope_min_score if gen_cfg else 0.30
+            return schema_scores.get(schema.id, 0.0) >= floor
+        return False  # stage 0: hard block
 
     def context_brief(
         self,
@@ -551,8 +647,15 @@ class RetrievalService:
             max_chars=max_chars,
             min_activation=-999.0 if mode == "debug" else 0.20,
         )
-        return self.working_memory_gate.select(
+        state = self.working_memory_gate.select(
             candidates_by_id.values(), cue=cue, policy=policy, cue_embedding=cue_embedding
+        )
+        return self.working_memory_gate.expand_via_relations(
+            state,
+            fetch_relations=self.schemas.get_relations,
+            fetch_schema=self._fetch_schema_or_none,
+            cue=cue,
+            policy=policy,
         )
 
     # ---- private -----------------------------------------------------------

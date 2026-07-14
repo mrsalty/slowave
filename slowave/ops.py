@@ -170,10 +170,14 @@ def recall(
     """Semantic retrieval.
 
     Returns:
-        retrieval_id  – pass to reinforce()
-        memories      – [{id, content_text, activation, scope_id, ...}, ...]
-        episodes      – raw episode text records (when evidence=True)
-        raw_events    – raw event records (when evidence=True)
+        retrieval_id     – pass to reinforce()
+        memories         – [{id, content_text, activation, scope_id, ...}, ...]
+        related_memories – schema_relations-linked schemas surfaced via spreading
+                           activation from `memories`, NOT counted toward top_k
+                           (same shape as `memories`, plus a `via` field naming
+                           the relation type(s) it arrived through)
+        episodes         – raw episode text records (when evidence=True)
+        raw_events       – raw event records (when evidence=True)
     """
     result = eng.recall(query, top_k=top_k, evidence=evidence, scope=scope, mode=mode)
     recall_id = f"rec_{uuid.uuid4().hex[:12]}"
@@ -206,9 +210,22 @@ def recall(
         }
         for s in result.schemas
     ]
+    related_memories = [
+        {
+            "id": f"sch_{s.id}",
+            "content_text": str(s.content_text or "")[:500],
+            "activation": round(result.schema_activations.get(s.id, 0.0), 4),
+            "scope_id": s.scope_id,
+            "status": s.status,
+            "generalization_stage": s.generalization_stage,
+            "via": result.related_schema_relations.get(s.id, []),
+        }
+        for s in result.related_schemas
+    ]
     return {
         "retrieval_id": recall_id,
         "memories": memories,
+        "related_memories": related_memories,
         "episodes": result.episode_texts,
         "raw_events": result.raw_events,
     }
