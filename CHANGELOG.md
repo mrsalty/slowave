@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.15.4](https://github.com/mrsalty/slowave/compare/slowave-v0.15.3...slowave-v0.15.4) (2026-07-14)
+
+
+### Bug Fixes
+
+* dashboard pulse ([3c3bf81](https://github.com/mrsalty/slowave/commit/3c3bf81e9461ed85338910cd2c9b2ec2d8e39b2e))
+
 ## [0.15.3](https://github.com/mrsalty/slowave/compare/slowave-v0.15.2...slowave-v0.15.3) (2026-07-14)
 
 
