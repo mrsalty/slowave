@@ -216,7 +216,6 @@ See: [docs/limitations.md](docs/limitations.md)
 
 Slowave is not:
 
-- a language model
 - an agent framework
 - a reasoning system
 - a prompt manager
@@ -225,7 +224,7 @@ Slowave is not:
 
 The AI client remains responsible for planning, reasoning, and execution.
 
-Slowave only provides persistent, evolving context injection based on prior interactions.
+Slowave provides relevant, persistent, evolving context injection based on prior interactions.
 
 ---
 

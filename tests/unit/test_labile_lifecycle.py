@@ -238,9 +238,11 @@ class TestReconsolidateLabileSchemas:
 
     def test_contradicted_when_timestamps_effectively_simultaneous(self) -> None:
         """Same contradiction as above, but with equal timestamps (time_delta_s
-        == 0) -> relation is 'contradicts' (not 'supersedes'), not gated by
-        the min_time_delta_to_supersede_s recency gate (that gate only fires
-        for 0 < time_delta_s < min_dt, not for exactly 0)."""
+        == 0) -> status is 'contradicted' (not 'superseded') -- the relation
+        edge itself is always 'supersedes' (see VALID_RELATIONS), but the
+        tie is still distinguished at the status level -- not gated by the
+        min_time_delta_to_supersede_s recency gate (that gate only fires for
+        0 < time_delta_s < min_dt, not for exactly 0)."""
         eng, path = _engine()
         try:
             old_c, new_c = _same_topic_centroids(0.85)

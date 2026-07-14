@@ -164,7 +164,8 @@ tbody tr:hover td{background:rgba(20,30,51,.6)}
 .pill-orphan{background:var(--red-bg);color:#ff9aaa;border-color:#4a1a22}
 
 /* ── SALIENCE BAR ── */
-.sal-bar-wrap{display:inline-block;width:60px;vertical-align:middle}
+.sal-bar-wrap{display:inline-flex;align-items:center;gap:6px}
+.sal-bar-wrap .sal-bar-track{width:60px}
 .sal-bar-track{background:var(--panel2);border-radius:999px;height:5px;overflow:hidden}
 .sal-bar-fill{height:5px;border-radius:999px;background:var(--blue);transition:width .3s}
 
@@ -351,6 +352,22 @@ tr.expandable:hover td{background:var(--panel3)}
 .pulse-stats b{color:var(--text)}
 .pulse-bar-hover{cursor:crosshair}
 #pulseTooltip{position:absolute;background:rgba(8,14,28,.95);border:1px solid rgba(79,155,255,.5);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--text);pointer-events:none;white-space:nowrap;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,.5)}
+
+/* ── CREATION HISTOGRAM ── */
+.histogram-panel{position:relative}
+.histogram-panel .panel-title{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.range-toolbar{display:flex;gap:2px;background:rgba(8,14,28,.6);border:1px solid rgba(30,45,74,.8);border-radius:999px;padding:3px}
+.range-btn{
+  border:none;background:transparent;color:var(--muted);
+  font-family:var(--font);font-size:11px;font-weight:600;
+  padding:4px 11px;border-radius:999px;cursor:pointer;transition:all .15s ease;
+}
+.range-btn:hover{color:var(--text);background:rgba(30,45,74,.5)}
+.range-btn.active{color:#060c19;background:linear-gradient(to bottom,#6aabff,#4f9bff);box-shadow:0 2px 8px rgba(79,155,255,.25)}
+.histogram-canvas{display:block;width:100%;height:140px;border-radius:8px;image-rendering:crisp-edges;cursor:crosshair}
+.histogram-stats{display:flex;gap:16px;margin-top:8px;font-size:12px;color:var(--muted)}
+.histogram-stats b{color:var(--text)}
+#histogramTooltip{position:absolute;background:rgba(8,14,28,.95);border:1px solid rgba(79,155,255,.5);border-radius:6px;padding:6px 10px;font-size:11px;color:var(--text);pointer-events:none;white-space:nowrap;z-index:100;display:none;box-shadow:0 4px 12px rgba(0,0,0,.5)}
 </style>
 </head>
 <body>
@@ -372,8 +389,7 @@ tr.expandable:hover td{background:var(--panel3)}
     <button class="tab active" data-tab="overview">📊 Overview</button>
     <button class="tab" data-tab="schemas">📖 Schemas</button>
     <button class="tab" data-tab="graph">🕸 Graph</button>
-    <button class="tab" data-tab="recall">🔍 Recall</button>
-    <button class="tab" data-tab="supersessions">🔄 Supersessions</button>
+    <button class="tab" data-tab="relations">🔗 Relations</button>
     <button class="tab" data-tab="worker">🧠 Worker</button>
     <button class="tab" data-tab="db">💾 DB Health</button>
   </nav>
@@ -384,12 +400,28 @@ tr.expandable:hover td{background:var(--panel3)}
 <section id="overview" class="section active">
   <div id="alertArea"></div>
   <div class="panel pulse-panel" style="margin-bottom:10px">
-    <div class="panel-title">⚡ Event pulse</div>
+    <div class="panel-title">Pulse</div>
     <div style="position:relative">
       <canvas id="pulseCanvas" class="pulse-canvas pulse-bar-hover"></canvas>
       <div id="pulseTooltip"></div>
     </div>
     <div class="pulse-stats" id="pulseStats"></div>
+  </div>
+  <div class="panel histogram-panel" style="margin-bottom:10px">
+    <div class="panel-title">
+      <span>Activity log</span>
+      <div class="range-toolbar" id="histogramRangeToolbar">
+        <button class="range-btn" data-range="1w">1W</button>
+        <button class="range-btn" data-range="1m">1M</button>
+        <button class="range-btn" data-range="1y">1Y</button>
+        <button class="range-btn" data-range="all">All</button>
+      </div>
+    </div>
+    <div style="position:relative">
+      <canvas id="histogramCanvas" class="histogram-canvas"></canvas>
+      <div id="histogramTooltip"></div>
+    </div>
+    <div class="histogram-stats" id="histogramStats"></div>
   </div>
   <div class="stat-grid" id="statGrid"></div>
 <div class="two-col">
@@ -484,22 +516,6 @@ tr.expandable:hover td{background:var(--panel3)}
   </div>
 </section>
 
-<!-- RECALL -->
-<section id="recall" class="section">
-  <div class="panel">
-    <div class="panel-title">🔍 Recall playground</div>
-    <textarea id="recallQuery" rows="3" style="width:100%;margin-bottom:10px" placeholder="Enter a query — what should Slowave remember about this?"></textarea>
-    <div class="controls">
-      <label style="font-size:13px;color:var(--muted)">Top-K</label>
-      <input id="recallTopK" type="number" value="20" min="1" max="50" style="width:60px"/>
-      <label class="pill"><input id="recallEvidence" type="checkbox" checked> evidence</label>
-      <button class="btn primary" onclick="runRecall()">Run recall</button>
-    </div>
-    <div id="recallLoading" class="loading-overlay"><div class="spinner"></div> Running recall (encoder may take a moment)…</div>
-    <div id="recallResults"></div>
-  </div>
-</section>
-
 <!-- WORKER -->
 <section id="worker" class="section">
   <div class="stat-grid" id="workerStatGrid"></div>
@@ -533,15 +549,16 @@ tr.expandable:hover td{background:var(--panel3)}
     <div id="dbHealth"></div>
   </div>
 </section>
-<!-- SUPERSESSIONS -->
-<section id="supersessions" class="section">
+<!-- RELATIONS -->
+<section id="relations" class="section">
   <div class="panel">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
-      <div class="panel-title" style="margin:0">🔄 Supersession chains</div>
-      <button class="btn" onclick="loadSupersessions()">↺ Refresh</button>
+      <div class="panel-title" style="margin:0">🔗 Relations</div>
+      <button class="btn" onclick="loadRelations()">↺ Refresh</button>
     </div>
-    <div id="supersessionLoading" class="loading-overlay"><div class="spinner"></div></div>
-    <div id="supersessionTable"></div>
+    <div id="relationsTypeBar" style="display:flex;gap:6px;margin-bottom:14px"></div>
+    <div id="relationsLoading" class="loading-overlay"><div class="spinner"></div></div>
+    <div id="relationsContent"></div>
   </div>
 </section>
 </main>

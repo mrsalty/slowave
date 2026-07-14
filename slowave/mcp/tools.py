@@ -216,6 +216,10 @@ def register_tools(mcp: FastMCP, build_engine: Callable) -> None:
         Returns:
             retrieval_id: pass to slowave_reinforce after using memories.
             memories: list of {id, content_text, activation, scope_id, ...}.
+            related_memories: schema_relations-linked memories (e.g. part_of a
+                broader memory in `memories`) surfaced via spreading activation,
+                NOT counted toward top_k -- worth a glance but not guaranteed
+                to directly match the query the way `memories` does.
         """
         try:
             eng = build_engine()

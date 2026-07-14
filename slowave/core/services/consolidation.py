@@ -85,12 +85,33 @@ class ConsolidationService:
                 # core/08-feedback.md's "Labile State & Reconsolidation"
                 # section and outcomes/08-feedback.md.
                 reconsolidation = self.consolidator.reconsolidate_labile_schemas()
+            # Backfill facet axes for schemas that have accumulated enough
+            # supporting episodes but lack them (engine.remember() creates
+            # schemas from single episodes so axes can only be computed
+            # retroactively once 3+ supporting IDs exist).
+            facet_backfill = self.schemas.backfill_facet_axes(limit=200)
+            # part_of edges depend on facet axes existing (subspace containment
+            # needs both sides' axes), so this must run after facet_backfill.
+            # Only the schemas that just gained facet axes this cycle can
+            # possibly produce a *new* part_of edge (an unchanged pool already
+            # had its chance against itself in a prior cycle), so restrict_ids
+            # keeps this an O(new_ids * N) incremental pass instead of a full
+            # O(N^2) sweep every cycle; skip the call entirely when nothing
+            # changed rather than paying even the query/matrix-build cost.
+            if facet_backfill.get("backfilled", 0) > 0:
+                part_of_backfill = self.schemas.backfill_part_of_edges(
+                    restrict_ids=facet_backfill["backfilled_ids"]
+                )
+            else:
+                part_of_backfill = {"compared": 0, "created": 0, "skipped_no_facets": 0}
             decay = self.schemas.decay_unused(idle_days=decay_idle_days, dry_run=False)
 
             result = {
                 "replay": replay_stats,
                 "consolidation": consolidation,
                 "reconsolidation": reconsolidation,
+                "facet_backfill": facet_backfill,
+                "part_of_backfill": part_of_backfill,
                 "decay": decay,
                 "procedures": {},  # removed Phase 1 P1
             }

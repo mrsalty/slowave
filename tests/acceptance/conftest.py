@@ -34,6 +34,8 @@ _PHASES: dict[str, str] = {
     "test_relations_cross_scope_isolation": "Relations — Cross-scope isolation",
     "test_relations_supersession": "Relations — Supersession edges",
     "test_relations_coactivation": "Relations — Co-activation edges",
+    "test_relations_part_of_hierarchy": "Relations — part_of facet backfill, hierarchy, negative rejection",
+    "test_relations_graph_expansion_respects_cross_scope_isolation": "Relations — Graph-expansion cross-scope isolation",
 }
 
 

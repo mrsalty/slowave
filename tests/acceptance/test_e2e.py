@@ -990,3 +990,159 @@ class TestE2E:
             assert float(weight_rows[0]["max_w"] or 0) > 0, "At least one edge must have weight > 0"
         else:
             _detail("fewer than 2 prototypes — edges not expected (latent layer may not have run)")
+
+    def test_relations_part_of_hierarchy(self, cli, qdb):
+        """A specific fact can be linked as `part_of` a broader one it's a
+        detail of, and recall() surfaces that link even when the caller only
+        asked about the broader topic.
+
+        Story: an agent tells Slowave a general fact about a service's retry
+        behaviour ("the billing service retries webhooks with backoff"),
+        then a more specific detail of the same behaviour ("...using a base
+        delay of 2 seconds, capped at 32"), each repeated a few times (this
+        is how a fact earns enough evidence to be compared geometrically —
+        see backfill_facet_axes). It also tells Slowave a third, unrelated
+        fact in a different project. After the next `consolidate` (Slowave's
+        background housekeeping), recalling the general topic should surface
+        the specific detail too, under `related_memories` -- NOT because it
+        matched the query, but because Slowave noticed it's a more specific
+        instance of the same thing. The unrelated fact from the other
+        project must never show up, proving relation-based surfacing isn't a
+        scope leak in disguise.
+
+        Endpoint-driven throughout (remember -> consolidate -> recall); a
+        direct DB read is used only as a secondary confirmation of the
+        specific relation recorded, never as the pass/fail signal.
+        """
+        parent_text = (
+            "The billing service retries failed webhook deliveries up to 5 times "
+            "with exponential backoff before giving up."
+        )
+        child_text = (
+            "Specifically, webhook retries for the billing service use a base delay "
+            "of 2 seconds doubling each attempt, capped at 32 seconds."
+        )
+        unrelated_text = (
+            "The internal style guide requires all product screenshots to use the "
+            "dark theme for consistency in Alpha's documentation."
+        )
+
+        # Repeat each fact so it earns enough evidence to be compared
+        # geometrically (backfill_facet_axes needs >=3 supporting episodes).
+        for text, scope in (
+            (parent_text, "project:slowave"),
+            (child_text, "project:slowave"),
+            (unrelated_text, "project:alpha"),
+        ):
+            for _ in range(3):
+                cli("remember", text, "--type", "fact", "--scope", scope)
+
+        # Slowave's background housekeeping: computes facet axes for newly-
+        # eligible facts and compares them for hierarchy. Both counts are
+        # read straight from the endpoint's own response.
+        r = cli("consolidate")
+        facet_backfill = r.get("facet_backfill", {})
+        part_of_backfill = r.get("part_of_backfill", {})
+        _detail(f"facet_backfill: {facet_backfill}")
+        _detail(f"part_of_backfill: {part_of_backfill}")
+        assert (
+            facet_backfill.get("backfilled", 0) >= 3
+        ), "expected all 3 newly-repeated facts to cross the facet-eligibility threshold"
+        assert set(part_of_backfill) >= {
+            "compared",
+            "created",
+            "skipped_no_facets",
+        }, "part_of comparison did not run with the expected shape"
+
+        # Ask about the general topic only -- the specific detail must not be
+        # required to match the query text itself to surface.
+        r_parent = cli(
+            "recall",
+            "billing service webhook retry backoff delivery",
+            "--scope",
+            "project:slowave",
+            "--top-k",
+            "3",
+        )
+        direct_texts = [m["content_text"] for m in r_parent["memories"]]
+        related = r_parent.get("related_memories", [])
+        _detail(f"direct recall results: {[t[:60] for t in direct_texts]}")
+        _detail(f"related_memories: {[(m['content_text'][:60], m['via']) for m in related]}")
+
+        # Deterministic: the unrelated cross-scope fact must never appear,
+        # neither as a direct hit nor riding in via a relation edge.
+        all_texts = direct_texts + [m["content_text"] for m in related]
+        assert not any(
+            "dark theme" in t for t in all_texts
+        ), "unrelated cross-scope fact leaked into recall results"
+
+        # Conditional: whether the child actually rides in as `part_of` this
+        # run depends on real embedding geometry (same caveat as
+        # test_relations_supersession's supersedes check) -- logged either
+        # way, required only when it does fire.
+        part_of_hits = [m for m in related if "part_of" in m.get("via", [])]
+        if part_of_hits:
+            assert any(
+                "base delay of 2 seconds" in m["content_text"] for m in part_of_hits
+            ), "a part_of-linked memory surfaced but wasn't the expected child fact"
+            # Secondary confirmation only -- the endpoint result above is
+            # already the pass/fail signal.
+            rel_rows = qdb(
+                "SELECT confidence FROM schema_relations WHERE relation='part_of' "
+                "AND src_schema_id IN (SELECT id FROM schemas WHERE content_text LIKE ?)",
+                ("%base delay of 2 seconds%",),
+            )
+            if rel_rows:
+                _detail(f"confirmed in DB: part_of confidence={rel_rows[0]['confidence']:.3f}")
+        else:
+            _detail(
+                "no part_of-linked memory surfaced this run "
+                "(subspace containment is real-embedding dependent, not guaranteed every run)"
+            )
+
+    def test_relations_graph_expansion_respects_cross_scope_isolation(self, cli):
+        """A memory linked to another project's memory via schema_relations
+        must not leak across projects just because it rode in on a relation
+        edge instead of matching the query directly.
+
+        Story: schema_relations edges (part_of especially) are deliberately
+        allowed to link memories across projects once there's strong enough
+        geometric evidence (see backfill_part_of_edges's stricter cross-scope
+        containment bar) -- a relation edge is not itself a scope wall. So
+        whenever `recall()` surfaces a related_memories entry, it must still
+        respect the same project-isolation rule a directly-matched memory
+        would: same project, no project at all (global), or the memory has
+        independently earned broad cross-project visibility
+        (generalization_stage >= 2 -- see the promotion-ladder phase above).
+
+        Probes broadly across the whole dataset built up by every prior
+        phase (not just test_relations_part_of_hierarchy's facts), since
+        which relation actually clears the activation threshold to surface
+        is real-embedding dependent. Reads scope_id/generalization_stage
+        straight off each related_memories entry -- no DB access at all.
+        """
+        probes = [
+            ("webhook retries billing service backoff", "project:slowave"),
+            ("session reaper daemon thread configuration", "project:slowave"),
+            ("API retry loop backoff jitter", "project:slowave"),
+        ]
+        found_any = False
+        for query, scope in probes:
+            r = cli("recall", query, "--scope", scope, "--mode", "strict_scope", "--top-k", "5")
+            for m in r.get("related_memories", []):
+                found_any = True
+                _detail(
+                    f"related memory {m['id']}  scope={m['scope_id']}  "
+                    f"stage={m['generalization_stage']}  via={m['via']}  (query scope={scope})"
+                )
+                assert (
+                    m["scope_id"] is None
+                    or m["scope_id"] == scope
+                    or m["generalization_stage"] >= 2
+                ), f"cross-project leak via relation-based surfacing: {m}"
+
+        _detail(
+            "relation-surfaced memories observed and verified safe this run"
+            if found_any
+            else "no relation-surfaced memories this run (real-embedding dependent)"
+        )
