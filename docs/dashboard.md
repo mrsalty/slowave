@@ -1,7 +1,7 @@
 # Slowave local dashboard
 
 Slowave includes a dependency-free local web dashboard for inspecting the memory
-database, MCP/server processes, schema health, recall behavior, and schema graph.
+database, MCP/server processes, schema health, schema relations, and schema graph.
 
 The dashboard is intended for local development and operational hygiene. It is
 read-only in the current MVP.
@@ -101,10 +101,16 @@ The MVP graph intentionally shows only explicit schema relations. Future graph
 modes can add same-prototype links, shared-evidence links, and neighborhood-only
 views.
 
-### Recall playground
+### Relations
 
-Runs `SlowaveEngine.recall()` from the browser. This can load the text encoder,
-so the first query may take longer than dashboard-only pages.
+Browsable view over `schema_relations`, split by relation type:
+
+- **supersedes** / **refines** — pair table; click a row to expand a two-column
+  detail (full text, status/salience/confidence/scope/stage, reason, adjacent
+  chain links)
+- **part_of** — parent/children tree
+- **reinforces** — leaderboard of most-reinforced schemas, since raw edges are
+  too numerous (700+) to browse usefully
 
 ### DB health
 
@@ -123,7 +129,7 @@ The dashboard serves a small JSON API on the same local HTTP server:
 | `GET /api/schemas?limit=100&status=active&q=text` | Schema table data |
 | `GET /api/schemas/123` | Schema detail, evidence, incoming/outgoing relations |
 | `GET /api/graph/schemas?limit=120&min_salience=2.5` | Schema graph data |
-| `POST /api/recall` | Recall playground backend |
+| `GET /api/relations?type=supersedes&limit=50` | Relations tab data; `type` is one of `supersedes`, `refines`, `part_of`, `reinforces` (default `supersedes`), `limit` is 1-200 (default 50) |
 
 Example graph request:
 
@@ -131,12 +137,10 @@ Example graph request:
 curl 'http://127.0.0.1:8765/api/graph/schemas?limit=120&statuses=active,needs_review&min_salience=2.5'
 ```
 
-Example recall request:
+Example relations request:
 
 ```bash
-curl -X POST http://127.0.0.1:8765/api/recall \
-  -H 'Content-Type: application/json' \
-  -d '{"query":"database preference","top_k":5,"evidence":true}'
+curl 'http://127.0.0.1:8765/api/relations?type=part_of&limit=100'
 ```
 
 ## Safety and limitations
@@ -147,5 +151,3 @@ curl -X POST http://127.0.0.1:8765/api/recall \
   frontend build step is required.
 - The schema graph uses a simple SVG layout suitable for MVP-scale inspection.
   Large graph exploration may later move to Cytoscape.js or another graph UI.
-- Recall uses the normal encoder-backed recall path and may be slower than the
-  stats/process/schema pages.

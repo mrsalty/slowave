@@ -389,6 +389,7 @@ class Consolidator:
                 dst_schema_id=related.id,
                 relation="reinforces",
                 confidence=schema.confidence,
+                reason=f"geometric judge: cos={verdict.similarity:.3f}",
             )
             # Cross-scope offline reinforcement: when consolidation finds that a
             # newly-formed schema reinforces an existing schema from a different
@@ -409,6 +410,7 @@ class Consolidator:
                 dst_schema_id=related.id,
                 relation="refines",
                 confidence=schema.confidence,
+                reason=f"geometric judge: cos={verdict.similarity:.3f} facet_dist={verdict.facet_distance:.3f}",
             )
             return "reinforced", new_schema_id
         if verdict.verdict == "contradicts":
@@ -430,8 +432,16 @@ class Consolidator:
                     diag["gate_downgrades"]["recency_gate"] += 1
                 return "reinforced", new_schema_id
 
-            relation = "supersedes" if verdict.time_delta_s > 0 else "contradicts"
-            old_status = "superseded" if relation == "supersedes" else "contradicted"
+            # The relation edge is always "supersedes" -- "contradicts" isn't
+            # a valid relation type (see VALID_RELATIONS): it never fired in
+            # production, since it required the exact time_delta_s<=0 tie
+            # below, and the graph gains nothing from a second edge label
+            # for the same "old schema loses" event. The tie is still
+            # distinguished at the *status* level (a genuine same-instant
+            # clash vs. an ordinary update), which is real, independently
+            # meaningful information consumed by belief-revision damping.
+            old_status = "contradicted" if verdict.time_delta_s <= 0 else "superseded"
+            relation = "supersedes"
             # Transition the old schema out of active so belief-revision
             # silencing in _schema_priors() actually fires at recall time.
             # Without this call the relation edge exists but status stays
@@ -442,6 +452,10 @@ class Consolidator:
                 dst_schema_id=related.id,
                 relation=relation,
                 confidence=max(schema.confidence, 0.5),
+                reason=(
+                    f"geometric judge: cos={verdict.similarity:.3f} "
+                    f"facet_dist={verdict.facet_distance:.3f} dt={verdict.time_delta_s}s"
+                ),
             )
             return "contradicted", new_schema_id
         # unrelated
@@ -638,24 +652,34 @@ class Consolidator:
                 stats["inconclusive"] += 1
                 continue
 
-            relation = "supersedes" if verdict.time_delta_s > 0 else "contradicts"
-            loser_status = "superseded" if relation == "supersedes" else "contradicted"
+            # See _write_latent_schema's identical comment: the relation edge
+            # is always "supersedes" (not a valid-relation-type distinction
+            # for "contradicts" any more), but the tie (time_delta_s<=0) still
+            # gets its own status so belief-revision damping can tell a
+            # same-instant clash apart from an ordinary update.
+            is_tie = verdict.time_delta_s <= 0
+            loser_status = "contradicted" if is_tie else "superseded"
+            relation = "supersedes"
             self.schemas.update_status(old_side.id, status=loser_status, salience=0.05)
             self.schemas.add_relation(
                 src_schema_id=new_side.id,
                 dst_schema_id=old_side.id,
                 relation=relation,
                 confidence=max(new_side.confidence, 0.5),
+                reason=(
+                    f"reconsolidation: cos={verdict.similarity:.3f} "
+                    f"facet_dist={verdict.facet_distance:.3f} dt={verdict.time_delta_s}s"
+                ),
             )
             # The labile schema under examination is now resolved either way
             # (confirmed as the winner, or just demoted to a non-"active"
             # status where is_labile no longer affects eligibility) — clear
             # its flag for a clean state.
             self.schemas.adjust_feedback_state(schema.id, is_labile=False)
-            if relation == "supersedes":
-                stats["superseded"] += 1
-            else:
+            if is_tie:
                 stats["contradicted"] += 1
+            else:
+                stats["superseded"] += 1
 
         return stats
 

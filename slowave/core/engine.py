@@ -745,6 +745,7 @@ class SlowaveEngine:
                                         dst_schema_id=candidate_id,
                                         relation="supersedes",
                                         confidence=1.0,
+                                        reason=f"same-scope value substitution: cos={score:.3f} dir_score={dir_score:.3f}",
                                     )
                                     superseded_schema_ids.append(candidate_id)
                                     seen_ids.add(candidate_id)
@@ -787,6 +788,7 @@ class SlowaveEngine:
                                     dst_schema_id=candidate_id,
                                     relation="supersedes",
                                     confidence=score,
+                                    reason=f"extended-range value substitution: cos={score:.3f} dir_score={dir_score:.3f}",
                                 )
                                 superseded_schema_ids.append(candidate_id)
                                 seen_ids.add(candidate_id)
