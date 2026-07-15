@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.5](https://github.com/mrsalty/slowave/compare/slowave-v0.15.4...slowave-v0.15.5) (2026-07-15)
+
+
+### Bug Fixes
+
+* restore pyproject.toml version to 0.15.4 (trigger release for PR [#110](https://github.com/mrsalty/slowave/issues/110)) ([507d2b7](https://github.com/mrsalty/slowave/commit/507d2b7069d9bfc62a6f37ceaaa0fbca9cba1528))
+* restore pyproject.toml version to 0.15.4 (trigger release for PR… ([8391df7](https://github.com/mrsalty/slowave/commit/8391df7706f5b8be149ad6cd45a55cfb7ac8229c))
+
 ## [0.15.4](https://github.com/mrsalty/slowave/compare/slowave-v0.15.3...slowave-v0.15.4) (2026-07-14)
 
 
