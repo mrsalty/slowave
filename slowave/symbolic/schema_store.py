@@ -49,11 +49,11 @@ VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archive
 # belief". See GeometricContradictionJudge.judge() and
 # Consolidator._link_schemas_via_prototype_centroid, both of which now write
 # this relation directly.
-VALID_RELATIONS = ("reinforces", "refines", "supersedes", "part_of", "relates_to")
+VALID_RELATIONS = ("refines", "supersedes", "part_of", "relates_to")
 # Relations whose direction carries meaning (src=acting/contained side,
 # dst=acted-upon/container side, per dashboard/_js.py's documented
-# convention) -- as opposed to relates_to/reinforces, which are symmetric
-# associations where "A->B" and "B->A" are the same fact. add_relation()
+# convention) -- as opposed to relates_to, which is the only symmetric
+# association where "A->B" and "B->A" are the same fact. add_relation()
 # uses this set to reject writing both directions of the same directional
 # relation for one pair (see its reverse-edge guard below).
 _DIRECTIONAL_RELATIONS = frozenset({"refines", "supersedes", "part_of"})
@@ -686,14 +686,15 @@ class SchemaStore:
     ) -> None:
         """Write a schema_relations edge.
 
-        IMPORTANT for symmetric relations (relates_to, reinforces): callers
+        IMPORTANT for the symmetric relation relates_to: callers
         MUST canonicalize src/dst as (min(id), max(id)) before calling, since
         this store has no way to recognize that A->B and B->A represent the
         same symmetric fact -- the ON CONFLICT dedup below is keyed on the
         literal (src, dst, relation) tuple. See
         Consolidator._link_schemas_via_prototype_centroid for the reference
-        pattern. Directional relations (refines, supersedes, part_of) must
-        NOT be canonicalized this way -- direction is the meaning.
+        pattern. Directional relations (refines, supersedes,
+        part_of) must NOT be canonicalized this way -- direction is the
+        meaning.
         """
         if relation not in VALID_RELATIONS:
             raise ValueError(

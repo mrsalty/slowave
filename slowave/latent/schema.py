@@ -486,19 +486,10 @@ class GeometricJudgeConfig:
     # "about the same thing" (the only floor below which no verdict
     # beyond "unrelated" is meaningful).
     same_topic_cosine: float = 0.75
-    # When neither side has any facet axes at all (no signal to measure
-    # elaboration/reinforcement against), cosine is the only data available
-    # -- this is its one remaining independent role. At or above this
-    # threshold, near-identical centroids are treated as sufficient evidence
-    # of restatement on their own; below it (but still same-topic), the
-    # honest verdict is "relates_to" rather than fabricating "reinforces"
-    # from missing data. When facet axes ARE present, this threshold plays
-    # no role -- the real facet_distance/direction_score signals decide.
-    reinforce_cosine: float = 0.95
     # Facet-axis distance above which two same-topic, non-superseding
     # schemas are judged to diverge enough to be "refines" (elaboration)
-    # rather than "reinforces" (restatement). Computed as
-    # 1 - mean(|cos(axis_old, axis_new)|).
+    # rather than "relates_to" (same topic, no specific signal).
+    # Computed as 1 - mean(|cos(axis_old, axis_new)|).
     contradicts_facet_dist: float = 0.35
     # New schema must have at least this much support to supersede
     # an older one.
@@ -575,19 +566,14 @@ class GeometricContradictionJudge:
                         against additive/duplicate/unrelated ones.
       * refines     -- facet axes disagree (different aspect of the same
                         topic) but the change isn't a value substitution.
-      * reinforces  -- facet axes agree / no signal points to anything more
-                        specific: this is a restatement, not new content.
       * relates_to  -- cleared the same-topic floor but nothing stronger
-                        applies (typically: no facet signal to measure
-                        against, and cosine isn't high enough to treat as
-                        restatement on its own).
+                        applies (no facet signal, or facets agree/no
+                        directional signal pointing to anything specific).
 
-    Cosine only ever gates candidacy (same_topic_cosine) and, in the one
-    case with no facet signal at all, distinguishes reinforces from
-    relates_to (reinforce_cosine) -- it is never the reason for a
-    part_of/supersedes/refines verdict. That distinction matters because
-    cosine measures topical closeness, not which of these relations
-    applies; conflating the two is what let the old cos>=0.95-only
+    Cosine only ever gates candidacy (same_topic_cosine) -- it is never
+    the reason for a part_of/supersedes/refines verdict. That distinction
+    matters because cosine measures topical closeness, not which of these
+    relations applies; conflating the two is what let the old cos>=0.95-only
     shortcut label facet-divergent pairs "reinforces" with no other signal
     ever consulted.
 
@@ -723,19 +709,8 @@ class GeometricContradictionJudge:
 
         if not has_facet_signal:
             # No facet axes on one or both sides: cosine is the only signal
-            # left. Near-identical centroids are strong enough evidence of
-            # restatement on their own even with zero facet data; anything
-            # below that, but still same-topic, is honestly "related,
-            # unclear how" rather than a specific claim ("refines") that
-            # isn't warranted without any facet signal to back it.
-            if cos >= self.cfg.reinforce_cosine:
-                return GeometricVerdict(
-                    verdict="reinforces",
-                    reasoning=f"centroid_cos={cos:.3f}>=reinforce, no facet signal",
-                    similarity=cos,
-                    facet_distance=facet_dist,
-                    time_delta_s=dt_s,
-                )
+            # left. Same-topic is all we can honestly say without facet data
+            # to measure elaboration/containment against.
             return GeometricVerdict(
                 verdict="relates_to",
                 reasoning=f"centroid_cos={cos:.3f}, no facet signal",
@@ -758,13 +733,10 @@ class GeometricContradictionJudge:
             )
 
         # Facet axes agree (or nearly so) and direction is low: nothing
-        # about this pair points to elaboration or substitution -- they
-        # restate/confirm the same claim. Cosine plays no role in reaching
-        # this verdict (unlike the old cos>=reinforce_cosine shortcut); it
-        # is still returned as `similarity` so the caller can use it as the
-        # edge's confidence weight, never as the reason for the label.
+        # about this pair points to elaboration or substitution. With no
+        # stronger signal, the honest verdict is relates_to.
         return GeometricVerdict(
-            verdict="reinforces",
+            verdict="relates_to",
             reasoning=f"centroid_cos={cos:.3f} facet_dist={facet_dist:.3f}",
             similarity=cos,
             facet_distance=facet_dist,

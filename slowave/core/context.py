@@ -148,15 +148,12 @@ _NOISE_PENALTY_WEIGHT = 0.30
 # Relation-graph spreading activation (expand_via_relations): a schema_relations
 # edge from an admitted schema injects activation into its neighbor, the same
 # way a directly-matched cosine hit does, so genuinely useful but only
-# indirectly-cued memories ("sparks") can still surface. reinforces is
-# excluded — it's the same content restated (an evidence-count signal, not a
-# distinct association) and floods the graph with no informational gain.
+# indirectly-cued memories ("sparks") can still surface.
 # Decay per hop and a hard cap on total injected schemas are engineering
 # bounds with no brain equivalent: unlike biological spreading activation,
 # every extra hop is a real query and every extra schema is real context-
 # window tokens, so depth/breadth must be bounded rather than left to decay
 # alone (see private/docs' relation-retrieval design discussion, 2026-07-14).
-_GRAPH_EXCLUDED_RELATIONS = ("reinforces",)
 _GRAPH_HOP_DECAY = 0.6
 _GRAPH_MAX_HOPS = 2
 _GRAPH_MAX_EXTRA = 3
@@ -824,8 +821,7 @@ def spread_relation_activation(
     `fetch_relations(schema_id)` returns that schema's edges in EITHER
     direction as `(neighbor_id, relation, confidence)` tuples -- direction only
     ever mattered for who was created from whom; activation spreads along the
-    edge regardless of which side is src/dst. `reinforces` edges are excluded
-    (same-content restatement, not a distinct association).
+    edge regardless of which side is src/dst.
 
     Contributions converge: a neighbor reachable from more than one seed gets
     the SUM of every path's injected activation before being compared to
@@ -857,7 +853,7 @@ def spread_relation_activation(
         touched_this_hop: set[int] = set()
         for source_id, source_activation in frontier.items():
             for neighbor_id, relation, confidence in fetch_relations(source_id):
-                if relation in _GRAPH_EXCLUDED_RELATIONS or neighbor_id in visited:
+                if neighbor_id in visited:
                     continue
                 contribution = source_activation * confidence * (_GRAPH_HOP_DECAY**hop)
                 injected[neighbor_id] = injected.get(neighbor_id, 0.0) + contribution

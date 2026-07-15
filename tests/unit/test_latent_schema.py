@@ -76,22 +76,20 @@ class TestGeometricContradictionJudge:
         assert result.verdict == "unrelated"
         assert result.similarity < self.judge.cfg.same_topic_cosine
 
-    def test_reinforcing_schemas(self):
-        """Near-identical centroids → reinforces."""
+    def test_near_identical_centroids_no_facet_signal(self):
+        """Near-identical centroids, no facet axes → relates_to."""
         base = _unit(np.array([1.0, 1.0, 0.0]))
         noisy = _unit(base + np.array([0.0001, 0.0, 0.0]))
         a = _make_schema(base)
         b = _make_schema(noisy)
         result = self.judge.judge(old=a, new=b)
-        assert result.verdict == "reinforces"
-        assert result.similarity >= self.judge.cfg.reinforce_cosine
+        assert result.verdict == "relates_to"
+        assert result.similarity >= 0.90
 
-    def test_refining_schemas(self):
+    def test_same_topic_identical_facets_no_direction(self):
         """Same topic (cos ~0.80), identical facet axes, no direction signal
-        -> reinforces (facet axes agree, so this is restatement, not
-        elaboration -- see test_refining_schemas_high_facet_distance for the
-        genuinely-divergent-axes case that produces "refines")."""
-        # cos([1,0,0,0,0], [0.8,0.6,0,0,0]) = 0.80: in same-topic zone, below reinforce
+        -> relates_to (facets agree but nothing more specific applies)."""
+        # cos([1,0,0,0,0], [0.8,0.6,0,0,0]) = 0.80: in same-topic zone
         c_old = _unit(np.array([1.0, 0.0, 0.0, 0.0, 0.0]))
         c_new = _unit(np.array([0.8, 0.6, 0.0, 0.0, 0.0]))
         # Identical axis -> facet_dist = 0 < contradicts_facet_dist
@@ -99,8 +97,8 @@ class TestGeometricContradictionJudge:
         a = _make_schema(c_old, facet_axes=axis)
         b = _make_schema(c_new, facet_axes=axis)
         result = self.judge.judge(old=a, new=b)
-        assert result.verdict == "reinforces", (
-            f"expected reinforces, got {result.verdict}; "
+        assert result.verdict == "relates_to", (
+            f"expected relates_to, got {result.verdict}; "
             f"sim={result.similarity:.3f} facet_dist={result.facet_distance:.3f}"
         )
         assert result.facet_distance < self.judge.cfg.contradicts_facet_dist
@@ -255,7 +253,6 @@ class TestGeometricContradictionJudge:
         """Custom config thresholds gate all verdicts correctly."""
         cfg = GeometricJudgeConfig(
             same_topic_cosine=0.5,
-            reinforce_cosine=0.99,
             contradicts_facet_dist=0.1,
         )
         judge = GeometricContradictionJudge(cfg)
@@ -265,7 +262,7 @@ class TestGeometricContradictionJudge:
         a = _make_schema(c_a, facet_axes=axis)
         b = _make_schema(c_b, facet_axes=axis)
         result = judge.judge(old=a, new=b)
-        assert result.verdict in ("reinforces", "refines", "relates_to")
+        assert result.verdict in ("refines", "relates_to")
 
 
 # ---------------------------------------------------------------------------

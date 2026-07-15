@@ -400,7 +400,7 @@ def main() -> None:
     )
     print(f" Hits    : {hits}/{n}")
     print(f" Score   : {100 * hits / max(1, n):.2f}%")
-    print(f" Recall@K: " + "  ".join(f"{k}={v}%" for k, v in recall_at_k_pct.items()))
+    print(" Recall@K: " + "  ".join(f"{k}={v}%" for k, v in recall_at_k_pct.items()))
     print(f" MRR     : {mrr}")
     total_elapsed = time.time() - start
     valid = [r for r in results if not r.error]
