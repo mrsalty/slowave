@@ -1,8 +1,14 @@
-"""Tests for B-5: contradiction judge support and recency gates.
+"""Tests for B-5: supersession judge support and recency gates.
 
 The GeometricJudgeConfig has min_support_to_supersede and
 min_time_delta_to_supersede_s that were previously unused.
-The consolidator now uses them to gate contradiction verdicts.
+The consolidator now uses them to gate "supersedes" verdicts (renamed from
+"contradicts" as part of the 2026-07-15 relation-taxonomy rewire -- see
+GeometricContradictionJudge.judge()). These tests mock the judge's return
+value directly rather than exercising the real cascade, so they only need
+the verdict *string* updated to stay meaningful; the gate logic they cover
+(support/recency thresholds in Consolidator._write_latent_schema) is
+unchanged.
 """
 
 from __future__ import annotations
@@ -50,7 +56,7 @@ def make_latent_schema(
 
 @pytest.fixture()
 def mock_consolidator():
-    """Consolidator with mocked judge that always returns 'contradicts'."""
+    """Consolidator with mocked judge that always returns 'supersedes'."""
     db_path = str(Path(tempfile.mkdtemp()) / "test.db")
     from slowave.storage.sqlite_db import SQLiteConfig, SQLiteDB
 
@@ -79,12 +85,12 @@ def mock_consolidator():
     cons.schemas.last_create_reinforced_existing_id = None
     # No geometric near-duplicate — let the write path reach the judge.
     cons.schemas.search_embedding.return_value = []
-    # Force the judge to return "contradicts" so we test the gate.
+    # Force the judge to return "supersedes" so we test the gate.
     from slowave.latent.schema import GeometricVerdict
 
     cons.geometric_judge.judge = MagicMock(
         return_value=GeometricVerdict(
-            verdict="contradicts",
+            verdict="supersedes",
             reasoning="test",
             similarity=0.80,
             facet_distance=0.40,
@@ -95,8 +101,8 @@ def mock_consolidator():
     db.close()
 
 
-def test_contradicts_gated_by_low_support(mock_consolidator):
-    """contradicts verdict with support=1 → should return 'reinforced'."""
+def test_supersedes_gated_by_low_support(mock_consolidator):
+    """supersedes verdict with support=1 → should return 'reinforced'."""
     old_schema = MagicMock(id=7, content_text="old", confidence=1.0, facets={}, scope_id="p:t")
     # Valid embedding on old schema
     old_emb = np.ones(32, dtype=np.float32) / np.sqrt(32)
@@ -111,8 +117,8 @@ def test_contradicts_gated_by_low_support(mock_consolidator):
     assert outcome == "reinforced"
 
 
-def test_contradicts_passes_with_enough_support(mock_consolidator):
-    """contradicts verdict with support=5 → passes gate, returns 'contradicted'."""
+def test_supersedes_passes_with_enough_support(mock_consolidator):
+    """supersedes verdict with support=5 → passes gate, returns 'contradicted'."""
     old_schema = MagicMock(id=7, content_text="old", confidence=1.0, facets={}, scope_id="p:t")
     old_emb = np.ones(32, dtype=np.float32) / np.sqrt(32)
 
@@ -126,8 +132,8 @@ def test_contradicts_passes_with_enough_support(mock_consolidator):
     assert outcome == "contradicted"
 
 
-def test_contradicts_gated_by_short_time_delta(mock_consolidator):
-    """contradicts with dt=30s < min_time_delta=60s → 'reinforced'."""
+def test_supersedes_gated_by_short_time_delta(mock_consolidator):
+    """supersedes with dt=30s < min_time_delta=60s → 'reinforced'."""
     from slowave.latent.schema import GeometricVerdict
 
     old_schema = MagicMock(id=7, content_text="old", confidence=1.0, facets={}, scope_id="p:t")
@@ -141,7 +147,7 @@ def test_contradicts_gated_by_short_time_delta(mock_consolidator):
                     mock_consolidator.geometric_judge,
                     "judge",
                     return_value=GeometricVerdict(
-                        verdict="contradicts",
+                        verdict="supersedes",
                         reasoning="test",
                         similarity=0.80,
                         facet_distance=0.40,

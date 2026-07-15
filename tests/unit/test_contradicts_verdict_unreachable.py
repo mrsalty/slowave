@@ -1,30 +1,34 @@
 """Regression test for a root-cause finding, not just a hypothesis.
 
-plans/05-consolidation.md flagged Q7 as an open question: is `contradicts`
-rare because most real prototypes have too few members to compute facet
-axes (LatentSchemaConfig.min_members_for_facets=3)? The 2026-07-09 B1/B2
-StaleMemory runs (26,250 prototypes combined, 0 contradicts observed either
-way) motivated digging further.
+plans/05-consolidation.md flagged Q7 as an open question: is the facet-
+distance-driven verdict (originally named "contradicts", renamed
+"refines"/"supersedes" by the 2026-07-15 taxonomy rewire -- see
+GeometricContradictionJudge.judge()) rare because most real prototypes have
+too few members to compute facet axes (LatentSchemaConfig.min_members_for_facets=3)?
+The 2026-07-09 B1/B2 StaleMemory runs (26,250 prototypes combined, 0
+contradicts observed either way) motivated digging further.
 
-The actual answer is stronger than "rare": `contradicts` is provably
-UNREACHABLE via Consolidator._write_latent_schema, regardless of the new
-schema's member count. `_write_latent_schema` reconstructs the *old*
-schema's LatentSchema view with `facet_axes=np.zeros((0, dim))` — an
-unconditional, always-empty placeholder — because facet axes are never
-persisted anywhere retrievable (only bound lossily into a VSA hypervector
-blob; see 05-consolidation.md's VSA encoding section). In
-GeometricContradictionJudge.judge() (schema.py line ~538), the facet-distance
-branch only activates `if old.facet_axes.size > 0 and new.facet_axes.size > 0`
-— since old.facet_axes.size is always 0 on this path, facet_dist is always
-exactly 0.0, which is always < contradicts_facet_dist (0.35). The
-"contradicts" verdict (schema.py line ~550, `facet_dist >= contradicts_facet_dist`)
-can therefore never fire here, no matter how divergent the new schema's
-real facet axes are from the old schema's true (but unreconstructable)
-structure.
+The actual answer is stronger than "rare": under the ORIGINAL judge, that
+verdict was provably UNREACHABLE via Consolidator._write_latent_schema,
+regardless of the new schema's member count. `_write_latent_schema`
+reconstructs the *old* schema's LatentSchema view with
+`facet_axes=np.zeros((0, dim))` — an unconditional, always-empty
+placeholder — because facet axes are never persisted anywhere retrievable
+(only bound lossily into a VSA hypervector blob; see 05-consolidation.md's
+VSA encoding section). Since old.facet_axes.size is always 0 on this path,
+`has_facet_signal` in judge() is always False, so no facet-distance-based
+verdict (refines-via-high-facet-distance) can ever fire here, no matter how
+divergent the new schema's real facet axes are from the old schema's true
+(but unreconstructable) structure. Under the current taxonomy, this
+"no facet signal at all" case resolves to "relates_to" (or "reinforces" if
+cosine alone is high enough) rather than the old refines-by-default
+fallback -- see test_no_facet_axes_falls_back_to_relates_to in
+test_latent_schema.py -- but the underlying structural finding (old.facet_axes
+is unreconstructable here) is unchanged.
 
 Note this is orthogonal to the existing tests in
 test_contradiction_support_gate.py, which all mock `judge.judge()` directly
-to inject a "contradicts" verdict and test the downstream support/recency
+to inject a "supersedes" verdict and test the downstream support/recency
 gates — none of them exercise the real facet-axis comparison, so none of
 them could have caught this.
 """
@@ -84,12 +88,15 @@ def _same_topic_centroids(cos_target: float):
 
 
 def test_contradicts_unreachable_even_with_maximally_divergent_new_facets(consolidator):
-    """cos=0.85 lands squarely in the facet-comparison band
+    """cos=0.85 lands squarely in the same-topic-but-below-reinforce band
     (same_topic_cosine=0.75 <= cos < reinforce_cosine=0.95). The new schema
     is given real, well-formed facet axes (as if built from >=3 members).
     The real (unmocked) judge is invoked end-to-end through
-    _write_latent_schema. Verdict must be "refines", never "contradicts",
-    because old.facet_axes is always empty on this path."""
+    _write_latent_schema. Verdict must be "relates_to" -- since old.facet_axes
+    is always empty on this path, there is no facet signal to compare against
+    (has_facet_signal=False), so neither a facet-distance-based verdict nor
+    containment (also gated on has_facet_signal) can ever fire here, no
+    matter how divergent or how many facet axes the new schema has."""
     old_centroid, new_centroid = _same_topic_centroids(cos_target=0.85)
 
     new_schema = LatentSchema(
@@ -121,11 +128,11 @@ def test_contradicts_unreachable_even_with_maximally_divergent_new_facets(consol
                     prototype_id=1, schema=new_schema
                 )
 
-    assert outcome == "reinforced"  # "refines" always maps to outcome "reinforced"
+    assert outcome == "reinforced"  # "relates_to" always maps to outcome "reinforced"
     assert outcome != "contradicted"
     consolidator.schemas.add_relation.assert_called_once()
     _, kwargs = consolidator.schemas.add_relation.call_args
-    assert kwargs["relation"] == "refines"
+    assert kwargs["relation"] == "relates_to"
 
 
 def test_facet_distance_is_always_zero_for_the_old_view(consolidator):
@@ -167,4 +174,4 @@ def test_facet_distance_is_always_zero_for_the_old_view(consolidator):
         )
         verdict = consolidator.geometric_judge.judge(old=old_view, new=new_view)
         assert verdict.facet_distance == 0.0
-        assert verdict.verdict != "contradicts"
+        assert verdict.verdict == "relates_to"  # no facet signal at all -> honest catch-all

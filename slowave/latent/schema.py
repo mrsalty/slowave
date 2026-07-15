@@ -35,11 +35,15 @@ from __future__ import annotations
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 import numpy as np
 
+from slowave.core.supersession_manifold import DIRECTION_THRESHOLD
 from slowave.symbolic.episode_text import EpisodeText
+
+if TYPE_CHECKING:
+    from slowave.core.supersession_manifold import SupersessionManifold
 
 # ---- Data types ----------------------------------------------------------
 
@@ -104,11 +108,19 @@ class GeometricVerdict:
     path.
     """
 
-    verdict: str  # 'reinforces' | 'refines' | 'contradicts' | 'unrelated'
+    verdict: str  # 'unrelated' | 'part_of' | 'supersedes' | 'refines' | 'reinforces' | 'relates_to'
     reasoning: str
     similarity: float
     facet_distance: float
     time_delta_s: int
+    # Only set when verdict == 'part_of': which side is the contained
+    # sub-component. 'old_within_new' means `old`'s variation from `new`
+    # stays inside `new`'s own facet spread (old is the specific instance,
+    # new is the broader container) -- 'new_within_old' is the reverse. The
+    # caller uses this to pick add_relation's src (contained)/dst (container)
+    # instead of blindly reusing the reinforces/refines convention of
+    # src=new, which does not hold for part_of.
+    contains_direction: Optional[str] = None
 
 
 # ---------------------------------------------------------------------------
@@ -471,13 +483,22 @@ class LatentSchemaBuilder:
 @dataclass(frozen=True)
 class GeometricJudgeConfig:
     # Centroid cosine similarity required for two schemas to be
-    # "about the same thing" (the only case where contradiction
-    # is meaningful). Below this they're judged "unrelated".
+    # "about the same thing" (the only floor below which no verdict
+    # beyond "unrelated" is meaningful).
     same_topic_cosine: float = 0.75
-    # If similarity is very high, the schemas reinforce each other.
+    # When neither side has any facet axes at all (no signal to measure
+    # elaboration/reinforcement against), cosine is the only data available
+    # -- this is its one remaining independent role. At or above this
+    # threshold, near-identical centroids are treated as sufficient evidence
+    # of restatement on their own; below it (but still same-topic), the
+    # honest verdict is "relates_to" rather than fabricating "reinforces"
+    # from missing data. When facet axes ARE present, this threshold plays
+    # no role -- the real facet_distance/direction_score signals decide.
     reinforce_cosine: float = 0.95
-    # Facet-axis distance above which we judge "contradicts" rather
-    # than "refines". Computed as 1 - mean(|cos(axis_old, axis_new)|).
+    # Facet-axis distance above which two same-topic, non-superseding
+    # schemas are judged to diverge enough to be "refines" (elaboration)
+    # rather than "reinforces" (restatement). Computed as
+    # 1 - mean(|cos(axis_old, axis_new)|).
     contradicts_facet_dist: float = 0.35
     # New schema must have at least this much support to supersede
     # an older one.
@@ -491,31 +512,109 @@ class GeometricJudgeConfig:
     # this judge. Set >= 1.0 to disable the guard (every candidate reaches
     # the judge, subject to related_schema_cosine below).
     near_dup_guard_cosine: float = 0.92
+    # Subspace-containment score (see _subspace_containment) above which one
+    # side's difference-from-the-other is considered to live "inside" the
+    # other's facet spread -- the geometric signature of hierarchical
+    # nesting (a specific instance whose variation never leaves its
+    # container's spread). Mirrors SchemaStore.backfill_part_of_edges's
+    # containment_threshold default so the live judge and the offline batch
+    # job agree on what counts as containment.
+    containment_threshold: float = 0.55
+    # Minimum gap between the two directions' containment scores required
+    # to call the relationship asymmetric (hence hierarchical) rather than
+    # symmetric (hence just "close in embedding space", not nested). Mirrors
+    # backfill_part_of_edges's asymmetry_margin default.
+    containment_asymmetry_margin: float = 0.10
     # Cosine above which Consolidator._best_related_schema treats an
     # existing schema as related enough to compare via this judge.
     related_schema_cosine: float = 0.72
 
 
+def _subspace_containment(diff: np.ndarray, axes: np.ndarray) -> float:
+    """Fraction of `diff`'s squared norm that lies within the subspace
+    spanned by `axes` (a schema's facet axes).
+
+    Returns a value in [0, 1] (up to floating-point slop when axes overlap):
+    0 means `diff` points entirely outside the given spread; close to 1
+    means `diff` -- the change from one schema to the other -- stays
+    entirely within dimensions that spread already varies along. That is
+    the geometric signature of hierarchical nesting: a specific instance
+    whose variation never leaves its container's natural range of
+    variation. It must be checked in BOTH directions and compared for
+    asymmetry (see the part_of branch in judge()) -- a diff that projects
+    heavily onto both sides' axes is just "these two are close together in
+    embedding space", not "one contains the other". Symmetric containment
+    is co-reference (same underlying thing, reworded), not nesting.
+
+    Returns 0.0 when `diff` is ~zero (nothing to measure) or `axes` is
+    empty (nothing to project onto).
+    """
+    dn = float(np.dot(diff, diff))
+    if dn < 1e-12 or axes.size == 0:
+        return 0.0
+    c = 0.0
+    for axis in axes:
+        p = float(np.dot(diff, axis))
+        c += p * p
+    return c / dn
+
+
 class GeometricContradictionJudge:
-    """Latent-space contradiction detector.
+    """Latent-space relation detector.
 
-    Two schemas conflict when:
-      * Their centroids are close (same topic), and
-      * Their facet axes disagree (different *aspect* of that topic),
-        OR they have the same axes but the newer one materially
-        differs along them.
+    Two schemas that are "about the same thing" (centroids close) can
+    relate in several distinct ways, each backed by an orthogonal
+    geometric signal rather than by cosine alone:
 
-    The brain analogue is predictive coding: a mismatch on the facet
-    axes is exactly the prediction error that triggers
-    reconsolidation. Stage 10 will use the same signal to *update*
-    the older schema; here we only emit a verdict for the Consolidator.
+      * part_of     -- one side's difference from the other lives almost
+                        entirely inside the other's facet spread, and only
+                        in that direction (asymmetric subspace containment).
+      * supersedes  -- the change between them aligns with a calibrated
+                        "value substitution" direction (direction_score),
+                        learned by contrasting real supersession pairs
+                        against additive/duplicate/unrelated ones.
+      * refines     -- facet axes disagree (different aspect of the same
+                        topic) but the change isn't a value substitution.
+      * reinforces  -- facet axes agree / no signal points to anything more
+                        specific: this is a restatement, not new content.
+      * relates_to  -- cleared the same-topic floor but nothing stronger
+                        applies (typically: no facet signal to measure
+                        against, and cosine isn't high enough to treat as
+                        restatement on its own).
+
+    Cosine only ever gates candidacy (same_topic_cosine) and, in the one
+    case with no facet signal at all, distinguishes reinforces from
+    relates_to (reinforce_cosine) -- it is never the reason for a
+    part_of/supersedes/refines verdict. That distinction matters because
+    cosine measures topical closeness, not which of these relations
+    applies; conflating the two is what let the old cos>=0.95-only
+    shortcut label facet-divergent pairs "reinforces" with no other signal
+    ever consulted.
+
+    The brain analogue is predictive coding: a mismatch on the facet axes
+    (refines) or an aligned value-substitution direction (supersedes) is
+    exactly the prediction error that triggers reconsolidation. Stage 10
+    uses the same signal to *update* the older schema; here we only emit a
+    verdict for the Consolidator.
     """
 
-    def __init__(self, cfg: Optional[GeometricJudgeConfig] = None):
+    def __init__(
+        self,
+        cfg: Optional[GeometricJudgeConfig] = None,
+        manifold: Optional["SupersessionManifold"] = None,
+    ):
         self.cfg = cfg or GeometricJudgeConfig()
+        # Optional so every existing hand-built-LatentSchema unit test (which
+        # never constructs a SupersessionManifold) keeps working exactly as
+        # before: direction_score defaults to 0.0 below, never fabricating a
+        # supersession verdict from missing data. Production callers
+        # (engine.py) inject the engine's shared, lazily-computed manifold.
+        self.manifold = manifold
 
     def judge(self, *, old: LatentSchema, new: LatentSchema) -> GeometricVerdict:
-        # Centroid similarity
+        # Centroid similarity -- the ONLY topical gate. Below this floor the
+        # two schemas simply aren't about the same thing, so no other signal
+        # is worth computing.
         a = old.centroid.astype(np.float32)
         b = new.centroid.astype(np.float32)
         denom = (np.linalg.norm(a) * np.linalg.norm(b)) + 1e-12
@@ -527,24 +626,20 @@ class GeometricContradictionJudge:
         if cos < self.cfg.same_topic_cosine:
             return GeometricVerdict(
                 verdict="unrelated",
-                reasoning=f"centroid_cos={cos:.3f}<thr",
-                similarity=cos,
-                facet_distance=0.0,
-                time_delta_s=dt_s,
-            )
-        if cos >= self.cfg.reinforce_cosine:
-            return GeometricVerdict(
-                verdict="reinforces",
-                reasoning=f"centroid_cos={cos:.3f}>=reinforce",
+                reasoning=f"centroid_cos={cos:.3f}<same_topic",
                 similarity=cos,
                 facet_distance=0.0,
                 time_delta_s=dt_s,
             )
 
-        # Same topic, less than maximal similarity: compare facet axes.
-        # Facet-axis distance = 1 - mean(|cos(axis_old_i, axis_new_i)|)
-        # over the min(k_old, k_new) pairs. Bounded in [0, 1].
-        if old.facet_axes.size > 0 and new.facet_axes.size > 0:
+        # Facet-axis distance = 1 - mean(|cos(axis_old_i, axis_new_i)|) over
+        # the min(k_old, k_new) pairs. Bounded in [0, 1]. `has_facet_signal`
+        # tracks whether that pairwise comparison actually happened -- with
+        # no axes on one or both sides there is nothing to compare, and
+        # facet_dist=0.0 in that case means "no data", not "these two
+        # confirm each other" (see the reinforces/relates_to split below).
+        has_facet_signal = old.facet_axes.size > 0 and new.facet_axes.size > 0
+        if has_facet_signal:
             k = min(old.facet_axes.shape[0], new.facet_axes.shape[0])
             pair_cos = []
             for i in range(k):
@@ -556,22 +651,120 @@ class GeometricContradictionJudge:
         else:
             facet_dist = 0.0
 
-        if facet_dist >= self.cfg.contradicts_facet_dist:
-            # The consolidator decides whether to supersede or mark
-            # as contradicted based on time delta and support metadata.
-            verdict = "contradicts"
+        # Subspace containment: does old's difference-from-new live inside
+        # new's own facet spread (old_within_new), or the reverse? Requires
+        # has_facet_signal (both sides have real facet axes), same as
+        # facet_dist above and the same candidate-eligibility rule
+        # backfill_part_of_edges uses (it only ever compares schemas that
+        # both have n_facet_axes > 0). Checking containment against only
+        # ONE side's axes would be meaningless, not just weaker: if old has
+        # no axes at all, "old_within_new" would spuriously read as ~1.0
+        # whenever new's axes happen to span whatever subspace the diff
+        # lives in -- an artifact of new's basis, not evidence that old is
+        # a specialization of new. Both centroids are re-normalised to unit
+        # length first -- containment measures direction of the diff
+        # relative to each side's spread, and raw embedding magnitude
+        # (which the cosine step above already factors out via its own
+        # denominator) would otherwise distort the diff vector's scale for
+        # no geometric reason. Only an ASYMMETRIC result counts as nesting;
+        # a diff that projects heavily onto BOTH sides' axes just means the
+        # two clusters overlap, which says nothing about hierarchy (see
+        # _subspace_containment's docstring).
+        containment_old_in_new = 0.0
+        containment_new_in_old = 0.0
+        if has_facet_signal:
+            a_unit = a / (np.linalg.norm(a) + 1e-12)
+            b_unit = b / (np.linalg.norm(b) + 1e-12)
+            containment_old_in_new = _subspace_containment(a_unit - b_unit, new.facet_axes)
+            containment_new_in_old = _subspace_containment(b_unit - a_unit, old.facet_axes)
+        if (
+            abs(containment_old_in_new - containment_new_in_old)
+            >= self.cfg.containment_asymmetry_margin
+            and max(containment_old_in_new, containment_new_in_old)
+            >= self.cfg.containment_threshold
+        ):
+            contains_direction = (
+                "old_within_new"
+                if containment_old_in_new > containment_new_in_old
+                else "new_within_old"
+            )
             return GeometricVerdict(
-                verdict=verdict,
+                verdict="part_of",
+                reasoning=(
+                    f"centroid_cos={cos:.3f} c_old_in_new={containment_old_in_new:.3f} "
+                    f"c_new_in_old={containment_new_in_old:.3f}"
+                ),
+                similarity=cos,
+                facet_distance=facet_dist,
+                time_delta_s=dt_s,
+                contains_direction=contains_direction,
+            )
+
+        # direction_score: is the change from old to new a genuine VALUE
+        # SUBSTITUTION (the same slot now holds a different value), as
+        # opposed to merely "similar topic"? Cosine cannot answer this --
+        # it measures how close two points are, not which way the change
+        # between them points. direction_score projects the raw diff onto a
+        # calibrated SVD1 axis learned by contrasting real supersession
+        # pairs (e.g. "uses SQLite" -> "uses DuckDB") against additive/
+        # duplicate/unrelated pairs across many domains, so a high score
+        # means "this specific kind of change", not merely "these are
+        # similar". With no manifold injected, this defaults to 0.0 --
+        # never fabricating a supersession verdict from missing data.
+        direction_score = self.manifold.direction_score(b, a) if self.manifold is not None else 0.0
+        if direction_score >= DIRECTION_THRESHOLD:
+            return GeometricVerdict(
+                verdict="supersedes",
+                reasoning=f"centroid_cos={cos:.3f} direction_score={direction_score:.3f}",
+                similarity=cos,
+                facet_distance=facet_dist,
+                time_delta_s=dt_s,
+            )
+
+        if not has_facet_signal:
+            # No facet axes on one or both sides: cosine is the only signal
+            # left. Near-identical centroids are strong enough evidence of
+            # restatement on their own even with zero facet data; anything
+            # below that, but still same-topic, is honestly "related,
+            # unclear how" rather than a specific claim ("refines") that
+            # isn't warranted without any facet signal to back it.
+            if cos >= self.cfg.reinforce_cosine:
+                return GeometricVerdict(
+                    verdict="reinforces",
+                    reasoning=f"centroid_cos={cos:.3f}>=reinforce, no facet signal",
+                    similarity=cos,
+                    facet_distance=facet_dist,
+                    time_delta_s=dt_s,
+                )
+            return GeometricVerdict(
+                verdict="relates_to",
+                reasoning=f"centroid_cos={cos:.3f}, no facet signal",
+                similarity=cos,
+                facet_distance=facet_dist,
+                time_delta_s=dt_s,
+            )
+
+        if facet_dist >= self.cfg.contradicts_facet_dist:
+            # Facet axes disagree and there's no value-substitution signal
+            # (direction_score already ruled that out above) -- this is
+            # elaboration/aspect-shift (a genuinely different angle on the
+            # same topic), not a value update and not mere restatement.
+            return GeometricVerdict(
+                verdict="refines",
                 reasoning=f"centroid_cos={cos:.3f} facet_dist={facet_dist:.3f}",
                 similarity=cos,
                 facet_distance=facet_dist,
                 time_delta_s=dt_s,
             )
 
-        # Same topic, axes mostly agree, but not maximally similar:
-        # the newer one *refines* the older one rather than contradicts.
+        # Facet axes agree (or nearly so) and direction is low: nothing
+        # about this pair points to elaboration or substitution -- they
+        # restate/confirm the same claim. Cosine plays no role in reaching
+        # this verdict (unlike the old cos>=reinforce_cosine shortcut); it
+        # is still returned as `similarity` so the caller can use it as the
+        # edge's confidence weight, never as the reason for the label.
         return GeometricVerdict(
-            verdict="refines",
+            verdict="reinforces",
             reasoning=f"centroid_cos={cos:.3f} facet_dist={facet_dist:.3f}",
             similarity=cos,
             facet_distance=facet_dist,

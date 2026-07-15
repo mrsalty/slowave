@@ -23,13 +23,17 @@ VALID_SCHEMA_STATUSES = ("active", "needs_review", "superseded", "contradicted",
 # "contradicts" and "related_to" were removed from schema_store.py's VALID_RELATIONS
 # (2026-07-14): contradicts required an unreachable time_delta_s<=0 tie (every call
 # site now writes "supersedes" for that case too), related_to was only add_relation()'s
-# own silent fallback for invalid input, never a real caller. Kept in sync here since
-# the dashboard is a standalone stdlib server with its own copy of this list.
+# own silent fallback for invalid input, never a real caller. "relates_to" (2026-07-15,
+# distinct spelling from the dead "related_to") was reintroduced as the taxonomy's
+# honest catch-all for "same topic, no stronger geometric signal applies" -- see
+# schema_store.py's VALID_RELATIONS comment. Kept in sync here since the dashboard is
+# a standalone stdlib server with its own copy of this list.
 VALID_SCHEMA_RELATIONS = (
     "reinforces",
     "refines",
     "supersedes",
     "part_of",
+    "relates_to",
 )
 
 
@@ -409,26 +413,25 @@ def _pulse_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]:
         counts = {int(r["bucket_ts"]): int(r["n"]) for r in rows}
         return [{"ts": ts, "n": counts.get(ts, 0)} for ts in all_ts]
 
+    def _bucket_rows(conn: sqlite3.Connection, table: str, ts_col: str) -> list:
+        # Tables may not exist yet on a brand-new database -- treat that the
+        # same as "no rows in range" so the pulse still renders (flatlined)
+        # instead of the endpoint 500ing.
+        try:
+            return conn.execute(
+                f"""SELECT ({ts_col} / ?) * ? AS bucket_ts, COUNT(*) AS n
+                   FROM {table} WHERE {ts_col} >= ? AND {ts_col} <= ?
+                   GROUP BY bucket_ts ORDER BY bucket_ts""",
+                (bucket_s, bucket_s, first_bucket, now),
+            ).fetchall()
+        except sqlite3.Error:
+            return []
+
     conn = _connect(db_path)
     try:
-        raw_rows = conn.execute(
-            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
-               FROM raw_events WHERE ts >= ? AND ts <= ?
-               GROUP BY bucket_ts ORDER BY bucket_ts""",
-            (bucket_s, bucket_s, first_bucket, now),
-        ).fetchall()
-        epi_rows = conn.execute(
-            """SELECT (ts / ?) * ? AS bucket_ts, COUNT(*) AS n
-               FROM episodic_memories WHERE ts >= ? AND ts <= ?
-               GROUP BY bucket_ts ORDER BY bucket_ts""",
-            (bucket_s, bucket_s, first_bucket, now),
-        ).fetchall()
-        sch_rows = conn.execute(
-            """SELECT (first_formed_ts / ?) * ? AS bucket_ts, COUNT(*) AS n
-               FROM schemas WHERE first_formed_ts >= ? AND first_formed_ts <= ?
-               GROUP BY bucket_ts ORDER BY bucket_ts""",
-            (bucket_s, bucket_s, first_bucket, now),
-        ).fetchall()
+        raw_rows = _bucket_rows(conn, "raw_events", "ts")
+        epi_rows = _bucket_rows(conn, "episodic_memories", "ts")
+        sch_rows = _bucket_rows(conn, "schemas", "first_formed_ts")
 
         channels = {
             "raw_events": _bucketize(raw_rows),
@@ -832,7 +835,7 @@ def _schema_graph_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, A
         limit = 120
     scope = (qs.get("scope") or [""])[0]
     statuses_raw = (qs.get("statuses") or ["active,needs_review,contradicted,superseded"])[0]
-    relations_raw = (qs.get("relations") or ["reinforces,refines,supersedes,part_of"])[0]
+    relations_raw = (qs.get("relations") or ["reinforces,refines,supersedes,part_of,relates_to"])[0]
     statuses = [s for s in statuses_raw.split(",") if s in VALID_SCHEMA_STATUSES]
     relations = [r for r in relations_raw.split(",") if r in VALID_SCHEMA_RELATIONS]
     if not statuses:

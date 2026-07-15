@@ -101,8 +101,17 @@ class IngestService:
             [e.embedding for e in embeddable if e.embedding is not None]
         )
         if macro_emb is not None:
-            macro_text = "\n".join(self._event_text(e) for e in events if e.content.strip())
-            macro_source = "\n".join(e.content.strip() for e in events if e.content.strip())
+            # Use `embeddable`, not `events`, here -- matching macro_emb above
+            # and event_ids below. A non-embeddable event (e.g. slowave_commit's
+            # task_complete "outcome=X" marker, logged with disable_encoder=True)
+            # has no vector to contribute to macro_emb, but its text would still
+            # get pulled into macro_text/macro_source if `events` were used here,
+            # producing an episode whose text describes MORE than its embedding
+            # represents -- when embeddable has exactly one entry, macro_emb is
+            # that single event's embedding unchanged, while macro_text would
+            # have an unrelated event's content appended to it.
+            macro_text = "\n".join(self._event_text(e) for e in embeddable if e.content.strip())
+            macro_source = "\n".join(e.content.strip() for e in embeddable if e.content.strip())
             salience, surprise = self._episode_salience(macro_emb)
             salience = max(salience * 0.8, 0.05)  # macro useful but less atomic
             if any(e.type.startswith("remember:") for e in events):
