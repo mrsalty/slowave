@@ -75,6 +75,69 @@ def _make_schema(
     return int(cur.lastrowid)
 
 
+def _insert_session(
+    db: SQLiteDB, session_id: str, scope_id: str, scope_kind: str = "project"
+) -> None:
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO sessions (id, agent, scope_id, scope_kind, started_ts, ended_ts) "
+        "VALUES (?, ?, ?, ?, ?, NULL)",
+        (session_id, "test", scope_id, scope_kind, int(time.time())),
+    )
+    conn.commit()
+
+
+def _insert_episode(db: SQLiteDB) -> int:
+    """episode_text.episode_id FKs to episodic_memories(id), so a real
+    parent row is required before episode_text/schema_evidence can
+    reference it."""
+    conn = db.connect()
+    cur = conn.execute(
+        "INSERT INTO episodic_memories "
+        "(event_id, ts, embedding, dim, salience, last_salience_ts, metadata_json) "
+        "VALUES (?, ?, ?, 1, 1.0, ?, '{}')",
+        (f"evt-{time.time_ns()}", int(time.time()), b"\x00\x00\x00\x00", int(time.time())),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def _insert_episode_text(db: SQLiteDB, *, episode_id: int, session_id: str) -> None:
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO episode_text (episode_id, content_text, source_content, event_ids, session_id) "
+        "VALUES (?, ?, ?, '[]', ?)",
+        (episode_id, "episode text", "episode text", session_id),
+    )
+    conn.commit()
+
+
+def _insert_raw_event(db: SQLiteDB, session_id: str) -> int:
+    conn = db.connect()
+    cur = conn.execute(
+        "INSERT INTO raw_events (session_id, ts, type, content) VALUES (?, ?, ?, ?)",
+        (session_id, int(time.time()), "task_complete", "{}"),
+    )
+    conn.commit()
+    return int(cur.lastrowid)
+
+
+def _insert_schema_evidence(
+    db: SQLiteDB,
+    schema_id: int,
+    *,
+    episode_id: int | None,
+    raw_event_id: int | None,
+) -> None:
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO schema_evidence (schema_id, episode_id, raw_event_id, quote, weight) "
+        "VALUES (?, ?, ?, NULL, 1.0)",
+        (schema_id, episode_id, raw_event_id),
+    )
+    conn.commit()
+
+
 # ---------------------------------------------------------------------------
 # 1. ScopeRegistry
 # ---------------------------------------------------------------------------
@@ -218,6 +281,91 @@ class TestSchemaStoreGeneralizationStage:
         schema = store.get(sid)
         # No cross-scope history yet -> must stay stage 0
         assert schema.generalization_stage == 0
+
+
+# ---------------------------------------------------------------------------
+# 3b. Regression tests: consolidation-path schema_evidence (raw_event_id=NULL)
+# must count toward distinct_scope_count. Root cause: the scope-breadth query
+# used an INNER JOIN through raw_events keyed on raw_event_id, which NULL can
+# never satisfy — every schema_evidence row written by _write_latent_schema
+# (the consolidation/prototype-clustering path) was silently invisible to
+# scope-breadth crediting, so schemas formed by clustering never generalized
+# past stage 1 no matter how many scopes their episodes actually spanned.
+# ---------------------------------------------------------------------------
+
+
+class TestScopeBreadthEvidenceJoin:
+    def test_scope_breadth_counts_null_raw_event_evidence(self):
+        """The bug itself: a NULL-raw_event_id row (consolidation path) must
+        still be reachable via episode_id -> episode_text -> sessions."""
+        db = _make_db()
+        store = SchemaStore(db, dim=384)
+        sid = _make_schema(db, scope_id="project:home")
+
+        _insert_session(db, "sess-1", scope_id="project:other")
+        eid = _insert_episode(db)
+        _insert_episode_text(db, episode_id=eid, session_id="sess-1")
+        _insert_schema_evidence(db, sid, episode_id=eid, raw_event_id=None)
+
+        store.reinforce(sid, amount=0.1)
+        schema = store.get(sid)
+        assert schema.facets.get("distinct_scope_count", 0) >= 1
+
+    def test_scope_breadth_still_counts_raw_event_evidence(self):
+        """The pre-existing explicit-remember path (raw_event_id set, no
+        episode_text row at all) must keep working standalone."""
+        db = _make_db()
+        store = SchemaStore(db, dim=384)
+        sid = _make_schema(db, scope_id="project:home")
+
+        _insert_session(db, "sess-2", scope_id="project:other")
+        raw_id = _insert_raw_event(db, "sess-2")
+        _insert_schema_evidence(db, sid, episode_id=None, raw_event_id=raw_id)
+
+        store.reinforce(sid, amount=0.1)
+        schema = store.get(sid)
+        assert schema.facets.get("distinct_scope_count", 0) >= 1
+
+    def test_scope_breadth_dedupes_when_both_paths_resolve_to_same_session(self):
+        """Two separate evidence rows -- one via each writer -- that both
+        resolve to the same session must count as one scope hit, not two
+        (this is why the query uses UNION rather than UNION ALL)."""
+        db = _make_db()
+        store = SchemaStore(db, dim=384)
+        sid = _make_schema(db, scope_id="project:home")
+
+        _insert_session(db, "sess-3", scope_id="project:other")
+        raw_id = _insert_raw_event(db, "sess-3")
+        eid = _insert_episode(db)
+        _insert_episode_text(db, episode_id=eid, session_id="sess-3")
+        _insert_schema_evidence(db, sid, episode_id=None, raw_event_id=raw_id)
+        _insert_schema_evidence(db, sid, episode_id=eid, raw_event_id=None)
+
+        store.reinforce(sid, amount=0.1)
+        schema = store.get(sid)
+        assert schema.facets.get("distinct_scope_count", 0) == 1
+
+    def test_scope_breadth_multiple_consolidation_scopes(self):
+        """The actual production symptom: a schema formed via consolidation
+        with episodes spanning multiple scopes must get credit for all of
+        them, not just its single _scope_for_episodes 'home' scope."""
+        db = _make_db()
+        store = SchemaStore(db, dim=384)
+        sid = _make_schema(db, scope_id="project:home")
+
+        _insert_session(db, "sess-4", scope_id="project:alpha")
+        eid1 = _insert_episode(db)
+        _insert_episode_text(db, episode_id=eid1, session_id="sess-4")
+        _insert_schema_evidence(db, sid, episode_id=eid1, raw_event_id=None)
+
+        _insert_session(db, "sess-5", scope_id="project:beta")
+        eid2 = _insert_episode(db)
+        _insert_episode_text(db, episode_id=eid2, session_id="sess-5")
+        _insert_schema_evidence(db, sid, episode_id=eid2, raw_event_id=None)
+
+        store.reinforce(sid, amount=0.1)
+        schema = store.get(sid)
+        assert schema.facets.get("distinct_scope_count", 0) >= 2
 
 
 # ---------------------------------------------------------------------------
