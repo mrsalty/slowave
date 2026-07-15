@@ -47,7 +47,6 @@ def test_valid_relations_matches_current_taxonomy():
     assert "related_to" not in VALID_RELATIONS  # old dead fallback spelling
     assert "relates_to" in VALID_RELATIONS  # reintroduced 2026-07-15, distinct spelling
     assert set(VALID_RELATIONS) == {
-        "reinforces",
         "refines",
         "supersedes",
         "part_of",
@@ -157,9 +156,10 @@ def test_centroid_linker_calls_judge_not_unconditional_reinforces(store):
     assert [r["relation"] for r in rows] == ["relates_to"]
 
 
-def test_centroid_linker_still_writes_reinforces_when_judge_confirms(store):
-    """When the judge genuinely agrees the pair reinforces each other, the
-    linker still writes 'reinforces' -- the legitimate case is preserved."""
+def test_centroid_linker_downgrades_reinforces_to_relates_to(store):
+    """reinforces is now a directional relation. The centroid linker has no
+    consolidation-time notion of which schema is new, so like all directional
+    verdicts, reinforces from the judge is downgraded to relates_to."""
     id_a, id_b, centroid = _seed_centroid_pair(store)
     cons = _consolidator_with_mocked_judge(store, verdict="reinforces")
 
@@ -174,7 +174,7 @@ def test_centroid_linker_still_writes_reinforces_when_judge_confirms(store):
         )
         .fetchall()
     )
-    assert [r["relation"] for r in rows] == ["reinforces"]
+    assert [r["relation"] for r in rows] == ["relates_to"]
 
 
 @pytest.mark.parametrize("directional_verdict", ["supersedes", "refines", "part_of"])
@@ -219,11 +219,11 @@ def test_centroid_linker_writes_nothing_when_unrelated(store):
 
 # ---------------------------------------------------------------------------
 # add_relation: cycle/mutual-exclusivity guard for directional relations
-# (refines, supersedes, part_of). A directional relation encodes an
-# asymmetric claim -- both directions existing simultaneously for the same
+# (refines, supersedes, part_of). A directional relation encodes
+# an asymmetric claim -- both directions existing simultaneously for the same
 # relation type is a logical contradiction (e.g. A refines B AND B refines
-# A can't both be true), not two independent facts. Symmetric relations
-# (relates_to, reinforces) are exempt: "A->B" and "B->A" are the same fact
+# A can't both be true), not two independent facts. The symmetric relation
+# relates_to is exempt: "A->B" and "B->A" are the same fact
 # there, and the guard would otherwise reject a caller that forgot to
 # canonicalize src/dst (a real gap, but a documentation responsibility --
 # see add_relation's docstring -- not this guard's job to catch).
@@ -261,15 +261,14 @@ def test_add_relation_allows_reverse_for_different_relation_types(store):
     store.add_relation(src_schema_id=id_b, dst_schema_id=id_a, relation="part_of")
 
 
-def test_add_relation_symmetric_relations_not_blocked_by_guard(store):
+def test_add_relation_relates_to_not_blocked_by_guard(store):
     emb = np.ones(DIM, dtype=np.float32) / np.sqrt(DIM)
     id_a = store.create(content_text="A", embedding=emb, dedupe=False)
     id_b = store.create(content_text="B", embedding=emb, dedupe=False)
 
-    store.add_relation(src_schema_id=id_a, dst_schema_id=id_b, relation="reinforces")
-    # The guard only applies to _DIRECTIONAL_RELATIONS -- a symmetric
-    # relation written in the non-canonical order must not raise.
-    store.add_relation(src_schema_id=id_b, dst_schema_id=id_a, relation="reinforces")
+    store.add_relation(src_schema_id=id_a, dst_schema_id=id_b, relation="relates_to")
+    # relates_to is the only symmetric relation — reverse write must not raise.
+    store.add_relation(src_schema_id=id_b, dst_schema_id=id_a, relation="relates_to")
 
 
 def test_add_relation_self_relation_not_blocked(store):

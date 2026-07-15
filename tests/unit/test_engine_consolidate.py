@@ -230,12 +230,12 @@ def test_explicit_remember_prototype_does_not_crash_link_step(eng):
 
 
 def test_link_schemas_via_prototype_centroid_is_direction_stable(eng, tmp_path):
-    """A "co-clustered" reinforces edge is a symmetric signal, not a directed
-    claim. If ranking by per-call cosine similarity to the prototype centroid
-    is allowed to pick which schema is src vs dst, repeated calls (or calls
-    from different prototypes near the same pair) can flip the order and
-    write both A->B and B->A rows for the same pair. Direction must be
-    canonicalized on schema id so it can never depend on call-time ranking."""
+    """The centroid linker writes only relates_to for pre-existing schema pairs
+    (directional verdicts like reinforces/refines are downgraded since the
+    call site has no consolidation-time notion of which is new). relates_to is
+    symmetric, so the direction must be canonicalized on schema id to prevent
+    the same pair producing both A->B and B->A rows when call-time ranking
+    flips across repeated calls or different prototype centroids."""
     dim = eng.cfg.dim
     rng = np.random.default_rng(7)
     emb_a = rng.standard_normal(dim).astype(np.float32)
@@ -258,7 +258,7 @@ def test_link_schemas_via_prototype_centroid_is_direction_stable(eng, tmp_path):
     conn = eng.db.connect()
     rows = conn.execute(
         "SELECT src_schema_id, dst_schema_id FROM schema_relations "
-        "WHERE relation = 'reinforces' AND src_schema_id IN (?, ?) AND dst_schema_id IN (?, ?)",
+        "WHERE relation = 'relates_to' AND src_schema_id IN (?, ?) AND dst_schema_id IN (?, ?)",
         (id_a, id_b, id_a, id_b),
     ).fetchall()
     assert len(rows) == 1, f"expected a single canonical-direction edge, got {list(rows)}"

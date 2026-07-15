@@ -5,8 +5,8 @@ const REFRESH_MS=__REFRESH_MS__;
 const ALLOW_ACTIONS=__ALLOW_ACTIONS__;
 
 const statusColor={active:"#3ecf6e",needs_review:"#f5b942",contradicted:"#f04e6a",superseded:"#9d71f0",archived:"#5a6e91",labile:"#f5b942"};
-const relColor={reinforces:"#3ecf6e",refines:"#4f9bff",supersedes:"#f5b942",part_of:"#34c4c4",relates_to:"#9d71f0"};
-const relLabel={reinforces:"reinforces",refines:"refines",supersedes:"supersedes",part_of:"part of",relates_to:"relates to"};
+const relColor={refines:"#4f9bff",supersedes:"#f5b942",part_of:"#34c4c4",relates_to:"#3ecf6e"};
+const relLabel={refines:"refines",supersedes:"supersedes",part_of:"part of",relates_to:"relates to"};
 
 // Shared channel palette for the pulse graph and the creation histogram —
 // keep in one place so the two views can never drift apart in color.
@@ -1014,6 +1014,12 @@ function drawGraph(g){
         "width":"data(width)","curve-style":"bezier","opacity":0.48,
         "label":"","font-size":8,"color":"data(color)","text-background-color":"#050b18","text-background-opacity":0.75,"text-background-padding":2
       }},
+      {selector:"edge[relation = 'relates_to']",style:{
+        "source-arrow-shape":"triangle",
+        "source-arrow-color":"data(color)",
+        "target-arrow-shape":"triangle",
+        "line-style":"dashed"
+      }},
       {selector:"node:selected",style:{"border-color":"#fff","border-width":5,"z-index":20}},
       {selector:".faded",style:{"opacity":0.12}},
       {selector:".highlight",style:{"opacity":1,"z-index":30}},
@@ -1031,7 +1037,8 @@ function drawGraph(g){
   schemaCy.on("mouseout","node",hideTip);
   schemaCy.on("mouseover","edge",ev=>{
     const e=ev.target.data();
-    showTip(ev.originalEvent,`<b>${esc(e.relation)}</b><br>sch_${e.src_schema_id} → sch_${e.dst_schema_id}<br>confidence: ${Number(e.confidence||0).toFixed(2)}${e.reason?`<br><em>${esc(e.reason)}</em>`:""}`);
+    const arrow = e.relation === "relates_to" ? "↔" : "→";
+    showTip(ev.originalEvent,`<b>${esc(e.relation)}</b><br>sch_${e.src_schema_id} ${arrow} sch_${e.dst_schema_id}<br>confidence: ${Number(e.confidence||0).toFixed(2)}${e.reason?`<br><em>${esc(e.reason)}</em>`:""}`);
   });
   schemaCy.on("mouseout","edge",hideTip);
   schemaCy.on("tap","node",ev=>{
@@ -1053,6 +1060,9 @@ function drawGraphSvgFallback(g){
   svg.innerHTML=`<defs>
     <marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto" markerUnits="strokeWidth">
       <path d="M0,0 L0,6 L8,3 z" fill="#7a8db5" opacity="0.8"/>
+    </marker>
+    <marker id="arrow-rev" markerWidth="8" markerHeight="8" refX="1" refY="3" orient="auto" markerUnits="strokeWidth">
+      <path d="M8,0 L8,6 L0,3 z" fill="#7a8db5" opacity="0.8"/>
     </marker>
     <filter id="glow"><feGaussianBlur stdDeviation="2" result="coloredBlur"/>
       <feMerge><feMergeNode in="coloredBlur"/><feMergeNode in="SourceGraphic"/></feMerge>
@@ -1107,12 +1117,23 @@ function drawGraphSvgFallback(g){
     // offset for arrow
     const dx=b.x-a.x,dy=b.y-a.y,d=Math.sqrt(dx*dx+dy*dy)+0.01;
     const x2=b.x-dx/d*12,y2=b.y-dy/d*12;
+    const isRelatesTo = e.relation === "relates_to";
     const line=document.createElementNS("http://www.w3.org/2000/svg","line");
-    line.setAttribute("x1",a.x);line.setAttribute("y1",a.y);
-    line.setAttribute("x2",x2);line.setAttribute("y2",y2);
+    line.setAttribute("x1",isRelatesTo ? a.x+dx/d*12 : a.x);
+    line.setAttribute("y1",isRelatesTo ? a.y+dy/d*12 : a.y);
+    line.setAttribute("x2",isRelatesTo ? b.x-dx/d*12 : x2);
+    line.setAttribute("y2",isRelatesTo ? b.y-dy/d*12 : y2);
     line.setAttribute("class","edge");line.setAttribute("stroke",color);
-    line.setAttribute("stroke-width",sw);line.setAttribute("marker-end","url(#arrow)");
-    line.addEventListener("mouseenter",ev=>showTip(ev,`<b>${e.relation}</b><br>sch_${e.src_schema_id} → sch_${e.dst_schema_id}<br>confidence: ${Number(e.confidence||0).toFixed(2)}${e.reason?`<br><em>${esc(e.reason)}</em>`:""}`) );
+    line.setAttribute("stroke-width",sw);
+    if (isRelatesTo) {
+      line.setAttribute("marker-start","url(#arrow-rev)");
+      line.setAttribute("marker-end","url(#arrow)");
+      line.setAttribute("stroke-dasharray","6,3");
+    } else {
+      line.setAttribute("marker-end","url(#arrow)");
+    }
+    const arrowLabel = isRelatesTo ? "↔" : "→";
+    line.addEventListener("mouseenter",ev=>showTip(ev,`<b>${e.relation}</b><br>sch_${e.src_schema_id} ${arrowLabel} sch_${e.dst_schema_id}<br>confidence: ${Number(e.confidence||0).toFixed(2)}${e.reason?`<br><em>${esc(e.reason)}</em>`:""}`) );
     line.addEventListener("mouseleave",hideTip);
     svg.appendChild(line);
     // edge label mid-point
@@ -1269,7 +1290,6 @@ const RELATION_TYPES=[
   {key:"supersedes",label:"Supersedes",icon:"⏭"},
   {key:"refines",label:"Refines",icon:"🔧"},
   {key:"part_of",label:"Part of",icon:"🧩"},
-  {key:"reinforces",label:"Reinforces",icon:"💪"},
 ];
 let relationsType="supersedes";
 const statCol=st=>statusColor[st]||"var(--muted)";
@@ -1293,7 +1313,6 @@ async function loadRelations(){
     const d=await getJSON(`/api/relations?type=${relationsType}&limit=100`);
     if(d.error){el.innerHTML=emptyState(d.error,"⚠️");return;}
     if(relationsType==="part_of")el.innerHTML=renderPartOfTree(d);
-    else if(relationsType==="reinforces")el.innerHTML=renderReinforcesLeaderboard(d);
     else el.innerHTML=renderRelationPairs(d);
     el.querySelectorAll("tr.expandable").forEach(tr=>{
       if(tr.dataset.srcId!==undefined)
@@ -1386,20 +1405,6 @@ function renderPartOfTree(d){
     <tbody>${rows}</tbody></table></div>`;
 }
 
-function renderReinforcesLeaderboard(d){
-  if(!d.leaderboard||!d.leaderboard.length)return emptyState("No reinforces relations found.","💪");
-  const rows=d.leaderboard.map((s,i)=>`
-    <tr class=\"expandable\" data-id=\"${s.id}\">
-      <td>#${i+1}</td>
-      <td><code style=\"color:${statCol(s.status)}\">sch_${s.id}</code></td>
-      <td><div style=\"font-size:11px;max-width:440px\">${esc((s.content||"").slice(0,100))}…</div></td>
-      <td style=\"font-weight:600\">${s.n}×</td>
-      <td>${salBar(s.salience,20)}</td>
-    </tr>`).join("");
-  return `<div style=\"font-size:11px;color:var(--muted);margin-bottom:6px\">${num(d.total)} reinforces edges total · top ${d.leaderboard.length} most-reinforced schemas (repeat evidence, not distinct associations) · click for full detail</div>
-    <div class=\"table-wrap\"><table><thead><tr><th>#</th><th>Schema</th><th>Content</th><th>Times reinforced</th><th>Salience</th></tr></thead>
-    <tbody>${rows}</tbody></table></div>`;
-}
 // ── GENERALIZATION ──
 const GEN_LABELS=['SCOPED','PORTABLE','CONTEXTUAL','GLOBAL'];
 const GEN_COLORS=['var(--gray)','var(--blue)','var(--amber)','var(--green)'];

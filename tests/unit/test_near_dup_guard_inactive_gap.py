@@ -84,7 +84,7 @@ def consolidator():
 def test_inactive_near_dup_does_not_block_judge(consolidator):
     """Closest match (cosine 0.97 >= 0.92) is superseded -> guard does not
     intercept -> a different active schema reaches the judge and gets a
-    real 'reinforces' verdict."""
+    real 'relates_to' verdict."""
     inactive_near_dup = MagicMock(id=99, status="superseded")
     active_related = MagicMock(
         id=7, content_text="rust is the primary language", confidence=1.0, facets={}, scope_id=None
@@ -101,7 +101,7 @@ def test_inactive_near_dup_does_not_block_judge(consolidator):
                     consolidator.geometric_judge,
                     "judge",
                     return_value=GeometricVerdict(
-                        verdict="reinforces",
+                        verdict="relates_to",
                         reasoning="test",
                         similarity=0.97,
                         facet_distance=0.0,
@@ -116,7 +116,7 @@ def test_inactive_near_dup_does_not_block_judge(consolidator):
     consolidator.schemas.reinforce_schema.assert_not_called()
     consolidator.schemas.add_relation.assert_called_once()
     _, kwargs = consolidator.schemas.add_relation.call_args
-    assert kwargs["relation"] == "reinforces"
+    assert kwargs["relation"] == "relates_to"
     assert outcome == "reinforced"
     assert new_id == 42
 

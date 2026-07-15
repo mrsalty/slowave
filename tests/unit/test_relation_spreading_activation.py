@@ -59,16 +59,6 @@ def test_below_threshold_neighbor_is_dropped():
     assert 2 not in winners
 
 
-def test_reinforces_relation_excluded_from_propagation():
-    def fetch_relations(schema_id):
-        return [(2, "reinforces", 1.0)] if schema_id == 1 else []
-
-    winners = spread_relation_activation(
-        {1: 1.0}, fetch_relations=fetch_relations, min_activation=0.01
-    )
-    assert winners == {}
-
-
 def test_convergent_paths_sum_before_threshold():
     """Neither seed alone clears the bar via a single 0.4-confidence edge, but
     two seeds both linking to the same neighbor sum their contributions."""
@@ -195,46 +185,6 @@ def test_context_brief_surfaces_part_of_neighbor_via_graph_expansion():
         child_item = next(item for item in brief.items if item.schema.id == child_id)
         assert child_item.peripheral is True
         assert child_item.reason.startswith("graph:")
-    finally:
-        eng.close()
-        _cleanup(path)
-
-
-def test_context_brief_does_not_expand_via_reinforces():
-    eng, path = _tmp_engine()
-    try:
-        parent_id = eng.schemas.create(
-            content_text="For meal planning, the user prefers vegetarian recipes.",
-            facets={
-                "schema_class": "preference",
-                "topics": ["food", "meal planning"],
-                "memory_layer": "profile",
-                "stability": "current",
-            },
-            tags=["food", "meal_planning", "vegetarian"],
-            embedding=None,
-            salience=5.0,
-            dedupe=False,
-        )
-        neighbor_id = eng.schemas.create(
-            content_text="An entirely unrelated fact about beekeeping equipment.",
-            facets={"schema_class": "fact"},
-            tags=["unrelated_tag"],
-            embedding=None,
-            salience=0.01,
-            scope_id="proj:other",  # non-None so it doesn't get the scope-less "global" bonus
-            dedupe=False,
-        )
-        eng.schemas.add_relation(
-            src_schema_id=parent_id,
-            dst_schema_id=neighbor_id,
-            relation="reinforces",
-            confidence=1.0,
-        )
-
-        brief = eng.context_brief(query="plan vegetarian meals", topics=["food"], limit=5)
-        ids = [item.schema.id for item in brief.items]
-        assert neighbor_id not in ids
     finally:
         eng.close()
         _cleanup(path)
