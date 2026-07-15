@@ -108,7 +108,7 @@ class GeometricVerdict:
     path.
     """
 
-    verdict: str  # 'unrelated' | 'part_of' | 'supersedes' | 'refines' | 'reinforces' | 'relates_to'
+    verdict: str  # 'unrelated' | 'part_of' | 'supersedes' | 'refines' | 'relates_to'
     reasoning: str
     similarity: float
     facet_distance: float

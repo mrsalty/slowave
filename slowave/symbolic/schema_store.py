@@ -1492,7 +1492,7 @@ class SchemaStore:
                 conn.execute(
                     "INSERT INTO schema_relations "
                     "(src_schema_id, dst_schema_id, relation, confidence, reason, created_ts) "
-                    "VALUES (?, ?, 'reinforces', ?, ?, ?) "
+                    "VALUES (?, ?, 'relates_to', ?, ?, ?) "
                     "ON CONFLICT(src_schema_id, dst_schema_id, relation) DO UPDATE SET "
                     "confidence=excluded.confidence, reason=excluded.reason, created_ts=excluded.created_ts",
                     (
