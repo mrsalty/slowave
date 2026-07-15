@@ -26,16 +26,37 @@ from slowave.utils.vec import (
 )
 
 VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archived")
-# "contradicts" and "related_to" were removed (2026-07-14): contradicts was
-# unreachable in practice (it required an exact time_delta_s<=0 tie, and every
-# call site now writes "supersedes" for that case too -- see
+# "contradicts" and the old "related_to" were removed (2026-07-14): contradicts
+# was unreachable in practice (it required an exact time_delta_s<=0 tie, and
+# every call site now writes "supersedes" for that case too -- see
 # Consolidator._write_latent_schema / reconsolidate_labile_schemas), and
 # related_to was only ever add_relation()'s own fallback for an invalid
 # relation string, never triggered by any real caller. Both sat at 0 edges in
 # production. The "contradicted" schema *status* (VALID_STATUS above) is
 # unrelated and unaffected -- it still distinguishes a same-instant clash from
 # an ordinary update, just no longer via a separate relation edge label.
-VALID_RELATIONS = ("reinforces", "refines", "supersedes", "part_of")
+#
+# "relates_to" (2026-07-15) is a distinct, deliberate reintroduction, NOT a
+# revival of the old related_to fallback -- do not conflate the two spellings.
+# It is the taxonomy's honest catch-all: cosine cleared the same-topic floor
+# (these two schemas are about the same thing) but neither containment,
+# direction_score, nor facet_distance clears the bar for a stronger claim
+# (part_of / supersedes / refines / reinforces). Without this bucket, the two
+# geometry shortcuts that only ever detect loose similarity -- the centroid-
+# proximity linker and GeometricContradictionJudge's old cos-only shortcut --
+# had nowhere honest to put their output and mislabeled it "reinforces", a
+# term that should mean "this specifically restates and strengthens that exact
+# belief". See GeometricContradictionJudge.judge() and
+# Consolidator._link_schemas_via_prototype_centroid, both of which now write
+# this relation directly.
+VALID_RELATIONS = ("reinforces", "refines", "supersedes", "part_of", "relates_to")
+# Relations whose direction carries meaning (src=acting/contained side,
+# dst=acted-upon/container side, per dashboard/_js.py's documented
+# convention) -- as opposed to relates_to/reinforces, which are symmetric
+# associations where "A->B" and "B->A" are the same fact. add_relation()
+# uses this set to reject writing both directions of the same directional
+# relation for one pair (see its reverse-edge guard below).
+_DIRECTIONAL_RELATIONS = frozenset({"refines", "supersedes", "part_of"})
 DEDUP_ACTIVE_STATUSES = ("active", "needs_review")
 
 # Shared salience ceiling for every reinforcement/feedback write path. The
@@ -663,10 +684,46 @@ class SchemaStore:
         confidence: float = 1.0,
         reason: str | None = None,
     ) -> None:
+        """Write a schema_relations edge.
+
+        IMPORTANT for symmetric relations (relates_to, reinforces): callers
+        MUST canonicalize src/dst as (min(id), max(id)) before calling, since
+        this store has no way to recognize that A->B and B->A represent the
+        same symmetric fact -- the ON CONFLICT dedup below is keyed on the
+        literal (src, dst, relation) tuple. See
+        Consolidator._link_schemas_via_prototype_centroid for the reference
+        pattern. Directional relations (refines, supersedes, part_of) must
+        NOT be canonicalized this way -- direction is the meaning.
+        """
         if relation not in VALID_RELATIONS:
             raise ValueError(
                 f"add_relation: invalid relation {relation!r}, must be one of {VALID_RELATIONS}"
             )
+        if relation in _DIRECTIONAL_RELATIONS and src_schema_id != dst_schema_id:
+            # A directional relation encodes an asymmetric claim
+            # (specialization, value-update, subspace containment); both
+            # directions existing simultaneously is a logical contradiction,
+            # not two independent facts (e.g. "A refines B" AND "B refines
+            # A" can't both be true), and downstream consumers (the
+            # dashboard's part_of tree view, belief-revision damping) assume
+            # a single direction per pair. Check before write rather than
+            # reconciling after the fact -- add_relation is the single write
+            # chokepoint for every relation edge in the system, so this is
+            # the one place that can guarantee the invariant holds at all
+            # times with no window where an inconsistent pair exists.
+            conn = self.db.connect()
+            reverse = conn.execute(
+                "SELECT 1 FROM schema_relations WHERE src_schema_id = ? AND dst_schema_id = ? "
+                "AND relation = ? LIMIT 1",
+                (int(dst_schema_id), int(src_schema_id), relation),
+            ).fetchone()
+            if reverse is not None:
+                raise ValueError(
+                    f"add_relation: refusing to add {src_schema_id}->{dst_schema_id} "
+                    f"({relation}); reverse edge {dst_schema_id}->{src_schema_id} "
+                    f"({relation}) already exists -- this is a modeling inconsistency, "
+                    f"not a valid state. Reconcile the existing edge before retrying."
+                )
         conn = self.db.connect()
         conn.execute(
             "INSERT INTO schema_relations "
@@ -986,6 +1043,23 @@ class SchemaStore:
         ).fetchall()
         total_cross_recalls = len(recall_rows)
 
+        # Two independent evidence-writers feed schema_evidence, and only one of
+        # them ever sets raw_event_id: explicit remember() calls always attach a
+        # raw_event_id, but the consolidation/prototype-clustering path writes
+        # (episode_id, raw_event_id=None) rows (_write_latent_schema) since a
+        # cluster of episodes has no single originating raw event. An INNER
+        # JOIN on raw_event_id alone silently drops every consolidation-path
+        # row from scope-breadth crediting, which is exactly the bug this
+        # UNION closes: the second branch reaches scope via
+        # episode_id -> episode_text.session_id -> sessions instead, the same
+        # lookup _scope_for_episodes already trusts for scope resolution. The
+        # two branches' WHERE clauses are mutually exclusive on raw_event_id's
+        # nullity, so a single evidence row only ever matches one of them —
+        # but two *separate* rows (one written by each path) can still resolve
+        # to the same session if the same underlying activity produced both an
+        # explicit remember() and a later consolidation cluster. Plain UNION
+        # (not UNION ALL) collapses that case to one scope hit instead of
+        # double-counting it in scope_weight below.
         evidence_rows = conn.execute(
             """
             SELECT ses.scope_id, ses.scope_kind, ses.id AS session_id
@@ -993,9 +1067,19 @@ class SchemaStore:
             JOIN raw_events re ON re.id = se.raw_event_id
             JOIN sessions ses ON ses.id = re.session_id
             WHERE se.schema_id = ?
+              AND se.raw_event_id IS NOT NULL
+              AND ses.scope_id IS NOT NULL
+            UNION
+            SELECT ses.scope_id, ses.scope_kind, ses.id AS session_id
+            FROM schema_evidence se
+            JOIN episode_text et ON et.episode_id = se.episode_id
+            JOIN sessions ses ON ses.id = et.session_id
+            WHERE se.schema_id = ?
+              AND se.raw_event_id IS NULL
+              AND se.episode_id IS NOT NULL
               AND ses.scope_id IS NOT NULL
             """,
-            (int(schema_id),),
+            (int(schema_id), int(schema_id)),
         ).fetchall()
 
         # Per-scope weight: validated 1.0, exposure-only 0.25, net-negative 0.

@@ -218,7 +218,16 @@ class SlowaveEngine:
             schemas=self.schemas,
             encoder=self.encoder,
             latent_builder=LatentSchemaBuilder(),
-            geometric_judge=GeometricContradictionJudge(self.cfg.judge),
+            # Share the engine's own lazily-computed manifold (same instance
+            # remember()'s direction_score check below uses) so the judge's
+            # supersedes verdict and remember()'s inline supersession logic
+            # never diverge from evaluating two independently-computed SVD1
+            # axes -- constructing SupersessionManifold is cheap (it doesn't
+            # compute anything until .axis is first accessed), so calling
+            # _get_manifold() here doesn't defeat that laziness.
+            geometric_judge=GeometricContradictionJudge(
+                self.cfg.judge, manifold=self._get_manifold()
+            ),
         )
         # The latent consolidator needs episode embeddings + ts.
         self.consolidator._episodic_store_ref = self.episodic
@@ -783,13 +792,23 @@ class SlowaveEngine:
                                 self.schemas.update_status(
                                     candidate_id, status="superseded", salience=0.05
                                 )
-                                self.schemas.add_relation(
-                                    src_schema_id=new_schema_id,
-                                    dst_schema_id=candidate_id,
-                                    relation="supersedes",
-                                    confidence=score,
-                                    reason=f"extended-range value substitution: cos={score:.3f} dir_score={dir_score:.3f}",
-                                )
+                                try:
+                                    self.schemas.add_relation(
+                                        src_schema_id=new_schema_id,
+                                        dst_schema_id=candidate_id,
+                                        relation="supersedes",
+                                        confidence=score,
+                                        reason=f"extended-range value substitution: cos={score:.3f} dir_score={dir_score:.3f}",
+                                    )
+                                except ValueError as e:
+                                    # Reverse "supersedes" edge already exists
+                                    # for this pair (add_relation's directional-
+                                    # relation guard) -- a rare modeling
+                                    # inconsistency; the status transition above
+                                    # still applies, don't abort remember() over it.
+                                    log.warning(
+                                        "remember: refusing inconsistent supersedes edge: %s", e
+                                    )
                                 superseded_schema_ids.append(candidate_id)
                                 seen_ids.add(candidate_id)
                     else:
