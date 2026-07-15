@@ -20,14 +20,16 @@ Slowave continuously adapts to your work — capturing decisions, preferences, a
 
 ## How it feels
 
-![Demo](img/demo.gif)
-
 You work daily with your AI tools:
 
 - **Day 1** — cold start: Slowave bootstraps memory from existing markdown knowledge, initializing the embedding-based memory state.
 - **Week 1** — emerging patterns: new interactions begin reinforcing relevant signals, forming stable associations.
 - **Month 1** — context consolidates: frequently reinforced information becomes consistently retrievable, low-signal data fades.
- 
+  
+How Day 1 would look like with Slowave:
+
+![Demo](img/demo.gif)
+
 Multiple AI clients continuously build and reuse the same evolving memory over time:
 - no markdown management
 - no static RAG
@@ -39,11 +41,11 @@ Multiple AI clients continuously build and reuse the same evolving memory over t
 
 Slowave becomes more useful the more you use it.
 
-- **Less repetition** — you stop re-explaining the same context across sessions
-- **Faster continuity** — returning to a project feels like resuming, not restarting
-- **Cross-tool consistency** — your working context follows you across AI clients
-- **Persistent working memory** — decisions, patterns, and preferences are retained beyond individual chats
-- **Lower cognitive overhead** — no need to maintain external memory files or prompt scaffolding
+* **Clarity** — your AI understands you without repeated explanation
+* **Continuity** — pick up projects where you left off
+* **Consistency** — keep your context across AI tools
+* **Retention** — retain decisions, patterns, and preferences over time
+* **Focus** — spend time creating instead of managing context
 
 Slowave does not just store information — it compounds it into usable context.
 
@@ -67,25 +69,31 @@ Slowave mirrors this separation: the language model is a client of memory, not t
 
 Neuroscience describes human memory as two complementary learning systems:
 
-- the **hippocampus** learns fast — it captures individual experiences in one shot, keeping them distinct;
-- the **neocortex** learns slowly — it extracts the statistical regularities across many experiences into stable, general knowledge.
+- the **hippocampus** learns fast — it captures individual experiences and preserves them as distinct episodes;
+- the **neocortex** learns slowly — it extracts regularities across many experiences and transforms them into stable, general knowledge.
 
-Neither system alone is enough. Fast learning without abstraction produces a pile of anecdotes; slow learning without an episodic buffer forgets everything that happened only once.
+Neither system alone is sufficient. Fast learning without abstraction creates a collection of isolated events; slow learning without episodic grounding loses the experiences that shape knowledge.
 
 Slowave mirrors this division:
 
 | Human brain | Slowave | What it does |
 |---|---|---|
-| Hippocampus | Episodic layer | Captures individual experiences as they happen |
-| Slow-wave sleep | Offline consolidation | Replays and groups episodes into prototypes, building a graph of associations — without the LLM |
-| Neocortex | Schema layer | Holds stable, abstracted knowledge as typed claims: decisions, preferences, constraints, conventions |
+| Hippocampus | Episodic layer | Captures individual experiences as they occur |
+| Neocortex | Schema layer | Extracts stable, abstract knowledge from repeated experiences into typed claims: decisions, preferences, constraints, conventions |
+
+Memory systems are supported by consolidation processes:
+
+| Human brain process | Slowave | What it does |
+|---|---|---|
+| Memory consolidation | Offline consolidation | Replays and groups episodes into prototypes, strengthens useful associations, and builds the memory graph without requiring an LLM |
 
 Three additional mechanisms emerge from this architecture:
 
-- **Spreading activation.** Recall propagates across the prototype association graph — a partial cue can recover a whole memory, the way a fragment of a song brings back the entire experience.
-- **Hebbian reinforcement.** Memories that prove useful strengthen and become easier to retrieve; unused memories gradually fade. Forgetting is a feature that keeps the signal-to-noise ratio high.
-- **Reconsolidation.** Recalling a memory reopens it. Feedback after retrieval — useful, stale, wrong — modifies the memory itself. Memory is a living state, not an append-only log.
+- **Spreading activation.** Recall propagates through the prototype association graph — a partial cue can recover related memories, similar to how one fragment of an experience can trigger a broader recollection.
+- **Hebbian reinforcement.** Memories that repeatedly prove useful become stronger and easier to retrieve; unused memories gradually decay. Forgetting improves signal-to-noise ratio.
+- **Reconsolidation.** Retrieval reopens memories for modification. Feedback — useful, stale, or incorrect — updates the memory state. Memory is dynamic, not an append-only log.
 
+  
 > [Design rationale](docs/design.md)
 > 
 > [Architecture](docs/architecture.md)
