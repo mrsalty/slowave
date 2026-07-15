@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.15.6](https://github.com/mrsalty/slowave/compare/slowave-v0.15.5...slowave-v0.15.6) (2026-07-15)
+
+
+### Bug Fixes
+
+* delete doc ([f15ea90](https://github.com/mrsalty/slowave/commit/f15ea9026fdac87a4f76b9ff2209c7f2c98db6ef))
+* remove residual reinforces references (SQL INSERT, verdict docstring, dead code) ([a773d17](https://github.com/mrsalty/slowave/commit/a773d17d9b7d4ff4daf16fe229ad8406575a565f))
+
 ## [0.15.5](https://github.com/mrsalty/slowave/compare/slowave-v0.15.4...slowave-v0.15.5) (2026-07-15)
 
 
