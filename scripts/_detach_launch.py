@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Double-fork launcher: detach a command into its own session so it
 survives the parent tool's process-group cleanup. macOS lacks setsid."""
+
 import os
 import sys
+
 
 def main():
     log = sys.argv[1]
@@ -21,6 +23,7 @@ def main():
     os.dup2(fd, 1)
     os.dup2(fd, 2)
     os.execv(cmd[0], cmd)
+
 
 if __name__ == "__main__":
     main()
