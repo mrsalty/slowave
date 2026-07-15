@@ -386,22 +386,31 @@ class Consolidator:
         )
         verdict = self.geometric_judge.judge(old=old_view, new=schema)
 
-        if verdict.verdict == "reinforces":
+        if verdict.verdict == "relates_to":
+            # Cleared the same-topic floor but nothing more specific applies
+            # (no facet signal, or facets agree with no directional signal).
             if diag is not None:
-                diag["verdict_counts"]["reinforces"] += 1
+                diag.setdefault("verdict_counts", {}).setdefault("relates_to", 0)
+                diag["verdict_counts"]["relates_to"] += 1
             self.schemas.add_relation(
                 src_schema_id=new_schema_id,
                 dst_schema_id=related.id,
-                relation="reinforces",
+                relation="relates_to",
                 confidence=schema.confidence,
-                reason=f"geometric judge: cos={verdict.similarity:.3f}",
+                reason=f"geometric judge: cos={verdict.similarity:.3f} facet_dist={verdict.facet_distance:.3f}",
             )
             # Cross-scope offline reinforcement: when consolidation finds that a
-            # newly-formed schema reinforces an existing schema from a different
-            # scope, record it as a distinct signal (not as fabricated recall).
-            # This breaks the bootstrap deadlock where stage-0 schemas can never
-            # accumulate cross-scope evidence without already being promoted.
-            if scope_id and related.scope_id and scope_id != related.scope_id:
+            # newly-formed schema relates to an existing schema from a different
+            # scope with high cosine similarity, record it as a distinct signal
+            # (not as fabricated recall). This breaks the bootstrap deadlock
+            # where stage-0 schemas can never accumulate cross-scope evidence
+            # without already being promoted.
+            if (
+                verdict.similarity >= 0.90
+                and scope_id
+                and related.scope_id
+                and scope_id != related.scope_id
+            ):
                 try:
                     self.schemas.increment_cross_scope_reinforcement(related.id)
                 except Exception:
@@ -424,22 +433,6 @@ class Consolidator:
                 # modeling inconsistency, not worth losing this whole
                 # consolidation pass over.
                 log.warning("consolidation: refusing inconsistent refines edge: %s", e)
-            return "reinforced", new_schema_id
-        if verdict.verdict == "relates_to":
-            # Cleared the same-topic floor but nothing more specific applies
-            # (typically: no facet signal on one or both sides to measure
-            # elaboration/reinforcement against). No status transition --
-            # this is a generic association, same treatment as reinforces/
-            # refines above, just a weaker claim.
-            if diag is not None:
-                diag["verdict_counts"]["relates_to"] += 1
-            self.schemas.add_relation(
-                src_schema_id=new_schema_id,
-                dst_schema_id=related.id,
-                relation="relates_to",
-                confidence=schema.confidence,
-                reason=f"geometric judge: cos={verdict.similarity:.3f} facet_dist={verdict.facet_distance:.3f}",
-            )
             return "reinforced", new_schema_id
         if verdict.verdict == "part_of":
             if diag is not None:
@@ -823,7 +816,7 @@ class Consolidator:
         # "Both near the same reference point" does NOT imply "near each
         # other" in a moderately high-dimensional embedding space -- the
         # original version of this method skipped this comparison entirely
-        # and unconditionally wrote "reinforces", which is exactly how a
+        # and unconditionally wrote an edge, which is exactly how a
         # confirmed production false positive (schema 153 linked to an
         # unrelated schema 154 at confidence 1.00) got created. Comparing
         # the two schemas directly via the same judge _write_latent_schema
@@ -834,27 +827,16 @@ class Consolidator:
 
         if verdict.verdict == "unrelated":
             return
-        if verdict.verdict in ("refines", "supersedes", "part_of"):
-            # This call site has no "which one is newer/more specific"
-            # semantics the way _write_latent_schema's new-vs-related
-            # distinction does -- both schemas here are pre-existing,
-            # discovered only by proximity to a shared prototype centroid.
-            # Asserting a directional claim on the strength of a geometry
-            # check alone, with no consolidation-time "this one is the new
-            # candidate" context, risks exactly the same class of false-
-            # confidence bug this fix closes. Downgrade to relates_to: a
-            # real geometric relationship exists (it cleared the judge's
-            # same-topic floor), but this call site shouldn't assert which
-            # specific directional claim applies.
-            relation = "relates_to"
-        else:
-            # verdict.verdict in ("reinforces", "relates_to") -- both are
-            # symmetric relations the judge already confirmed directly.
-            relation = verdict.verdict
+        # All directional verdicts (refines, supersedes, part_of) are
+        # downgraded to relates_to: this call site has no consolidation-time
+        # "which one is new" context to responsibly assert a directional
+        # claim. relates_to is the only non-unrelated verdict the judge
+        # returns for pre-existing pairs, and it's symmetric — canonicalize
+        # on schema id so the same pair never produces both A->B and B->A.
         self.schemas.add_relation(
             src_schema_id=old_id,
             dst_schema_id=new_id,
-            relation=relation,
+            relation="relates_to",
             confidence=round(s2_cos, 3),
             reason=f"co-clustered via prototype {prototype_id}",
         )

@@ -109,8 +109,6 @@ Browsable view over `schema_relations`, split by relation type:
   detail (full text, status/salience/confidence/scope/stage, reason, adjacent
   chain links)
 - **part_of** — parent/children tree
-- **reinforces** — leaderboard of most-reinforced schemas, since raw edges are
-  too numerous (700+) to browse usefully
 
 ### DB health
 
@@ -129,7 +127,7 @@ The dashboard serves a small JSON API on the same local HTTP server:
 | `GET /api/schemas?limit=100&status=active&q=text` | Schema table data |
 | `GET /api/schemas/123` | Schema detail, evidence, incoming/outgoing relations |
 | `GET /api/graph/schemas?limit=120&min_salience=2.5` | Schema graph data |
-| `GET /api/relations?type=supersedes&limit=50` | Relations tab data; `type` is one of `supersedes`, `refines`, `part_of`, `reinforces` (default `supersedes`), `limit` is 1-200 (default 50) |
+| `GET /api/relations?type=supersedes&limit=50` | Relations tab data; `type` is one of `supersedes`, `refines`, `part_of`, `relates_to` (default `supersedes`), `limit` is 1-200 (default 50) |
 
 Example graph request:
 

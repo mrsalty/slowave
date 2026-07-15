@@ -216,7 +216,7 @@ def main():
     sess = session_stats(conn)
     wr = worker_run_stats(conn)
     schema_d = round(100.0 * total_rels / max(1, total_schemas * (total_schemas - 1)), 3)
-    print(f"\n─── Cross-Cutting ───")
+    print("\n─── Cross-Cutting ───")
     print(f"  C1 Schema graph density: {schema_d}%")
     print(
         f"  C2 Worker runs: {wr['total_runs']}, "
@@ -230,7 +230,7 @@ def main():
 
     # Supplementary
     sup = supplementary(conn)
-    print(f"\n─── Supplementary ───")
+    print("\n─── Supplementary ───")
     print(f"  Labile schemas: {sup['labile_count']}")
     print(f"  Generalization stages: {json.dumps(sup['generalization_stages'])}")
     print(f"  Prototype scales: {json.dumps(sup['prototype_scales'])}")

@@ -29,7 +29,6 @@ VALID_SCHEMA_STATUSES = ("active", "needs_review", "superseded", "contradicted",
 # schema_store.py's VALID_RELATIONS comment. Kept in sync here since the dashboard is
 # a standalone stdlib server with its own copy of this list.
 VALID_SCHEMA_RELATIONS = (
-    "reinforces",
     "refines",
     "supersedes",
     "part_of",

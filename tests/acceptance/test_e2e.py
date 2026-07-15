@@ -1237,8 +1237,8 @@ class TestE2E:
         value-update, subspace containment); both directions existing at once
         for the same relation type is a logical contradiction, not two
         independent facts -- e.g. "A refines B" and "B refines A" can't both
-        be true. Symmetric relations (reinforces, relates_to) are correctly
-        exempt: "A->B" and "B->A" are the same fact there, not a conflict.
+        be true. The symmetric relation relates_to is correctly exempt:
+        "A->B" and "B->A" are the same fact there, not a conflict.
         """
         rows = qdb("""
             SELECT a.relation, a.src_schema_id, a.dst_schema_id
