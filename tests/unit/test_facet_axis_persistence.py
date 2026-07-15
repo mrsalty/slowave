@@ -16,7 +16,16 @@ schema genuinely has no persisted facet data.
 
 This test uses a REAL SchemaStore (not mocked) end-to-end: create an "old"
 schema with real facet axes, then run a divergent "new" schema through
-Consolidator._write_latent_schema and confirm "contradicts" is now reachable.
+Consolidator._write_latent_schema and confirm the facet-distance-driven
+verdict is now reachable. As of the 2026-07-15 relation-taxonomy rewire
+(GeometricContradictionJudge.judge()), high facet_distance WITHOUT a
+direction_score signal maps to "refines" (elaboration), not "supersedes" --
+"supersedes" now requires direction_score, a distinct signal this test's
+no-manifold judge never computes (see test_supersedes_via_direction_score
+in test_latent_schema.py for that path). The persistence fix under test
+here is unchanged: it's still what makes old.facet_axes real instead of an
+empty placeholder, which is what makes a facet-distance-driven verdict
+reachable at all.
 """
 
 from __future__ import annotations
@@ -104,11 +113,13 @@ def test_schema_without_facets_round_trips_to_empty(real_store):
     assert fetched.facet_strengths.shape == (0,)
 
 
-def test_contradicts_now_reachable_with_persisted_facet_axes(real_store):
+def test_divergent_facets_now_reachable_with_persisted_facet_axes(real_store):
     """The actual fix, end-to-end: an old schema with real, persisted facet
     axes that are maximally divergent from the new schema's facet axes ->
     the geometric judge, invoked through the real _write_latent_schema
-    path, now returns "contradicts" (previously impossible)."""
+    path, now returns "refines" (previously impossible -- old.facet_axes
+    was always an empty placeholder, so has_facet_signal was always False
+    and no facet-distance-driven verdict could ever fire)."""
     cons, schemas = real_store
     old_centroid, new_centroid = _same_topic_centroids(cos_target=0.85)
 
@@ -149,10 +160,10 @@ def test_contradicts_now_reachable_with_persisted_facet_axes(real_store):
 
     outcome, new_id = cons._write_latent_schema(prototype_id=1, schema=new_schema)
 
-    assert outcome == "contradicted"
+    assert outcome == "reinforced"
     relations = (
         schemas.db.connect()
         .execute("SELECT relation FROM schema_relations WHERE src_schema_id = ?", (new_id,))
         .fetchall()
     )
-    assert any(r["relation"] == "supersedes" for r in relations)
+    assert any(r["relation"] == "refines" for r in relations)

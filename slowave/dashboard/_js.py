@@ -5,8 +5,8 @@ const REFRESH_MS=__REFRESH_MS__;
 const ALLOW_ACTIONS=__ALLOW_ACTIONS__;
 
 const statusColor={active:"#3ecf6e",needs_review:"#f5b942",contradicted:"#f04e6a",superseded:"#9d71f0",archived:"#5a6e91",labile:"#f5b942"};
-const relColor={reinforces:"#3ecf6e",refines:"#4f9bff",supersedes:"#f5b942",part_of:"#34c4c4"};
-const relLabel={reinforces:"reinforces",refines:"refines",supersedes:"supersedes",part_of:"part of"};
+const relColor={reinforces:"#3ecf6e",refines:"#4f9bff",supersedes:"#f5b942",part_of:"#34c4c4",relates_to:"#9d71f0"};
+const relLabel={reinforces:"reinforces",refines:"refines",supersedes:"supersedes",part_of:"part of",relates_to:"relates to"};
 
 // Shared channel palette for the pulse graph and the creation histogram —
 // keep in one place so the two views can never drift apart in color.

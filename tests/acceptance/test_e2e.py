@@ -809,20 +809,96 @@ class TestE2E:
 
         assert len(scopes) >= 8, f"Expected ≥8 evidence-linked scopes, got {len(scopes)}: {scopes}"
 
+    def test_relations_evidence_credits_consolidation_path_across_scopes(self, cli, qdb, db):
+        """Consolidation-path schema_evidence (raw_event_id=NULL, episode_id set)
+        must count toward distinct_scope_count -- regression test for the
+        2026-07-15 fix to SchemaStore._update_utility_scores's scope-breadth
+        query. That query used to INNER JOIN through raw_events only, which
+        NULL raw_event_id can never satisfy, silently excluding every evidence
+        row the consolidation / near-duplicate-guard path writes (episode_id-
+        based, no raw_event_id) from cross-scope credit -- exactly why a
+        schema formed purely from ingested session events (never an explicit
+        `remember()` call) could never generalize past stage 1 no matter how
+        many scopes its episodes actually spanned.
+
+        Story: the exact same fact, ingested as raw session events (not
+        `remember()`) in two different scopes. Consolidation forms a schema
+        from the first scope's episode; the near-duplicate guard (cos>=0.92,
+        reliably cleared here since the text is byte-identical) then
+        reinforces that SAME schema with the second scope's episode. Before
+        the fix, that second scope's evidence was invisible to
+        distinct_scope_count.
+        """
+        consolidation_fact = (
+            "The nightly backup job compresses the SQLite database with zstd "
+            "level 19 and uploads it to the offsite bucket before 4am UTC."
+        )
+        for scope in ("project:gamma", "project:delta"):
+            r = cli("session", "start", "--scope", scope, "--agent", "consolidation-evidence-test")
+            sid = r["session_id"]
+            cli(
+                "event", "--session", sid, "--type", "user_message", "--content", consolidation_fact
+            )
+            cli("session", "end", sid)
+            cli("consolidate")
+            _detail(f"ingested + consolidated in {scope}")
+
+        schema_id = _schema_id_for(db, "nightly backup job compresses")
+        assert schema_id is not None, "consolidation-derived schema not found"
+
+        row = qdb(
+            "SELECT json_extract(facets_json,'$.distinct_scope_count') as scopes "
+            "FROM schemas WHERE id=?",
+            (schema_id,),
+        )[0]
+        _detail(f"consolidation-path schema distinct_scope_count={row['scopes']}")
+        assert (
+            int(row["scopes"] or 0) >= 2
+        ), f"expected >=2 scopes credited via the episode_id evidence path, got {row['scopes']}"
+
+        # Confirm the credit genuinely came through the NULL-raw_event_id path
+        # this test targets -- this schema was created purely from
+        # `event`/`session end`, never `remember()`, so a passing assertion
+        # above that was secretly satisfied via the raw_event_id path alone
+        # would not actually be exercising the fix.
+        evidence_rows = qdb(
+            "SELECT raw_event_id, episode_id FROM schema_evidence WHERE schema_id=?",
+            (schema_id,),
+        )
+        assert any(
+            r["raw_event_id"] is None and r["episode_id"] is not None for r in evidence_rows
+        ), "expected at least one NULL-raw_event_id, episode_id-based evidence row"
+
     def test_relations_cross_scope_isolation(self, db):
-        """Stage-0 project:slowave schemas must not have evidence from project:alpha."""
+        """Stage-0 project:slowave schemas must not have evidence from
+        project:alpha, via EITHER evidence path -- the explicit-remember
+        raw_event_id join, or the consolidation-path episode_id join (see
+        SchemaStore._update_utility_scores's UNION query, extended 2026-07-15
+        to also credit the episode_id path; this isolation check must cover
+        the same UNION or a leak introduced via the new path would go
+        undetected here)."""
         time.time()
 
         rows = _query(
             db,
             """
-            SELECT DISTINCT sch.id, sch.content_text, ses.scope_id
-            FROM schema_evidence se
-            JOIN raw_events re ON re.id = se.raw_event_id
-            JOIN sessions ses ON ses.id = re.session_id
-            JOIN schemas sch ON sch.id = se.schema_id
+            SELECT DISTINCT sch.id, sch.content_text, ev.scope_id
+            FROM (
+                SELECT se.schema_id AS schema_id, ses.scope_id AS scope_id
+                FROM schema_evidence se
+                JOIN raw_events re ON re.id = se.raw_event_id
+                JOIN sessions ses ON ses.id = re.session_id
+                WHERE se.raw_event_id IS NOT NULL
+                UNION
+                SELECT se.schema_id AS schema_id, ses.scope_id AS scope_id
+                FROM schema_evidence se
+                JOIN episode_text et ON et.episode_id = se.episode_id
+                JOIN sessions ses ON ses.id = et.session_id
+                WHERE se.raw_event_id IS NULL AND se.episode_id IS NOT NULL
+            ) ev
+            JOIN schemas sch ON sch.id = ev.schema_id
             WHERE sch.scope_id = 'project:slowave'
-              AND ses.scope_id = 'project:alpha'
+              AND ev.scope_id = 'project:alpha'
               AND sch.generalization_stage = 0
         """,
         )
@@ -1146,3 +1222,31 @@ class TestE2E:
             if found_any
             else "no relation-surfaced memories this run (real-embedding dependent)"
         )
+
+    def test_relations_no_reverse_directional_duplicates(self, qdb):
+        """Directional relations (refines/supersedes/part_of) must never exist
+        in both directions for the same pair -- regression test for
+        add_relation()'s reverse-edge guard (2026-07-15). Unlike the other
+        relation tests in this file, this is a deterministic invariant, not
+        real-embedding dependent: it must hold no matter which relations the
+        rest of the suite happened to produce, so it's asserted unconditionally
+        against whatever schema_relations looks like after every prior phase
+        has run.
+
+        A directional relation encodes an asymmetric claim (specialization,
+        value-update, subspace containment); both directions existing at once
+        for the same relation type is a logical contradiction, not two
+        independent facts -- e.g. "A refines B" and "B refines A" can't both
+        be true. Symmetric relations (reinforces, relates_to) are correctly
+        exempt: "A->B" and "B->A" are the same fact there, not a conflict.
+        """
+        rows = qdb("""
+            SELECT a.relation, a.src_schema_id, a.dst_schema_id
+            FROM schema_relations a
+            JOIN schema_relations b
+              ON a.relation = b.relation
+             AND a.src_schema_id = b.dst_schema_id
+             AND a.dst_schema_id = b.src_schema_id
+            WHERE a.relation IN ('refines', 'supersedes', 'part_of')
+            """)
+        assert rows == [], f"found reverse-direction duplicate directional edges: {rows}"
