@@ -353,6 +353,36 @@ CREATE INDEX IF NOT EXISTS idx_scope_registry_kind ON scope_registry(scope_kind)
 CREATE INDEX IF NOT EXISTS idx_scope_registry_last_active ON scope_registry(last_active_ts);
 
 -- ============================================================================
+-- Graph health snapshots: one row per consolidation epoch for trend analysis.
+-- ============================================================================
+CREATE TABLE IF NOT EXISTS graph_health_snapshots (
+  id                       INTEGER PRIMARY KEY AUTOINCREMENT,
+  worker_run_id            INTEGER,
+  ts                       INTEGER NOT NULL,
+  total_schemas            INTEGER,
+  superseded_pct           REAL,
+  schema_isolates          INTEGER,
+  schema_isolate_pct       REAL,
+  schema_components        INTEGER,
+  schema_largest_component INTEGER,
+  salience_median          REAL,
+  salience_ceiling_breaches INTEGER,
+  proto_edge_count         INTEGER,
+  proto_similarity_dom_pct REAL,
+  proto_fine_intra         REAL,
+  proto_coarse_intra       REAL,
+  proto_inter              REAL,
+  proto_zero_variance_pct  REAL,
+  episodes_total           INTEGER,
+  episodes_per_schema      REAL,
+  worker_runs_total        INTEGER,
+  schemas_decayed_total    INTEGER,
+  labile_schemas           INTEGER,
+  FOREIGN KEY (worker_run_id) REFERENCES worker_runs(id)
+);
+CREATE INDEX IF NOT EXISTS idx_gh_snapshots_ts ON graph_health_snapshots(ts);
+
+-- ============================================================================
 -- Procedural memory system (REMOVED in Phase 1 P1 — 2026-06-25)
 -- Procedural behavior is now implicit: schemas + prototypes + TransitionModel
 -- + spreading activation. The explicit procedural_memories / procedural_memory_evidence

@@ -139,6 +139,8 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
                     self._send_json(_event_detail(db_path, event_id))
                 elif path == "/api/relations":
                     self._send_json(_relations_payload(db_path, qs))
+                elif path == "/api/debug/graph":
+                    self._send_json(_graph_health_payload(db_path))
                 else:
                     self._send_json(
                         {"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND
@@ -1403,3 +1405,10 @@ def _relations_payload(db_path: str, qs: dict[str, list[str]]) -> dict[str, Any]
 
 
 from slowave.dashboard._html import _INDEX_HTML  # noqa: E402
+
+
+def _graph_health_payload(db_path: str) -> dict[str, Any]:
+    """Return full graph health metrics for the /api/debug/graph endpoint."""
+    from slowave.core.graph_health import compute
+
+    return compute(db_path)

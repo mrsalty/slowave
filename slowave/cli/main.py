@@ -692,8 +692,9 @@ def schema_list(ctx: click.Context, needs_review: bool, limit: int) -> None:
 @cli.command("stats")
 @click.option("--scope", default=None, help="Filter by scope (e.g., project:myrepo).")
 @click.option("--verbose", is_flag=True, help="Detailed breakdown.")
+@click.option("--graph", "show_graph", is_flag=True, help="Full graph health report.")
 @click.pass_context
-def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
+def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool, show_graph: bool) -> None:
     """Print memory and storage statistics."""
     from pathlib import Path
 
@@ -756,7 +757,107 @@ def stats_cmd(ctx: click.Context, scope: str | None, verbose: bool) -> None:
         # Hints
         if data.get("episodes", 0) == 0:
             renderer.hint("No memories yet. Episodes will appear after sessions.")
+
+        if show_graph:
+            _print_graph_health(str(db_path), renderer, as_json)
+
         click.echo()
+
+
+def _print_graph_health(db_path: str, renderer: Any, as_json: bool) -> None:
+    """Print full graph health report from the shared metrics module."""
+    from slowave.core.graph_health import compute
+
+    gh = compute(db_path)
+    if "error" in gh:
+        renderer.item("Graph Health", f"Error: {gh['error']}")
+        return
+
+    if as_json:
+        _print(gh, True)
+        return
+
+    s = gh["schema_graph"]
+    p = gh["prototype_graph"]
+    e = gh["episode_graph"]
+    x = gh["cross_cutting"]
+    sup = gh["supplementary"]
+
+    renderer.section("Schema Graph")
+    renderer.item("Total", f"{s['total']:,}")
+    renderer.item("Status", ", ".join(f"{k}={v}" for k, v in s["status"].items()))
+    renderer.item("Superseded", f"{s['superseded_pct']}%")
+    renderer.item(
+        "Relations",
+        f"{s['total_relations']} edges: "
+        + ", ".join(f"{k}={v}" for k, v in s["relations"].items()),
+    )
+    renderer.item("Isolates", f"{s['isolates']} ({s['isolate_pct']}%)")
+    renderer.item(
+        "Components",
+        f"{s['components']['total_components']} "
+        f"(largest={s['components']['largest_component']})",
+    )
+    renderer.item(
+        "Salience",
+        f"median={s['salience']['median']}, "
+        f"ceiling breaches={s['salience']['ceiling_breaches']}",
+    )
+
+    renderer.section("Prototype Graph")
+    renderer.item(
+        "Total", f"{p['total']:,} " + ", ".join(f"{k}={v}" for k, v in p["scales"].items())
+    )
+    renderer.item("Edges", f"{p['edge_count']} (density={p['density_pct']}%)")
+    ec = p["edge_composition"]
+    renderer.item(
+        "Edge dominance",
+        f"similarity={ec['similarity_pct']}%, "
+        f"transition={ec['transition_pct']}%, "
+        f"coactivation={ec['coactivation_pct']}%",
+    )
+    d = p["distances"]
+    if "error" not in d:
+        renderer.item(
+            "Intra/Inter distances",
+            f"fine={d['fine_intra']}, coarse={d['coarse_intra']}, " f"inter={d['inter']}",
+        )
+    renderer.item(
+        "Updated 24h / 7d", f"{p['age']['pct_updated_24h']}% / {p['age']['pct_updated_7d']}%"
+    )
+    renderer.item("Zero-variance fine", f"{p['zero_variance_fine_pct']}%")
+    sm = p["schema_mapping"]
+    renderer.item(
+        "Multi-prototype schemas", f"{sm['multi_prototype_schemas']} ({sm['multi_prototype_pct']}%)"
+    )
+
+    renderer.section("Episode Graph")
+    renderer.item("Total", f"{e['total']:,}")
+    renderer.item(
+        "Salience",
+        f"avg={e['salience']['avg']}, " f"range=[{e['salience']['min']}, {e['salience']['max']}]",
+    )
+    renderer.item("Episodes per schema", f"{e['episodes_per_schema']}")
+
+    renderer.section("Cross-Cutting")
+    sess = x["sessions"]
+    wr = x["worker_runs"]
+    renderer.item("Sessions", f"{sess['total']} ({sess['open']} open)")
+    renderer.item(
+        "Worker runs",
+        f"{wr['total']}, avg={wr['avg_duration_ms']}ms, " f"max={wr['max_duration_ms']}ms",
+    )
+    renderer.item("Schemas decayed", f"{wr['schemas_decayed']}")
+    renderer.item("Schema density", f"{x['schema_graph_density_pct']}%")
+    renderer.item("Prototype density", f"{x['prototype_graph_density_pct']}%")
+
+    renderer.section("Supplementary")
+    renderer.item("Labile schemas", f"{sup['labile_schemas']}")
+    renderer.item(
+        "Generalization stages",
+        ", ".join(f"stage {k}={v}" for k, v in sorted(sup["generalization_stages"].items())),
+    )
+    renderer.item("Top scopes", ", ".join(f"{s}={c}" for s, c in sup["top_scopes"]))
 
 
 def _slowave_processes() -> list[dict[str, Any]]:
