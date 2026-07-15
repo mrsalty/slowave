@@ -155,4 +155,12 @@ class ConsolidationService:
                     conn.commit()
                 except Exception as e2:
                     log.warning("worker_runs update failed: %s", e2)
+
+                # Graph health snapshot — best-effort, non-fatal
+                try:
+                    from slowave.core.graph_health import snapshot
+
+                    snapshot(conn, run_id)
+                except Exception as e3:
+                    log.debug("graph_health snapshot skipped: %s", e3)
         return result
