@@ -14,6 +14,14 @@ import sqlite3
 import time
 from typing import Any
 
+try:
+    import numpy as np
+
+    _HAS_NUMPY = True
+except ImportError:
+    np = None  # type: ignore
+    _HAS_NUMPY = False
+
 
 def _connect(db_path: str) -> sqlite3.Connection:
     conn = sqlite3.connect(f"file:{os.path.abspath(db_path)}?mode=ro", uri=True, timeout=10)
@@ -37,6 +45,96 @@ def compute(db_path: str) -> dict[str, Any]:
         }
     finally:
         conn.close()
+
+
+# ---------------------------------------------------------------------------
+# Schema cosine distribution (requires numpy)
+# ---------------------------------------------------------------------------
+
+
+def _schema_cosine_distribution(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """Pairwise cosine similarity distribution across active/labile schemas.
+
+    Buckets pairs into the verdict zones used by GeometricContradictionJudge,
+    plus fine-grained 0.05-step histogram bins and percentiles.
+
+    Returns None when numpy is unavailable or there are <2 schemas.
+    """
+    if not _HAS_NUMPY:
+        return None
+
+    rows = conn.execute(
+        "SELECT id, embedding FROM schemas "
+        "WHERE status IN ('active', 'needs_review') AND embedding IS NOT NULL"
+    ).fetchall()
+    if len(rows) < 2:
+        return None
+
+    n = len(rows)
+    assert np is not None  # mypy
+    embeddings = np.array([np.frombuffer(r["embedding"], dtype=np.float32) for r in rows])
+    # Normalise to unit length
+    norms = np.linalg.norm(embeddings, axis=1, keepdims=True)
+    embeddings = embeddings / np.maximum(norms, 1e-12)
+
+    # Batched upper-triangle pairwise cosine
+    batch_size = 200
+    chunks: list[np.ndarray] = []
+    for i in range(0, n, batch_size):
+        end = min(i + batch_size, n)
+        batch = embeddings[i:end]
+        sims = np.dot(batch, embeddings.T)
+        for j in range(sims.shape[0]):
+            global_j = i + j
+            chunks.append(sims[j, global_j + 1 :])
+    all_cos = np.concatenate(chunks)
+    total_pairs = int(len(all_cos))
+
+    # Percentiles
+    pcts: dict[str, float] = {}
+    for p in [1, 5, 10, 25, 50, 75, 90, 95, 99]:
+        pcts[f"p{p}"] = round(float(np.percentile(all_cos, p)), 4)
+
+    # Verdict-zone buckets
+    zones = [
+        ("unrelated", 0.0, 0.72),
+        ("at_risk", 0.72, 0.75),
+        ("same_topic", 0.75, 0.92),
+        ("near_dup", 0.92, 1.01),
+    ]
+    zone_counts: dict[str, int] = {}
+    zone_pcts: dict[str, float] = {}
+    for name, lo, hi in zones:
+        cnt = int(np.sum((all_cos >= lo) & (all_cos < hi)))
+        zone_counts[name] = cnt
+        zone_pcts[name] = round(100.0 * cnt / total_pairs, 2)
+
+    # Fine-grained histogram (0.05-step bins)
+    bins: list[dict[str, Any]] = []
+    for lo in np.arange(0.0, 1.0, 0.05):
+        hi = float(round(lo + 0.05, 4))
+        cnt = int(np.sum((all_cos >= lo) & (all_cos < hi)))
+        bins.append({"range": [round(float(lo), 2), hi], "count": cnt})
+
+    # Pairs above key thresholds (approximate edge potential)
+    above_075 = int(np.sum(all_cos >= 0.75))
+    above_092 = int(np.sum(all_cos >= 0.92))
+
+    return {
+        "pairs_sampled": total_pairs,
+        "schemas_with_embeddings": n,
+        "mean": round(float(all_cos.mean()), 4),
+        "median": round(float(np.median(all_cos)), 4),
+        "std": round(float(all_cos.std()), 4),
+        "min": round(float(all_cos.min()), 4),
+        "max": round(float(all_cos.max()), 4),
+        "percentiles": pcts,
+        "zones": zone_counts,
+        "zone_pcts": zone_pcts,
+        "pairs_above_075": above_075,
+        "pairs_above_092": above_092,
+        "histogram_005": bins,
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -84,6 +182,9 @@ def _schema_graph(conn: sqlite3.Connection) -> dict[str, Any]:
     # S4: connected components (union-find)
     components = _connected_components(conn)
 
+    # S6: pairwise cosine similarity distribution
+    cosine_dist = _schema_cosine_distribution(conn)
+
     return {
         "total": total,
         "status": status,
@@ -103,6 +204,9 @@ def _schema_graph(conn: sqlite3.Connection) -> dict[str, Any]:
             "ceiling_breaches": ceiling_breaches,
         },
         "components": components,
+        "component_coherence": _component_coherence(conn),
+        "hubs_authorities": _hubs_authorities(conn),
+        "cosine_distribution": cosine_dist,
     }
 
 
@@ -159,6 +263,163 @@ def _connected_components(conn: sqlite3.Connection) -> dict[str, Any]:
         "largest_component": sizes[0] if sizes else 0,
         "isolates": sum(1 for s in sizes if s == 1),
         "size_buckets": buckets,
+    }
+
+
+def _component_coherence(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """Scope purity and mean pairwise cosine per connected component.
+
+    Returns aggregate stats plus a per-component breakdown for the top-N
+    components. Requires numpy for pairwise cosine computation.
+    """
+    if not _HAS_NUMPY:
+        return None
+    assert np is not None
+
+    rows = conn.execute(
+        "SELECT id, embedding, scope_id FROM schemas " "WHERE status IN ('active', 'needs_review')"
+    ).fetchall()
+    if len(rows) < 2:
+        return None
+
+    all_ids = [r["id"] for r in rows]
+    id_to_idx = {sid: i for i, sid in enumerate(all_ids)}
+    n = len(all_ids)
+
+    emb_map: dict[int, np.ndarray] = {}
+    scope_map: dict[int, str | None] = {}
+    for r in rows:
+        scope_map[r["id"]] = r["scope_id"]
+        if r["embedding"] is not None:
+            vec = np.frombuffer(r["embedding"], dtype=np.float32)
+            emb_map[r["id"]] = vec / (np.linalg.norm(vec) + 1e-12)
+
+    parent = list(range(n))
+
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
+
+    def union(a: int, b: int) -> None:
+        ra, rb = find(a), find(b)
+        if ra != rb:
+            parent[rb] = ra
+
+    edge_rows = conn.execute("SELECT src_schema_id, dst_schema_id FROM schema_relations").fetchall()
+    for r in edge_rows:
+        a = id_to_idx.get(r["src_schema_id"])
+        b = id_to_idx.get(r["dst_schema_id"])
+        if a is not None and b is not None:
+            union(a, b)
+
+    comp_of = [find(i) for i in range(n)]
+    comp_to_members: dict[int, list[int]] = {}
+    for i, root in enumerate(comp_of):
+        comp_to_members.setdefault(root, []).append(i)
+
+    comps = sorted(comp_to_members.values(), key=len, reverse=True)
+
+    from collections import Counter
+
+    purities: list[float] = []
+    mean_cosines: list[float] = []
+    top_components: list[dict[str, Any]] = []
+    low_coherence: list[dict[str, Any]] = []
+
+    for members in comps[:20]:
+        mids = [all_ids[i] for i in members]
+        sz = len(members)
+        scope_counts = Counter(scope_map.get(mid) for mid in mids)
+        dominant = scope_counts.most_common(1)[0] if scope_counts else (None, 0)
+        purity = round(100.0 * dominant[1] / sz, 1)
+
+        cosines: list[float] = []
+        for i in range(len(members)):
+            for j in range(i + 1, len(members)):
+                e1 = emb_map.get(all_ids[members[i]])
+                e2 = emb_map.get(all_ids[members[j]])
+                if e1 is not None and e2 is not None:
+                    cosines.append(float(np.dot(e1, e2)))
+        mean_cos = round(float(np.mean(cosines)), 4) if cosines else None
+
+        purities.append(purity)
+        if mean_cos is not None:
+            mean_cosines.append(mean_cos)
+
+        comp_info: dict[str, Any] = {
+            "size": sz,
+            "purity_pct": purity,
+            "dominant_scope": (dominant[0] or "none") if dominant[0] else "none",
+            "mean_pairwise_cosine": mean_cos,
+        }
+        top_components.append(comp_info)
+        if purity < 60 and (mean_cos is not None and mean_cos < 0.45):
+            low_coherence.append(comp_info)
+
+    return {
+        "mean_purity_pct": round(float(np.mean(purities)), 1) if purities else None,
+        "median_purity_pct": round(float(np.median(purities)), 1) if purities else None,
+        "mean_within_cosine": round(float(np.mean(mean_cosines)), 4) if mean_cosines else None,
+        "median_within_cosine": round(float(np.median(mean_cosines)), 4) if mean_cosines else None,
+        "low_coherence_components": len(low_coherence),
+        "low_coherence": low_coherence,
+        "top_components": top_components,
+    }
+
+
+def _hubs_authorities(conn: sqlite3.Connection) -> dict[str, Any] | None:
+    """HITS (Hyperlink-Induced Topic Search) hub/authority scores.
+
+    Iterative computation over the directed schema_relations graph.
+    Requires numpy.
+    """
+    if not _HAS_NUMPY:
+        return None
+    assert np is not None
+
+    rows = conn.execute(
+        "SELECT id FROM schemas WHERE status IN ('active', 'needs_review') ORDER BY id"
+    ).fetchall()
+    all_ids = [r["id"] for r in rows]
+    id_to_idx = {sid: i for i, sid in enumerate(all_ids)}
+    n = len(all_ids)
+    if n == 0:
+        return None
+
+    edges = conn.execute(
+        "SELECT src_schema_id, dst_schema_id, confidence FROM schema_relations"
+    ).fetchall()
+
+    hub = np.ones(n, dtype=np.float64)
+    auth = np.ones(n, dtype=np.float64)
+    for _ in range(50):
+        new_auth = np.zeros(n, dtype=np.float64)
+        new_hub = np.zeros(n, dtype=np.float64)
+        for r in edges:
+            si = id_to_idx.get(r["src_schema_id"])
+            di = id_to_idx.get(r["dst_schema_id"])
+            if si is not None and di is not None:
+                w = float(r["confidence"] or 1.0)
+                new_auth[di] += hub[si] * w
+                new_hub[si] += auth[di] * w
+        new_auth = new_auth / (np.linalg.norm(new_auth) + 1e-12)
+        new_hub = new_hub / (np.linalg.norm(new_hub) + 1e-12)
+        if np.max(np.abs(new_auth - auth)) < 1e-8 and np.max(np.abs(new_hub - hub)) < 1e-8:
+            break
+        auth, hub = new_auth, new_hub
+
+    return {
+        "hub_mean": round(float(np.mean(hub)), 4),
+        "hub_median": round(float(np.median(hub)), 4),
+        "hub_max": round(float(np.max(hub)), 4),
+        "hub_p95": round(float(np.percentile(hub, 95)), 4),
+        "auth_mean": round(float(np.mean(auth)), 4),
+        "auth_median": round(float(np.median(auth)), 4),
+        "auth_max": round(float(np.max(auth)), 4),
+        "auth_p95": round(float(np.percentile(auth, 95)), 4),
+        "schemas_scored": n,
     }
 
 
