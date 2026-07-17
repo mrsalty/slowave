@@ -30,7 +30,11 @@ CREATE TABLE IF NOT EXISTS semantic_prototypes (
   -- Stage 9: CA3 fine / CA1 coarse dual-scale prototypes. Defaults to
   -- 'fine' for backward compatibility (legacy single-scale rows behave
   -- exactly as before).
-  scale TEXT NOT NULL DEFAULT 'fine'
+  scale TEXT NOT NULL DEFAULT 'fine',
+  -- Which logic_versions row's code produced this prototype. Lets a future
+  -- rebuild scope itself to "prototypes made under an old version" instead
+  -- of reprocessing everything. See private/docs/iterations/20260716_event-store-replay.md.
+  logic_version TEXT NOT NULL DEFAULT '0'
 );
 CREATE INDEX IF NOT EXISTS idx_semantic_proto_scale ON semantic_prototypes (scale);
 
@@ -88,11 +92,32 @@ CREATE TABLE IF NOT EXISTS raw_events (
   metadata_json TEXT NOT NULL DEFAULT '{}',
   embedding     BLOB,
   dim           INTEGER,
+  -- Logic version active when this event was appended. Lets a future
+  -- rebuild scope replay to "events ingested under old logic" instead of
+  -- reprocessing everything. See logic_versions below.
+  logic_version TEXT NOT NULL DEFAULT '0',
   FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_raw_events_session ON raw_events(session_id);
 CREATE INDEX IF NOT EXISTS idx_raw_events_ts ON raw_events(ts);
 CREATE INDEX IF NOT EXISTS idx_raw_events_type ON raw_events(type);
+
+-- Logic versions: one row per deployed generation of ingest/replay/
+-- consolidation code. applied_ts records when this version first went
+-- live; replayed_from_scratch flags whether a full rebuild has been run
+-- against it yet (see private/docs/iterations/20260716_event-store-replay.md).
+-- claimed_ts/claim_attempts implement an optimistic-lease lock so exactly
+-- one process performs the rebuild for a given version even if the
+-- daemon/worker/CLI all construct a SlowaveEngine around the same time;
+-- see RebuildService.try_claim.
+CREATE TABLE IF NOT EXISTS logic_versions (
+  version               TEXT PRIMARY KEY,
+  applied_ts            INTEGER NOT NULL,
+  description           TEXT,
+  replayed_from_scratch INTEGER NOT NULL DEFAULT 0,
+  claimed_ts            INTEGER,
+  claim_attempts        INTEGER NOT NULL DEFAULT 0
+);
 
 -- Episode text + provenance to raw events. 1:1 with episodic_memories.id.
 CREATE TABLE IF NOT EXISTS episode_text (
@@ -143,6 +168,8 @@ CREATE TABLE IF NOT EXISTS schemas (
   generalization_stage     INTEGER NOT NULL DEFAULT 0,         -- 0=scoped 1=portable 2=contextual 3=global
   first_formed_ts          INTEGER NOT NULL,
   last_updated_ts          INTEGER NOT NULL,
+  -- Logic version active when this schema was created. See raw_events.logic_version.
+  logic_version            TEXT NOT NULL DEFAULT '0',
   FOREIGN KEY (prototype_id) REFERENCES semantic_prototypes(id) ON DELETE CASCADE
 );
 CREATE INDEX IF NOT EXISTS idx_schemas_prototype ON schemas(prototype_id);
@@ -228,6 +255,24 @@ CREATE TABLE IF NOT EXISTS worker_runs (
   error_text            TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_worker_runs_started ON worker_runs(started_ts DESC);
+
+-- Replay checkpoints: one row per completed replay_all()+consolidate_all()
+-- rebuild pass. A future cold start can compare the latest checkpoint's
+-- logic_version against the current one and skip a full replay if they
+-- match, instead of always replaying from scratch. See
+-- private/docs/iterations/20260716_event-store-replay.md point 3.
+CREATE TABLE IF NOT EXISTS replay_checkpoints (
+  id              INTEGER PRIMARY KEY AUTOINCREMENT,
+  created_ts      INTEGER NOT NULL,
+  logic_version   TEXT NOT NULL,
+  last_event_id   INTEGER NOT NULL,        -- all raw_events up to this ID are processed
+  last_episode_id INTEGER NOT NULL,
+  episode_count   INTEGER NOT NULL,
+  prototype_count INTEGER NOT NULL,
+  schema_count    INTEGER NOT NULL,
+  duration_ms     INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_replay_checkpoints_created ON replay_checkpoints(created_ts DESC);
 
 -- FTS5 over schema content for lexical recall bonus.
 CREATE VIRTUAL TABLE IF NOT EXISTS schemas_fts USING fts5(

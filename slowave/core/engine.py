@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import dataclasses
 import logging
+import sys
 import time as _time
 import uuid
 from typing import Any
@@ -133,6 +134,50 @@ class SlowaveEngine:
         self.db = SQLiteDB(SQLiteConfig(path=self.cfg.db_path))
         self.db.init_schema(schema_path)
 
+        # encoder (lazy) — accept a pre-built shared encoder to avoid
+        # reloading weights across multiple engines (e.g. in benchmarking).
+        # Constructed here, before the latent substrate below, so a
+        # logic_version rebuild (which needs a real encoder for schema
+        # embeddings) can reuse it instead of loading a second copy.
+        if shared_encoder is not None:
+            self._encoder: TextEncoder | None = shared_encoder
+        elif self.cfg.disable_encoder:
+            self._encoder = None
+        else:
+            self._encoder = TextEncoder(self.cfg.encoder)
+
+        # Auto-migration: if a release bumped current_logic_version, rebuild
+        # all derived memory state from raw_events before anything below
+        # reads it. Must run before EpisodicStore/SemanticStore/etc so their
+        # reset_faiss_from_db() calls near the end of __init__ see
+        # post-migration state. See slowave/core/services/rebuild.py and
+        # private/docs/iterations/20260716_event-store-replay.md.
+        from slowave.core.services.rebuild import RebuildService
+
+        if RebuildService.needs_rebuild(self.db, self.cfg):
+            try:
+                if RebuildService.try_claim(self.db, self.cfg):
+                    RebuildService.run(
+                        self.db,
+                        self.cfg,
+                        encoder=self._encoder,
+                        on_start=lambda: print(
+                            f"Slowave: rebuilding memory for logic v{self.cfg.current_logic_version}"
+                            " — one-time, may take a moment",
+                            file=sys.stderr,
+                        ),
+                    )
+                else:
+                    # Another process is migrating (or just did). Wait
+                    # briefly for its checkpoint rather than building our
+                    # own stores against a mid-rebuild derived-table state;
+                    # give up and proceed on current state if it's taking a
+                    # while — self-heals on a later restart via the
+                    # claim/reclaim logic in try_claim().
+                    RebuildService.wait_for_completion(self.db, self.cfg)
+            except Exception:
+                log.exception("logic_version rebuild failed; continuing on current derived state")
+
         # latent substrate (SlowWave)
         self.salience = SalienceEngine(self.cfg.salience)
         self.episodic = EpisodicStore(
@@ -164,6 +209,9 @@ class SlowaveEngine:
                 assignment_threshold=self.cfg.assignment_threshold,
                 coarse_assignment_threshold=self.cfg.assignment_threshold,
             )
+        replay_cfg = dataclasses.replace(
+            replay_cfg, current_logic_version=self.cfg.current_logic_version
+        )
         self.replay_engine = ReplayEngine(
             db=self.db,
             episodic=self.episodic,
@@ -192,15 +240,6 @@ class SlowaveEngine:
         self.schemas = SchemaStore(self.db, dim=self.cfg.dim)
         self.working_memory_gate = WorkingMemoryGate()
 
-        # encoder (lazy) — accept a pre-built shared encoder to avoid
-        # reloading weights across multiple engines (e.g. in benchmarking).
-        if shared_encoder is not None:
-            self._encoder: TextEncoder | None = shared_encoder
-        elif self.cfg.disable_encoder:
-            self._encoder = None
-        else:
-            self._encoder = TextEncoder(self.cfg.encoder)
-
         # SupersessionManifold: lazy-computed SVD1 direction axis for P2.
         self._manifold: SupersessionManifold | None = None
 
@@ -228,6 +267,7 @@ class SlowaveEngine:
             geometric_judge=GeometricContradictionJudge(
                 self.cfg.judge, manifold=self._get_manifold()
             ),
+            logic_version=self.cfg.current_logic_version,
         )
         # The latent consolidator needs episode embeddings + ts.
         self.consolidator._episodic_store_ref = self.episodic
@@ -584,6 +624,7 @@ class SlowaveEngine:
             metadata=metadata,
             embedding=emb,
             ts=ts,
+            logic_version=self.cfg.current_logic_version,
         )
 
     def remember(
@@ -658,6 +699,7 @@ class SlowaveEngine:
             salience=1.4,
             supporting_episode_ids=episode_ids,
             evidence=[(episode_ids[0] if episode_ids else None, event_id, content, 1.0)],
+            logic_version=self.cfg.current_logic_version,
         )
 
         superseded_schema_ids: list[int] = []
