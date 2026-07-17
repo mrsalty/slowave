@@ -89,6 +89,7 @@ class Consolidator:
         latent_builder=None,
         geometric_judge=None,
         episodic_store=None,
+        logic_version: str = "0",
     ):
         self.db = db
         self.semantic = semantic
@@ -98,20 +99,44 @@ class Consolidator:
         self.max_episodes_per_prototype = max_episodes_per_prototype
         self.latent_builder = latent_builder
         self.geometric_judge = geometric_judge
+        self._episodic_store_ref = episodic_store
         self._latent_mode = latent_builder is not None
         if self._latent_mode and geometric_judge is None:
             raise ValueError("Consolidator: latent_builder given but no geometric_judge")
+        # Stamped onto every schema this consolidator creates (see schema.sql
+        # comment on schemas.logic_version and
+        # private/docs/iterations/20260716_event-store-replay.md point 2).
+        self.logic_version = logic_version
 
     def consolidate(self, *, prototype_ids: list[int]) -> ConsolidationStats:
         """Consolidate prototypes into latent schemas. Zero LLM calls."""
         return self._consolidate_latent(prototype_ids=prototype_ids)
+
+    def consolidate_all(self) -> ConsolidationStats:
+        """Consolidate every prototype currently in the store, in ID order.
+
+        Companion to ReplayEngine.replay_all(): a regular consolidate() call
+        only processes the prototypes a replay pass just touched, so after a
+        full deterministic replay this instead walks the complete prototype
+        set — same deterministic ID ordering consolidate() already relies on
+        for _episodes_for_prototype().
+        """
+        conn = self.db.connect()
+        rows = conn.execute("SELECT id FROM semantic_prototypes ORDER BY id ASC").fetchall()
+        prototype_ids = [int(r["id"]) for r in rows]
+        return self.consolidate(prototype_ids=prototype_ids)
 
     # ------------------------------------------------------------------
     # Stage 6: brain-only consolidation path
     # ------------------------------------------------------------------
 
     def _consolidate_latent(self, *, prototype_ids: list[int]) -> ConsolidationStats:
-        """Latent-schema consolidation. Zero LLM calls."""
+        """Latent-schema consolidation. Zero LLM calls.
+
+        Changing this method's schema-writing output for existing data?
+        Bump ``SlowaveConfig.current_logic_version`` (slowave/core/config.py)
+        so customer DBs auto-rebuild via RebuildService.
+        """
         created = 0
         reinforced = 0
         contradicted = 0
@@ -122,7 +147,6 @@ class Consolidator:
                 "missing_embedding": 0,
                 "unrelated": 0,
                 "part_of": 0,
-                "reinforces": 0,
                 "refines": 0,
                 "supersedes": 0,
                 "relates_to": 0,
@@ -323,6 +347,7 @@ class Consolidator:
             evidence=evidence_rows,
             facet_axes=schema.facet_axes,
             facet_strengths=schema.facet_strengths,
+            logic_version=self.logic_version,
         )
 
         dedup_existing_id = self.schemas.last_create_reinforced_existing_id
@@ -685,7 +710,7 @@ class Consolidator:
             old_view = self._schema_to_latent_view(old_side)
             verdict = self.geometric_judge.judge(old=old_view, new=new_view)
 
-            if verdict.verdict in ("reinforces", "refines", "unrelated", "part_of", "relates_to"):
+            if verdict.verdict in ("refines", "unrelated", "part_of", "relates_to"):
                 # Replay found no conflict with the neighbor closest to it —
                 # restabilize. part_of/relates_to are associative/hierarchical
                 # signals, not contradictions, so they resolve the same way

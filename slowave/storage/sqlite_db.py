@@ -163,6 +163,13 @@ class SQLiteDB:
             ("worker_runs", "procedures_promoted", "INTEGER NOT NULL DEFAULT 0"),
             ("worker_runs", "procedures_generalized", "INTEGER NOT NULL DEFAULT 0"),
             ("worker_runs", "schemas_decayed", "INTEGER NOT NULL DEFAULT 0"),
+            # Event-store replay point 2 (2026-07-16): logic version tagging.
+            ("raw_events", "logic_version", "TEXT NOT NULL DEFAULT '0'"),
+            ("schemas", "logic_version", "TEXT NOT NULL DEFAULT '0'"),
+            ("semantic_prototypes", "logic_version", "TEXT NOT NULL DEFAULT '0'"),
+            # Auto-migration lock fields (2026-07-16): RebuildService.try_claim.
+            ("logic_versions", "claimed_ts", "INTEGER"),
+            ("logic_versions", "claim_attempts", "INTEGER NOT NULL DEFAULT 0"),
         ]
 
         for table, column, type_spec in missing_columns:

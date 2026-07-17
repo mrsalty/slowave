@@ -39,6 +39,7 @@ class SemanticPrototype:
     support_count: int
     variance: float
     last_updated_ts: int
+    logic_version: str = "0"
 
 
 @dataclass(frozen=True)

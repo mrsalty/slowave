@@ -97,6 +97,10 @@ class ReplayConfig:
     # more general prototypes (hippocampal CA1 analogue).
     coarse_assignment_threshold: float = 0.55
 
+    # Event-store replay point 2 (2026-07-16): stamped onto every prototype
+    # this engine creates. See schema.sql comment on semantic_prototypes.logic_version.
+    current_logic_version: str = "0"
+
 
 class ReplayEngine:
     """Replay + consolidation.
@@ -156,6 +160,7 @@ class ReplayEngine:
         X: np.ndarray,
         scale: str = "fine",
         threshold: float | None = None,
+        max_new_prototypes: int | None = None,
     ) -> tuple[list[tuple[int, int]], list[int]]:
         """Return (episode->prototype pairs, prototype_ids_touched).
 
@@ -163,9 +168,20 @@ class ReplayEngine:
         operates on the coarse prototype graph independently of the fine
         one. Only loads prototypes of the requested scale, so fine and
         coarse graphs do not contaminate each other.
+
+        ``max_new_prototypes`` overrides ``cfg.max_prototypes_per_replay``
+        for this call — used by ``replay_all()`` to lift the per-pass cap
+        that exists to bound cost of a salience-sampled batch, which
+        doesn't apply when deliberately processing every episode.
+
+        Changing this method's assignment/clustering output for existing
+        data? Bump ``SlowaveConfig.current_logic_version`` (slowave/core/config.py)
+        so customer DBs auto-rebuild via RebuildService.
         """
         if threshold is None:
             threshold = self.cfg.assignment_threshold
+        if max_new_prototypes is None:
+            max_new_prototypes = self.cfg.max_prototypes_per_replay
         # Load only prototypes of the requested scale.
         conn = self.db.connect()
         proto_rows = conn.execute(
@@ -196,7 +212,7 @@ class ReplayEngine:
             # Once we have created/updated enough distinct prototypes for this replay,
             # we stop *creating new ones*, but we still assign remaining episodes to
             # their nearest existing prototype so that mapping is complete.
-            allow_create = len(touched) < self.cfg.max_prototypes_per_replay
+            allow_create = len(touched) < max_new_prototypes
 
             # Stage 8 — dentate-gyrus-style pattern separation.
             # An episode is only assigned to its closest prototype if its
@@ -254,6 +270,7 @@ class ReplayEngine:
                     variance=0.0,
                     ts=int(time.time()),
                     scale=scale,
+                    logic_version=self.cfg.current_logic_version,
                 )
                 proto_ids.append(pid)
                 centroids.append(e.copy())
@@ -268,7 +285,12 @@ class ReplayEngine:
         self.semantic.bulk_map_episode_to_prototype(pairs)
         return pairs, sorted(touched)
 
-    def _train_transition_model(self, *, episode_ids: list[int], X: np.ndarray) -> float:
+    def _train_transition_model(
+        self, *, episode_ids: list[int], X: np.ndarray, deterministic: bool = False
+    ) -> float:
+        # Changing this method's training output for existing data? Bump
+        # SlowaveConfig.current_logic_version (slowave/core/config.py) so
+        # customer DBs auto-rebuild via RebuildService.
         # Skip if transition model is not enabled
         if self.transition_model is None:
             return 0.0
@@ -286,11 +308,84 @@ class ReplayEngine:
         if n_pairs == 0:
             return 0.0
 
+        batch_size = min(self.cfg.transition_batch_size, n_pairs)
         losses: list[float] = []
-        for _ in range(self.cfg.transition_steps):
-            idx = np.random.randint(0, n_pairs, size=min(self.cfg.transition_batch_size, n_pairs))
+        for step in range(self.cfg.transition_steps):
+            if deterministic:
+                # Sequential, wrapping batches in timestamp order — no RNG,
+                # so the same episode set always trains the same weights.
+                start = (step * batch_size) % n_pairs
+                idx = (start + np.arange(batch_size)) % n_pairs
+            else:
+                idx = np.random.randint(0, n_pairs, size=batch_size)
             losses.append(self.transition_model.train_batch(e_t[idx], e_next[idx]))
         return float(np.mean(losses))
+
+    def _apply_graph_updates_and_train(
+        self,
+        *,
+        episode_ids: list[int],
+        X: np.ndarray,
+        pairs: list[tuple[int, int]],
+        touched: list[int],
+        deterministic: bool,
+    ) -> float:
+        """Coactivation/transition graph updates + transition-model training.
+
+        Shared by replay_once() (salience-sampled batch) and replay_all()
+        (every episode, chronological order) — same update rule, applied to
+        a different episode set with a different randomness mode.
+        """
+        # coactivation counts: any pair of prototypes in batch
+        proto_in_batch = [p for _, p in pairs]
+        coact: dict[tuple[int, int], float] = {}
+        unique = sorted(set(proto_in_batch))
+        for i in range(len(unique)):
+            for j in range(len(unique)):
+                if i == j:
+                    continue
+                coact[(unique[i], unique[j])] = coact.get((unique[i], unique[j]), 0.0) + 1.0
+        self.graph.apply_coactivation_counts(coact)
+
+        # Transition counts: hippocampal replay co-activation, NOT episodic adjacency.
+        #
+        # We sample a salience-weighted batch of episodes, sort by timestamp,
+        # and count prototype pairs that appear adjacent in this compressed
+        # replay.  This models systems-consolidation replay: the brain re-activates
+        # memories out of their original session order, prioritising salient /
+        # frequently-replayed items.
+        #
+        # A separate code path (not yet implemented) would be needed to derive
+        # edges from per-session episode order (episodic adjacency).  Batch-order
+        # edges are a legitimate consolidation signal — they are not a bug.
+        mems = self.episodic.get_many(episode_ids)
+        mems_sorted = sorted(mems, key=lambda m: m.ts)
+        transition_counts: dict[tuple[int, int], float] = {}
+        for a, b in zip(mems_sorted[:-1], mems_sorted[1:], strict=False):
+            pa = self.semantic.prototype_for_episode(a.id)
+            pb = self.semantic.prototype_for_episode(b.id)
+            if pa is None or pb is None or pa == pb:
+                continue
+            transition_counts[(pa, pb)] = transition_counts.get((pa, pb), 0.0) + 1.0
+        # Convert counts -> conditional probabilities P(dst|src)
+        totals: dict[int, float] = {}
+        for (src, _dst), c in transition_counts.items():
+            totals[src] = totals.get(src, 0.0) + float(c)
+        transition_prob: dict[tuple[int, int], float] = {}
+        for (src, dst), c in transition_counts.items():
+            transition_prob[(src, dst)] = float(c) / float(totals.get(src, 1.0))
+        self.graph.apply_transition_counts(transition_prob)
+
+        # similarity edges among touched prototypes
+        touched_protos = self.semantic.get_many(touched)
+        if touched_protos:
+            proto_ids = [p.id for p in touched_protos]
+            centroids = np.stack([p.centroid for p in touched_protos], axis=0)
+            self.graph.set_similarity_edges(prototype_ids=proto_ids, centroids=centroids)
+
+        return self._train_transition_model(
+            episode_ids=episode_ids, X=X, deterministic=deterministic
+        )
 
     def replay_once(self) -> dict[str, Any]:
         # Apply time decay before sampling.
@@ -337,55 +432,9 @@ class ReplayEngine:
             pairs = pairs + pairs_coarse
             touched = sorted(set(touched) | set(touched_coarse))
 
-        # coactivation counts: any pair of prototypes in batch
-        proto_in_batch = [p for _, p in pairs]
-        coact: dict[tuple[int, int], float] = {}
-        unique = sorted(set(proto_in_batch))
-        for i in range(len(unique)):
-            for j in range(len(unique)):
-                if i == j:
-                    continue
-                coact[(unique[i], unique[j])] = coact.get((unique[i], unique[j]), 0.0) + 1.0
-        self.graph.apply_coactivation_counts(coact)
-
-        # Transition counts: hippocampal replay co-activation, NOT episodic adjacency.
-        #
-        # We sample a salience-weighted batch of episodes, sort by timestamp,
-        # and count prototype pairs that appear adjacent in this compressed
-        # replay.  This models systems-consolidation replay: the brain re-activates
-        # memories out of their original session order, prioritising salient /
-        # frequently-replayed items.
-        #
-        # A separate code path (not yet implemented) would be needed to derive
-        # edges from per-session episode order (episodic adjacency).  Batch-order
-        # edges are a legitimate consolidation signal — they are not a bug.
-        mems = self.episodic.get_many(sampled_ids)
-        mems_sorted = sorted(mems, key=lambda m: m.ts)
-        transition_counts: dict[tuple[int, int], float] = {}
-        for a, b in zip(mems_sorted[:-1], mems_sorted[1:], strict=False):
-            pa = self.semantic.prototype_for_episode(a.id)
-            pb = self.semantic.prototype_for_episode(b.id)
-            if pa is None or pb is None or pa == pb:
-                continue
-            transition_counts[(pa, pb)] = transition_counts.get((pa, pb), 0.0) + 1.0
-        # Convert counts -> conditional probabilities P(dst|src)
-        totals: dict[int, float] = {}
-        for (src, _dst), c in transition_counts.items():
-            totals[src] = totals.get(src, 0.0) + float(c)
-        transition_prob: dict[tuple[int, int], float] = {}
-        for (src, dst), c in transition_counts.items():
-            transition_prob[(src, dst)] = float(c) / float(totals.get(src, 1.0))
-        self.graph.apply_transition_counts(transition_prob)
-
-        # similarity edges among touched prototypes
-        touched_protos = self.semantic.get_many(touched)
-        if touched_protos:
-            proto_ids = [p.id for p in touched_protos]
-            centroids = np.stack([p.centroid for p in touched_protos], axis=0)
-            self.graph.set_similarity_edges(prototype_ids=proto_ids, centroids=centroids)
-
-        # train transition model
-        transition_loss = self._train_transition_model(episode_ids=sampled_ids, X=X)
+        transition_loss = self._apply_graph_updates_and_train(
+            episode_ids=sampled_ids, X=X, pairs=pairs, touched=touched, deterministic=False
+        )
 
         # reduce episodic salience after consolidation
         for eid, _pid in pairs:
@@ -396,6 +445,59 @@ class ReplayEngine:
 
         return {
             "replay_sampled": float(len(sampled_ids)),
+            "prototypes_touched": float(len(touched)),
+            "touched_prototype_ids": list(touched),
+            "transition_loss": float(transition_loss),
+        }
+
+    def replay_all(self) -> dict[str, Any]:
+        """Deterministic full replay: process every episode currently in the
+        store, in strict chronological order, with zero randomness.
+
+        Unlike replay_once() — which samples ``cfg.sample_size`` episodes
+        proportional to salience and caps new-prototype creation at
+        ``cfg.max_prototypes_per_replay`` to bound the cost of a live
+        consolidation tick — replay_all() is a pure function of
+        episodic_memories: same rows in, same prototype assignments,
+        centroids and transition-model weights out. Intended for rebuilding
+        latent state from scratch after a logic change, not for the regular
+        replay cadence.
+        """
+        conn = self.db.connect()
+        rows = conn.execute("SELECT id FROM episodic_memories ORDER BY ts ASC, id ASC").fetchall()
+        all_ids = [int(r["id"]) for r in rows]
+        if not all_ids:
+            return {"replay_sampled": 0, "transition_loss": 0.0, "touched_prototype_ids": []}
+
+        X = self.episodic.load_embeddings(all_ids)
+
+        # No creation cap: a from-scratch replay must be free to form as
+        # many prototypes as the episode set actually needs. len(all_ids)
+        # is a trivial upper bound (never more new prototypes than episodes).
+        pairs, touched = self._assign_to_prototypes(
+            episode_ids=all_ids,
+            X=X,
+            scale="fine",
+            threshold=self.cfg.assignment_threshold,
+            max_new_prototypes=len(all_ids),
+        )
+        if self.cfg.use_multi_scale:
+            pairs_coarse, touched_coarse = self._assign_to_prototypes(
+                episode_ids=all_ids,
+                X=X,
+                scale="coarse",
+                threshold=self.cfg.coarse_assignment_threshold,
+                max_new_prototypes=len(all_ids),
+            )
+            pairs = pairs + pairs_coarse
+            touched = sorted(set(touched) | set(touched_coarse))
+
+        transition_loss = self._apply_graph_updates_and_train(
+            episode_ids=all_ids, X=X, pairs=pairs, touched=touched, deterministic=True
+        )
+
+        return {
+            "replay_sampled": float(len(all_ids)),
             "prototypes_touched": float(len(touched)),
             "touched_prototype_ids": list(touched),
             "transition_loss": float(transition_loss),
