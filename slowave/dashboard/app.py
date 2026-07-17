@@ -1,8 +1,9 @@
 """Local Slowave dashboard.
 
 Dependency-free: stdlib HTTP server + SQLite read APIs + embedded UI.
-The dashboard is local-only by default and read-only unless future actions
-are explicitly enabled.
+The dashboard is local-only by default. The one mutating action (schema
+forget/unforget) is enabled by default too -- pass --no-allow-actions for a
+strictly read-only dashboard, e.g. before sharing a screen or a port.
 """
 
 from __future__ import annotations
@@ -19,7 +20,14 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-VALID_SCHEMA_STATUSES = ("active", "needs_review", "superseded", "contradicted", "archived")
+VALID_SCHEMA_STATUSES = (
+    "active",
+    "needs_review",
+    "superseded",
+    "contradicted",
+    "archived",
+    "forgotten",
+)
 # "contradicts" and "related_to" were removed from schema_store.py's VALID_RELATIONS
 # (2026-07-14): contradicts required an unreachable time_delta_s<=0 tie (every call
 # site now writes "supersedes" for that case too), related_to was only add_relation()'s
@@ -42,7 +50,7 @@ def run_dashboard(
     host: str = "127.0.0.1",
     port: int = 8765,
     refresh_ms: int = 2000,
-    allow_actions: bool = False,
+    allow_actions: bool = True,
     open_browser: bool = True,
 ) -> None:
     """Run the local dashboard HTTP server."""
@@ -151,6 +159,37 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
             except Exception as e:
                 self._send_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
 
+        def do_POST(self) -> None:  # noqa: N802
+            if not allow_actions:
+                self._send_json(
+                    {"error": "mutating actions disabled; restart with --allow-actions"},
+                    status=HTTPStatus.FORBIDDEN,
+                )
+                return
+            parsed = urlparse(self.path)
+            path = parsed.path.rstrip("/") or "/"
+            try:
+                if path.startswith("/api/schemas/") and path.endswith("/forget"):
+                    schema_id = int(path.split("/")[-2])
+                    length = int(self.headers.get("Content-Length", 0) or 0)
+                    body = self.rfile.read(length) if length else b""
+                    reason = None
+                    if body:
+                        try:
+                            reason = json.loads(body).get("reason")
+                        except Exception:
+                            reason = None
+                    self._send_json(_forget_schema_action(db_path, schema_id, reason))
+                elif path.startswith("/api/schemas/") and path.endswith("/unforget"):
+                    schema_id = int(path.split("/")[-2])
+                    self._send_json(_unforget_schema_action(db_path, schema_id))
+                else:
+                    self._send_json(
+                        {"error": "not found", "path": path}, status=HTTPStatus.NOT_FOUND
+                    )
+            except Exception as e:
+                self._send_json({"error": str(e)}, status=HTTPStatus.INTERNAL_SERVER_ERROR)
+
         def _send_html(self, html: str) -> None:
             html = html.replace("__REFRESH_MS__", str(refresh_ms)).replace(
                 "__ALLOW_ACTIONS__", "true" if allow_actions else "false"
@@ -158,6 +197,7 @@ def _make_handler(*, db_path: str, refresh_ms: int, allow_actions: bool):
             data = html.encode("utf-8")
             self.send_response(HTTPStatus.OK)
             self.send_header("Content-Type", "text/html; charset=utf-8")
+            self.send_header("Cache-Control", "no-store")
             self.send_header("Content-Length", str(len(data)))
             self.end_headers()
             self.wfile.write(data)
@@ -991,6 +1031,112 @@ def _schema_detail(db_path: str, schema_id: int) -> dict[str, Any]:
             ).fetchall()
         ]
         return {"schema": schema, "evidence": evidence, "outgoing": outgoing, "incoming": incoming}
+    finally:
+        conn.close()
+
+
+# Mutating actions below are only reachable when the server was started with
+# --allow-actions (see do_POST); the dashboard is read-only by default. Logic
+# is intentionally a standalone copy of SchemaStore.forget/unforget rather than
+# importing schema_store.py, matching this module's "dependency-free: stdlib
+# HTTP server + SQLite" design (see module docstring, and VALID_SCHEMA_STATUSES
+# above which already duplicates schema_store.py's copy for the same reason).
+def _ensure_schema_forget_log(conn: sqlite3.Connection) -> None:
+    """Create schema_forget_log if missing.
+
+    The dashboard talks to the DB via raw sqlite3 (_connect), never through
+    SlowaveEngine/SQLiteDB.init_schema() -- so a DB whose schema was last
+    initialized before this table existed (i.e. any DB only ever opened by
+    the dashboard, never by a CLI command that constructs an engine) would
+    otherwise 500 with "no such table: schema_forget_log" the first time
+    Forget is clicked. Mirrors the CREATE TABLE in storage/schema.sql.
+    """
+    conn.execute("""
+        CREATE TABLE IF NOT EXISTS schema_forget_log (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          schema_id     INTEGER NOT NULL,
+          action        TEXT NOT NULL,
+          prior_status  TEXT NOT NULL,
+          reason        TEXT,
+          created_ts    INTEGER NOT NULL,
+          FOREIGN KEY (schema_id) REFERENCES schemas(id) ON DELETE CASCADE
+        )
+        """)
+    conn.execute(
+        "CREATE INDEX IF NOT EXISTS idx_schema_forget_log_schema " "ON schema_forget_log(schema_id)"
+    )
+
+
+def _forget_schema_action(db_path: str, schema_id: int, reason: str | None) -> dict[str, Any]:
+    conn = _connect(db_path)
+    try:
+        _ensure_schema_forget_log(conn)
+        row = conn.execute(
+            "SELECT status, generalization_stage FROM schemas WHERE id = ?", (schema_id,)
+        ).fetchone()
+        if row is None:
+            return {"error": "schema not found", "schema_id": schema_id}
+        prior_status = str(row["status"])
+        if prior_status == "forgotten":
+            return {
+                "schema_id": f"sch_{schema_id}",
+                "status": "forgotten",
+                "prior_status": "forgotten",
+            }
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO schema_forget_log (schema_id, action, prior_status, reason, created_ts) "
+            "VALUES (?, 'forget', ?, ?, ?)",
+            (schema_id, prior_status, reason, now),
+        )
+        conn.execute(
+            "UPDATE schemas SET status = 'forgotten', last_updated_ts = ? WHERE id = ?",
+            (now, schema_id),
+        )
+        conn.commit()
+        result: dict[str, Any] = {
+            "schema_id": f"sch_{schema_id}",
+            "status": "forgotten",
+            "prior_status": prior_status,
+        }
+        gen_stage = int(row["generalization_stage"] or 0)
+        if gen_stage >= 1:
+            result["warning"] = (
+                f"sch_{schema_id} is generalized (generalization_stage={gen_stage}); "
+                "forgetting it removes it from every scope that reuses it, not just this one."
+            )
+        return result
+    finally:
+        conn.close()
+
+
+def _unforget_schema_action(db_path: str, schema_id: int) -> dict[str, Any]:
+    conn = _connect(db_path)
+    try:
+        _ensure_schema_forget_log(conn)
+        row = conn.execute("SELECT status FROM schemas WHERE id = ?", (schema_id,)).fetchone()
+        if row is None:
+            return {"error": "schema not found", "schema_id": schema_id}
+        if str(row["status"]) != "forgotten":
+            return {"error": "schema is not currently forgotten", "schema_id": schema_id}
+        log_row = conn.execute(
+            "SELECT prior_status FROM schema_forget_log "
+            "WHERE schema_id = ? AND action = 'forget' ORDER BY id DESC LIMIT 1",
+            (schema_id,),
+        ).fetchone()
+        prior_status = str(log_row["prior_status"]) if log_row is not None else "active"
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO schema_forget_log (schema_id, action, prior_status, reason, created_ts) "
+            "VALUES (?, 'unforget', ?, NULL, ?)",
+            (schema_id, prior_status, now),
+        )
+        conn.execute(
+            "UPDATE schemas SET status = ?, last_updated_ts = ? WHERE id = ?",
+            (prior_status, now, schema_id),
+        )
+        conn.commit()
+        return {"schema_id": f"sch_{schema_id}", "status": prior_status}
     finally:
         conn.close()
 
