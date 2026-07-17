@@ -99,6 +99,7 @@ class Consolidator:
         self.max_episodes_per_prototype = max_episodes_per_prototype
         self.latent_builder = latent_builder
         self.geometric_judge = geometric_judge
+        self._episodic_store_ref = episodic_store
         self._latent_mode = latent_builder is not None
         if self._latent_mode and geometric_judge is None:
             raise ValueError("Consolidator: latent_builder given but no geometric_judge")
