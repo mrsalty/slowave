@@ -267,10 +267,10 @@ class SlowaveEngine:
             geometric_judge=GeometricContradictionJudge(
                 self.cfg.judge, manifold=self._get_manifold()
             ),
+            # The latent consolidator needs episode embeddings + ts.
+            episodic_store=self.episodic,
             logic_version=self.cfg.current_logic_version,
         )
-        # The latent consolidator needs episode embeddings + ts.
-        self.consolidator._episodic_store_ref = self.episodic
 
         # Stage 10 — temporal probe (embedding-space temporal compass).
         # Built once if an encoder is available; None otherwise (no-op at
