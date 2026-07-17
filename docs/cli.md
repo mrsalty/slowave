@@ -149,6 +149,8 @@ slowave session end "$SID"
 | `slowave context [OPTIONS]` | Context brief without opening a session (operational inspection). Same options as `activate`. |
 | `slowave schema [--needs-review] [--limit 50]` | List schemas. |
 | `slowave show sch_N \| epi_N \| evt_N` | Inspect a schema, episode, or raw event. |
+| `slowave forget sch_N [--reason TEXT]` | Suppress a schema from all future retrieval (reversible). |
+| `slowave unforget sch_N` | Undo `forget`, restoring the schema's prior status. |
 | `slowave stats` | Episode / prototype / schema / edge counts. |
 | `slowave status` | DB health, schema health, local process snapshot. |
 | `slowave dedup-schemas [--apply]` | Merge exact duplicate active schemas; dry-run by default. |
@@ -157,6 +159,12 @@ slowave session end "$SID"
 | `slowave doctor` | Checks Python version, deps, encoder, SQLite, MCP availability. Exits 1 on failure. |
 | `slowave setup [--client all\|claude-code\|…] [--dry-run]` | One-command post-install wiring: MCP configs, CLAUDE.md lifecycle block, hooks, worker and backup services. Idempotent. |
 | `slowave serve start \| stop \| status` | Manage the HTTP MCP daemon (port 8766 by default). |
+
+`forget`/`unforget` are the one exception to "the CLI mirrors the MCP tools
+1-to-1" above — there is deliberately no `slowave_forget` MCP tool. Forgetting
+a memory is meant to be a human action taken after looking at a specific
+schema (via this CLI or the [dashboard](dashboard.md#forgetting-a-memory)),
+not something an agent decides mid-conversation from inferred intent.
 
 ---
 

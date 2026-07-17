@@ -13,7 +13,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python-version: ["3.11", "3.12", "3.13"]
+        python-version: ["3.11", "3.12", "3.13", "3.14"]
 
     steps:
     - uses: actions/checkout@v4
@@ -74,3 +74,30 @@ jobs:
     - uses: astral-sh/setup-uv@v5
     - run: uv sync --group dev
     - run: uv run mypy slowave/
+
+
+  acceptance:
+    if: ${{ !startsWith(github.event.head_commit.message, 'chore(main):') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: "3.12"
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -e ".[test]"
+        pip install faiss-cpu
+        python -m spacy download en_core_web_sm 2>/dev/null || echo "spacy model install skipped (test will skip if unavailable)"
+
+    - name: Run acceptance tests (slow, full e2e blackbox)
+      run: |
+        python -m pytest tests/acceptance/ \
+          --timeout=600 -v -p no:randomly
+      env:
+        SLOWAVE_DB: /tmp/slowave_ci_acceptance.db

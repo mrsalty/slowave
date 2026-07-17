@@ -321,6 +321,27 @@ class Consolidator:
                         diag["near_dup_intercepts"] += 1
                     return "reinforced", existing.id
 
+            # Forgotten-schema guard: search_embedding() excludes non-active/
+            # needs_review rows by default, so a forgotten schema never
+            # surfaces in `near` above -- without this second check, every
+            # consolidation pass would silently recreate it as a fresh
+            # duplicate. Re-searching with include_inactive=True and checking
+            # specifically for a forgotten match lets us skip instead, without
+            # either reinforcing it back to active (would silently undo the
+            # user's forget) or creating a duplicate (would defeat it).
+            near_incl = self.schemas.search_embedding(
+                claim_embedding, limit=1, include_inactive=True
+            )
+            if near_incl and near_incl[0][1] >= near_dup_cosine:
+                try:
+                    forgotten_existing = self.schemas.get(near_incl[0][0])
+                except KeyError:
+                    forgotten_existing = None
+                if forgotten_existing is not None and forgotten_existing.status == "forgotten":
+                    if diag is not None:
+                        diag["near_dup_intercepts"] += 1
+                    return "skipped", forgotten_existing.id
+
         related = self._best_related_schema(
             claim=claim_text,
             embedding=claim_embedding,
