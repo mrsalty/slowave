@@ -105,10 +105,19 @@ jobs:
           VERSION="${{ steps.verify.outputs.version }}"
           URL="https://files.pythonhosted.org/packages/source/s/slowave/slowave-${VERSION}.tar.gz"
           SHA=$(curl -sL "$URL" | shasum -a 256 | awk '{print $1}')
-          sed -i "s|url \".*\"|url \"$URL\"|"       Formula/slowave.rb
-          sed -i "s|sha256 \".*\"|sha256 \"$SHA\"|" Formula/slowave.rb
+
           git config user.name  "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # This job's checkout is pinned to the release commit's SHA (see
+          # comment above), which can be behind main's current tip by the
+          # time we get here. Rebase onto the latest tip first so the push
+          # below is always a fast-forward.
+          git fetch origin main
+          git checkout -B main origin/main
+
+          sed -i "s|url \".*\"|url \"$URL\"|"       Formula/slowave.rb
+          sed -i "s|sha256 \".*\"|sha256 \"$SHA\"|" Formula/slowave.rb
           git add Formula/slowave.rb
           git diff --cached --quiet || git commit -m "chore: bump Homebrew formula to ${VERSION}"
           git push origin HEAD:main
