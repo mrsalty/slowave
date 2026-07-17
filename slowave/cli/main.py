@@ -1356,6 +1356,36 @@ def consolidate_cmd(ctx: click.Context, decay_idle_days: float) -> None:
     eng.close()
 
 
+@cli.command("rebuild")
+@click.option(
+    "--force",
+    "force",
+    is_flag=True,
+    help="Wipe and rebuild derived memory state from raw_events unconditionally, "
+    "bypassing the usual logic_version check. For support/debugging a stuck "
+    "instance — normal auto-migration on startup does not need this.",
+)
+@click.pass_context
+def rebuild_cmd(ctx: click.Context, force: bool) -> None:
+    """Rebuild derived memory state (episodes/prototypes/schemas) from raw_events.
+
+    Normally this happens automatically, once, the next time a Slowave
+    process starts after current_logic_version is bumped — nothing to run
+    manually. --force is for support/debugging only.
+    """
+    if not force:
+        raise click.UsageError("Pass --force to run a rebuild manually (see --help).")
+
+    import dataclasses as _dataclasses
+
+    from slowave.core.services.rebuild import RebuildService
+
+    eng = _build_engine(ctx.obj["db"])
+    stats = RebuildService.run(eng.db, eng.cfg, encoder=eng.encoder)
+    eng.close()
+    _print(_dataclasses.asdict(stats), ctx.obj["json"])
+
+
 @cli.command("worker")
 @click.option(
     "--interval",

@@ -57,6 +57,30 @@ class SlowaveConfig:
     # symbolic
     disable_encoder: bool = False
 
+    # Event-store replay (2026-07-16): stamped onto every raw event, schema,
+    # and prototype created while this config is active. RebuildService
+    # (slowave/core/services/rebuild.py) compares this against each
+    # customer DB's replay_checkpoints on every SlowaveEngine startup, and
+    # transparently rebuilds all derived memory state from raw_events if
+    # they don't match — no manual action from the customer.
+    #
+    # Bump this ONLY when a change alters episode formation (ingest.py),
+    # prototype assignment/clustering (replay_engine.py), or schema-writing
+    # logic (consolidation.py) such that it would produce *different output*
+    # for already-ingested raw_events. Do NOT bump for refactors or bug
+    # fixes that don't change output (e.g. the replay_all()/consolidate_all()
+    # additions themselves were behavior-preserving for existing code paths
+    # and did not bump this), or for unrelated features — most releases
+    # should leave this untouched, which is what keeps the auto-rebuild a
+    # no-op for most upgrades. When you do bump it, also set
+    # current_logic_version_description below so the change is
+    # self-documenting. See private/docs/iterations/20260716_event-store-replay.md.
+    current_logic_version: str = "0"
+    # Human-readable note on *why* current_logic_version was last bumped.
+    # Written into the logic_versions.description column by
+    # RebuildService.try_claim() at rebuild time.
+    current_logic_version_description: str = ""
+
     # feedback system
     feedback: FeedbackConfig = field(default_factory=FeedbackConfig)
 

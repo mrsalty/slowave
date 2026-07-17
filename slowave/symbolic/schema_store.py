@@ -326,6 +326,9 @@ class Schema:
     # None, so callers can treat "no facets" uniformly without a None-check.
     facet_axes: "np.ndarray | None" = None
     facet_strengths: "np.ndarray | None" = None
+    # Logic version active when this schema was created (see schema.sql
+    # comment on schemas.logic_version).
+    logic_version: str = "0"
 
 
 @dataclass(frozen=True)
@@ -412,6 +415,7 @@ class SchemaStore:
         dedupe: bool = True,
         facet_axes: np.ndarray | None = None,
         facet_strengths: np.ndarray | None = None,
+        logic_version: str = "0",
     ) -> int:
         self.last_create_reinforced_existing_id = None
         status = status if status in VALID_STATUS else "active"
@@ -485,8 +489,8 @@ class SchemaStore:
               salience, embedding, dim, facet_axes, facet_strengths, n_facet_axes,
               supporting_episode_ids,
               contradicting_episode_ids, is_labile, first_formed_ts,
-              last_updated_ts
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+              last_updated_ts, logic_version
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 primary_proto,
@@ -507,6 +511,7 @@ class SchemaStore:
                 1 if is_labile else 0,
                 now,
                 now,
+                str(logic_version),
             ),
         )
         sid = int(cur.lastrowid or 0)
@@ -1932,6 +1937,10 @@ class SchemaStore:
             gen_stage = int(row["generalization_stage"])
         except (KeyError, TypeError, IndexError):
             gen_stage = 0
+        try:
+            logic_version = str(row["logic_version"])
+        except (KeyError, TypeError, IndexError):
+            logic_version = "0"
         # Facet axes/strengths: NULL / n_facet_axes=0 (legacy row, or the schema
         # genuinely had fewer than min_members_for_facets members) both degrade
         # to an empty (0, dim) / (0,) matrix rather than None.
@@ -1970,4 +1979,5 @@ class SchemaStore:
             generalization_stage=gen_stage,
             facet_axes=facet_axes,
             facet_strengths=facet_strengths,
+            logic_version=logic_version,
         )
