@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.16.0](https://github.com/mrsalty/slowave/compare/slowave-v0.15.6...slowave-v0.16.0) (2026-07-17)
+
+
+### Features
+
+* event store memory replay ([2751712](https://github.com/mrsalty/slowave/commit/2751712891d266f41fe6cfe2fe9537e141aa6889))
+
+
+### Bug Fixes
+
+* wire episodic_store through Consolidator constructor ([6a7b915](https://github.com/mrsalty/slowave/commit/6a7b915dc2731742b22c47efc4a990a5947bd9ab))
+
 ## [0.15.6](https://github.com/mrsalty/slowave/compare/slowave-v0.15.5...slowave-v0.15.6) (2026-07-15)
 
 
