@@ -25,7 +25,22 @@ from slowave.utils.vec import (
     unpack_f32_matrix,
 )
 
-VALID_STATUS = ("active", "needs_review", "superseded", "contradicted", "archived")
+VALID_STATUS = (
+    "active",
+    "needs_review",
+    "superseded",
+    "contradicted",
+    "archived",
+    "forgotten",
+)
+# "forgotten" (2026-07-17) is a distinct status from "archived": archived means
+# dedup_exact() folded this row into a canonical duplicate (see dedup_exact
+# below); forgotten means a human explicitly asked to suppress this schema via
+# CLI/dashboard. Keeping them separate preserves dedup_exact's duplicate-ratio
+# stats and lets unforget() put a schema back to its real prior status instead
+# of always guessing "active". Deliberately CLI/dashboard-only -- not exposed
+# as an MCP tool, since forgetting requires a human looking at a specific
+# schema id, not an agent inferring intent from conversational subtext.
 # "contradicts" and the old "related_to" were removed (2026-07-14): contradicts
 # was unreachable in practice (it required an exact time_delta_s<=0 tie, and
 # every call site now writes "supersedes" for that case too -- see
@@ -679,6 +694,60 @@ class SchemaStore:
         conn = self.db.connect()
         conn.execute(f"UPDATE schemas SET {', '.join(sets)} WHERE id = ?", tuple(args))
         conn.commit()
+
+    def forget(self, schema_id: int, *, reason: str | None = None) -> None:
+        """Suppress a schema from all retrieval (CLI/dashboard-initiated only).
+
+        Records the schema's current status in schema_forget_log before
+        overwriting it, so unforget() can reinstate the real prior status
+        (e.g. "superseded") instead of unconditionally reactivating it.
+        Idempotent: forgetting an already-forgotten schema is a no-op, so a
+        repeated call can never clobber the recorded prior_status with
+        "forgotten" itself.
+        """
+        schema = self.get(schema_id)
+        if schema.status == "forgotten":
+            return
+        conn = self.db.connect()
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO schema_forget_log (schema_id, action, prior_status, reason, created_ts) "
+            "VALUES (?, 'forget', ?, ?, ?)",
+            (int(schema_id), schema.status, reason, now),
+        )
+        conn.commit()
+        self.update_status(schema_id, status="forgotten")
+
+    def unforget(self, schema_id: int) -> str:
+        """Undo a forget, returning the schema to its status prior to forgetting.
+
+        Named "unforget" rather than "restore" to avoid colliding with the
+        unrelated `slowave restore` DB-backup command (slowave/cli/backup.py).
+
+        Returns the status it was restored to. Raises KeyError if the schema
+        is not currently forgotten (either never forgotten, or already
+        unforgotten) -- this only acts on status == "forgotten" so it can
+        never be reapplied on top of an already-unforgotten schema.
+        """
+        schema = self.get(schema_id)
+        if schema.status != "forgotten":
+            raise KeyError(f"Schema id={schema_id} is not currently forgotten")
+        conn = self.db.connect()
+        row = conn.execute(
+            "SELECT prior_status FROM schema_forget_log "
+            "WHERE schema_id = ? AND action = 'forget' ORDER BY id DESC LIMIT 1",
+            (int(schema_id),),
+        ).fetchone()
+        prior_status = row["prior_status"] if row is not None else "active"
+        now = int(time.time())
+        conn.execute(
+            "INSERT INTO schema_forget_log (schema_id, action, prior_status, reason, created_ts) "
+            "VALUES (?, 'unforget', ?, NULL, ?)",
+            (int(schema_id), prior_status, now),
+        )
+        conn.commit()
+        self.update_status(schema_id, status=prior_status)
+        return prior_status
 
     def add_relation(
         self,

@@ -153,6 +153,7 @@ tbody tr:hover td{background:rgba(20,30,51,.6)}
 .pill-contradicted{background:#200d14;color:#ff9aaa;border-color:#4a1a22}
 .pill-superseded{background:#1a1430;color:#c4b0f5;border-color:#3a2d6a}
 .pill-archived{background:#181e30;color:#8090b4;border-color:#2a3558}
+.pill-forgotten{background:#12141c;color:#5a6070;border-color:#20232e}
 .pill input[type=checkbox]{accent-color:currentColor;width:11px;height:11px;margin:0 4px 0 0;cursor:pointer;vertical-align:middle;flex-shrink:0}
 .pill:has(input[type=checkbox]):not(:has(input:checked)){opacity:.38;filter:saturate(.3)}
 .pill:has(input[type=checkbox]){cursor:pointer;user-select:none;transition:opacity .15s,filter .15s}
@@ -198,6 +199,26 @@ btn.primary,.btn-primary,button.primary{
 }
 btn.primary:hover,.btn-primary:hover{background:linear-gradient(to bottom,#7ab5ff,#6aabff);box-shadow:0 4px 12px rgba(79,155,255,.3);transform:translateY(-1px)}
 btn:hover,.btn:hover,button.btn:hover{background:linear-gradient(to bottom,rgba(25,37,64,.8),rgba(20,30,51,.6));border-color:rgba(30,45,74,.8);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.btn-forget{background:var(--red)!important;color:#fff!important;border-color:var(--red)!important;font-weight:700}
+.btn-forget:hover{background:#ff6b82!important;border-color:#ff6b82!important}
+.modal-overlay{
+  display:none;position:fixed;inset:0;background:rgba(3,6,14,.72);
+  align-items:center;justify-content:center;z-index:1000;
+}
+.modal-overlay.show{display:flex}
+.modal-box{
+  background:var(--panel);border:1px solid var(--line2);border-radius:var(--radius);
+  padding:20px;width:420px;max-width:90vw;box-shadow:0 12px 40px rgba(0,0,0,.5);
+}
+.modal-title{font-size:15px;font-weight:700;margin-bottom:8px;color:#fff}
+.modal-message{font-size:13px;color:var(--muted);line-height:1.5;margin-bottom:14px}
+.modal-box textarea{
+  width:100%;min-height:64px;resize:vertical;background:var(--panel2);
+  border:1px solid var(--line);border-radius:var(--radius-sm);color:var(--text);
+  padding:8px 10px;font-family:var(--font);font-size:13px;margin-bottom:16px;
+}
+.modal-box textarea:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(79,155,255,.2)}
+.modal-actions{display:flex;justify-content:flex-end;gap:8px}
 
 /* ── SPINNER ── */
 .spinner{
@@ -454,7 +475,7 @@ tr.expandable:hover td{background:var(--panel3)}
       <select id="schemaStatus">
         <option value="">All statuses</option>
         <option>active</option><option>needs_review</option>
-        <option>contradicted</option><option>superseded</option><option>archived</option>
+        <option>contradicted</option><option>superseded</option><option>archived</option><option>forgotten</option>
       </select>
       <select id="schemaScope" style="width:180px"><option value="">(all scopes)</option></select>
       <input id="schemaQ" placeholder="search content…" style="flex:1;min-width:160px"/>
@@ -484,6 +505,7 @@ tr.expandable:hover td{background:var(--panel3)}
         <label class="pill pill-contradicted"><input type="checkbox" class="gstat" value="contradicted" checked> contradicted</label>
         <label class="pill pill-superseded"><input type="checkbox" class="gstat" value="superseded" checked> superseded</label>
         <label class="pill pill-archived"><input type="checkbox" class="gstat" value="archived"> archived</label>
+        <label class="pill pill-forgotten"><input type="checkbox" class="gstat" value="forgotten"> forgotten</label>
       </div>
       <span class="gc-label">Min salience</span>
       <div class="gc-value" style="gap:8px">
@@ -562,6 +584,18 @@ tr.expandable:hover td{background:var(--panel3)}
   </div>
 </section>
 </main>
+
+<div id="forgetModalOverlay" class="modal-overlay" onclick="if(event.target===this)closeForgetModal()">
+  <div class="modal-box">
+    <div class="modal-title" id="forgetModalTitle">Forget memory?</div>
+    <div class="modal-message" id="forgetModalMessage"></div>
+    <textarea id="forgetModalReason" placeholder="Optional reason…"></textarea>
+    <div class="modal-actions">
+      <button class="btn" onclick="closeForgetModal()">Cancel</button>
+      <button class="btn btn-forget" onclick="confirmForgetSchema()">Forget</button>
+    </div>
+  </div>
+</div>
 
 <script>
 /**

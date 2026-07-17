@@ -277,9 +277,9 @@ class RebuildService:
             encoder=encoder,
             latent_builder=LatentSchemaBuilder(),
             geometric_judge=GeometricContradictionJudge(cfg.judge, manifold=manifold),
-            episodic_store=episodic,
             logic_version=cfg.current_logic_version,
         )
+        consolidator._episodic_store_ref = episodic
 
         session_rows = conn.execute(
             "SELECT id FROM sessions ORDER BY started_ts ASC, id ASC"

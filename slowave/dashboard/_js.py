@@ -4,7 +4,7 @@ _APP_JS = r"""
 const REFRESH_MS=__REFRESH_MS__;
 const ALLOW_ACTIONS=__ALLOW_ACTIONS__;
 
-const statusColor={active:"#3ecf6e",needs_review:"#f5b942",contradicted:"#f04e6a",superseded:"#9d71f0",archived:"#5a6e91",labile:"#f5b942"};
+const statusColor={active:"#3ecf6e",needs_review:"#f5b942",contradicted:"#f04e6a",superseded:"#9d71f0",archived:"#5a6e91",forgotten:"#3a3f4d",labile:"#f5b942"};
 const relColor={refines:"#4f9bff",supersedes:"#f5b942",part_of:"#34c4c4",relates_to:"#3ecf6e"};
 const relLabel={refines:"refines",supersedes:"supersedes",part_of:"part of",relates_to:"relates to"};
 
@@ -196,7 +196,7 @@ async function loadStatus(){
   // SCHEMA HEALTH PANEL
   const byStatus=h.schemas_by_status||{};
   const total=Math.max(1,h.schemas_total||0);
-  const statusOrder=["active","needs_review","contradicted","superseded","archived"];
+  const statusOrder=["active","needs_review","contradicted","superseded","archived","forgotten"];
   const barSegs=statusOrder.map(st=>{
     const n=byStatus[st]||0;
     const pct=Math.round(n/total*100);
@@ -546,7 +546,7 @@ async function renderHistogram(){
 }
 
 function statusBreakdown(by){
-  const statusOrder=["active","needs_review","contradicted","superseded","archived"];
+  const statusOrder=["active","needs_review","contradicted","superseded","archived","forgotten"];
   return statusOrder
     .filter(s=>by[s]>0)
     .map(s=>`<span class="pill pill-${s}" style="font-size:10px">${s[0].toUpperCase()} ${by[s]}</span>`)
@@ -676,7 +676,11 @@ const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence",
         ${(s.recalled_scopes||[]).length?` <span class="scope-count-tip" data-tip="${esc((s.recalled_scopes||[]).join("\n"))}">(${(s.recalled_scopes||[]).length} scopes)</span>`:""}
       </div>`:"<div style='font-size:12px;color:var(--muted)'>Not yet recalled across multiple scopes.</div>"}
   </div>`;
+  const forgetHtml=ALLOW_ACTIONS?(s.status==="forgotten"
+    ?`<button class="btn btn-forget" onclick="unforgetSchema(${s.schema_id})">Unforget</button>`
+    :`<button class="btn btn-forget" onclick="forgetSchema(${s.schema_id})">Forget</button>`):"";
   expTr.innerHTML=`<td colspan="9"><div class="expand-content">
+    ${forgetHtml?`<div style="text-align:right;margin-bottom:8px">${forgetHtml}</div>`:""}
     <div class="detail-section" style="margin-bottom:14px">
       <h4>Content</h4>
       <div style="font-size:13px;line-height:1.6;white-space:pre-wrap;word-break:break-word;padding:10px 12px;background:var(--panel2);border:1px solid var(--line);border-radius:var(--radius-sm)">${esc(s.content)}</div>
@@ -701,6 +705,42 @@ const outHtml=d.outgoing&&d.outgoing.length?table(["To","Relation","Confidence",
   tr.after(expTr);
   tr.scrollIntoView({behavior:"smooth",block:"start"});
 }
+
+let _forgetModalSchemaId=null;
+function forgetSchema(schemaId){
+  _forgetModalSchemaId=schemaId;
+  document.getElementById("forgetModalTitle").textContent=`Forget sch_${schemaId}?`;
+  document.getElementById("forgetModalMessage").textContent=
+    "This hides it from all future retrieval (reversible via Unforget).";
+  document.getElementById("forgetModalReason").value="";
+  document.getElementById("forgetModalOverlay").classList.add("show");
+  document.getElementById("forgetModalReason").focus();
+}
+function closeForgetModal(){
+  document.getElementById("forgetModalOverlay").classList.remove("show");
+  _forgetModalSchemaId=null;
+}
+async function confirmForgetSchema(){
+  const schemaId=_forgetModalSchemaId;
+  if(schemaId===null)return;
+  const reason=document.getElementById("forgetModalReason").value.trim();
+  closeForgetModal();
+  const res=await fetch(`/api/schemas/${schemaId}/forget`,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({reason:reason||null})});
+  const d=await res.json();
+  if(d.error){alert("Error: "+d.error);return;}
+  if(d.warning)alert(d.warning);
+  loadSchemas();
+}
+async function unforgetSchema(schemaId){
+  const res=await fetch(`/api/schemas/${schemaId}/unforget`,{method:"POST"});
+  const d=await res.json();
+  if(d.error){alert("Error: "+d.error);return;}
+  loadSchemas();
+}
+window.forgetSchema=forgetSchema;
+window.closeForgetModal=closeForgetModal;
+window.confirmForgetSchema=confirmForgetSchema;
+window.unforgetSchema=unforgetSchema;
 
 async function loadEventInline(eventId, slotId){
   const slot=document.getElementById(slotId);
@@ -1009,6 +1049,7 @@ function drawGraph(g){
       }},
       {selector:"node[effective_status = 'superseded']",style:{"opacity":0.55}},
       {selector:"node[effective_status = 'archived']",style:{"opacity":0.38}},
+      {selector:"node[effective_status = 'forgotten']",style:{"opacity":0.22}},
       {selector:"edge",style:{
         "line-color":"data(color)","target-arrow-color":"data(color)","target-arrow-shape":"triangle",
         "width":"data(width)","curve-style":"bezier","opacity":0.48,

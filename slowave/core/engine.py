@@ -267,10 +267,10 @@ class SlowaveEngine:
             geometric_judge=GeometricContradictionJudge(
                 self.cfg.judge, manifold=self._get_manifold()
             ),
-            # The latent consolidator needs episode embeddings + ts.
-            episodic_store=self.episodic,
             logic_version=self.cfg.current_logic_version,
         )
+        # The latent consolidator needs episode embeddings + ts.
+        self.consolidator._episodic_store_ref = self.episodic
 
         # Stage 10 — temporal probe (embedding-space temporal compass).
         # Built once if an encoder is available; None otherwise (no-op at
@@ -945,6 +945,16 @@ class SlowaveEngine:
 
     def dedup_schemas_exact(self, *, dry_run: bool = True) -> dict[str, Any]:
         return self.schemas.dedup_exact(dry_run=dry_run)
+
+    def forget_schema(self, schema_id: int, *, reason: str | None = None) -> None:
+        """Suppress a schema from retrieval. CLI/dashboard-initiated only --
+        deliberately not exposed as an MCP tool (see schema_store.VALID_STATUS
+        comment for the trust-boundary rationale)."""
+        self.schemas.forget(schema_id, reason=reason)
+
+    def unforget_schema(self, schema_id: int) -> str:
+        """Undo forget_schema(), returning the schema to its prior status."""
+        return self.schemas.unforget(schema_id)
 
     def decay_schemas(self, *, idle_days: float = 30.0, dry_run: bool = False) -> dict[str, Any]:
         """Decay salience of active schemas that have never been recalled.

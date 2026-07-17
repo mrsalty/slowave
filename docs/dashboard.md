@@ -3,8 +3,11 @@
 Slowave includes a dependency-free local web dashboard for inspecting the memory
 database, MCP/server processes, schema health, schema relations, and schema graph.
 
-The dashboard is intended for local development and operational hygiene. It is
-read-only in the current MVP.
+The dashboard is intended for local development and operational hygiene. The
+only way to mutate memory content from it is forgetting a schema (see
+[Forgetting a memory](#forgetting-a-memory) below), enabled by default; pass
+`--no-allow-actions` for a strictly read-only dashboard, e.g. before sharing
+a screen or a port.
 
 ## Launch
 
@@ -29,6 +32,9 @@ slowave dashboard --no-open
 
 # Refresh the overview every 5 seconds instead of 2 seconds.
 slowave dashboard --refresh-ms 5000
+
+# Disable the Forget/Unforget buttons for a strictly read-only dashboard.
+slowave dashboard --no-allow-actions
 ```
 
 The default DB is `~/.slowave/slowave.db`. Use `SLOWAVE_DB` or the global
@@ -75,6 +81,11 @@ agent sessions.
 
 Searchable schema table with status filtering. Columns include schema id,
 status, salience, schema class, scope, support count, and content preview.
+Click a row to expand its full detail: content, facets, tags, evidence,
+outgoing/incoming relations, and generalization info. Unless the server was
+started with `--no-allow-actions`, the expanded view also shows a Forget (or
+Unforget, for already-forgotten schemas) button — see
+[Forgetting a memory](#forgetting-a-memory).
 
 ### Schema graph
 
@@ -115,6 +126,28 @@ Browsable view over `schema_relations`, split by relation type:
 Shows SQLite pragmas, `PRAGMA integrity_check`, `PRAGMA foreign_key_check`, and
 table counts.
 
+## Forgetting a memory
+
+If you spot a memory in the Schemas tab that's wrong, stale, or something you
+just don't want influencing future recall, you can suppress it — expand the
+schema and click **Forget** (shown by default). This sets the schema's
+status to `forgotten`, which hides it
+from `activate`/`recall` in every retrieval mode (`strict_scope`, `broad`,
+`debug`). It's reversible: click **Unforget** on a forgotten schema to restore
+it to whatever status it had before (not always `active` — a schema that was
+already `superseded` or `contradicted` goes back to that, not `active`).
+Forgetting is logged with an optional reason to `schema_forget_log` for audit,
+and the underlying episodes/raw events/evidence are never touched — only the
+schema row's status changes.
+
+Forget/Unforget are deliberately **CLI and dashboard only** — there is no MCP
+tool for this, unlike `remember`/`recall`/`reinforce`/`commit`. Forgetting is
+meant to be a deliberate action a human takes after looking at a specific
+memory, not something an AI agent infers from conversational subtext (which
+could also make it a prompt-injection target if it were a callable tool). See
+`slowave forget`/`slowave unforget` in [`docs/cli.md`](cli.md) for the CLI
+equivalent, which works without a running dashboard.
+
 ## Local JSON API
 
 The dashboard serves a small JSON API on the same local HTTP server:
@@ -128,6 +161,8 @@ The dashboard serves a small JSON API on the same local HTTP server:
 | `GET /api/schemas/123` | Schema detail, evidence, incoming/outgoing relations |
 | `GET /api/graph/schemas?limit=120&min_salience=2.5` | Schema graph data |
 | `GET /api/relations?type=supersedes&limit=50` | Relations tab data; `type` is one of `supersedes`, `refines`, `part_of`, `relates_to` (default `supersedes`), `limit` is 1-200 (default 50) |
+| `POST /api/schemas/123/forget` | Suppress schema 123 (status → `forgotten`). Body: optional JSON `{"reason": "..."}`. `403` if started with `--no-allow-actions`. |
+| `POST /api/schemas/123/unforget` | Undo a forget, restoring schema 123's prior status. `403` if started with `--no-allow-actions`. |
 
 Example graph request:
 
@@ -143,7 +178,9 @@ curl 'http://127.0.0.1:8765/api/relations?type=part_of&limit=100'
 
 ## Safety and limitations
 
-- The dashboard is read-only in the MVP.
+- The only mutating action is forgetting/unforgetting a schema. It's enabled
+  by default; pass `--no-allow-actions` for a strictly read-only dashboard —
+  see [Forgetting a memory](#forgetting-a-memory).
 - It is local-first and binds to `127.0.0.1` by default.
 - It uses Python stdlib HTTP serving and embedded HTML/JS; no FastAPI, Node, or
   frontend build step is required.
