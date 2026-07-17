@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.16.3](https://github.com/mrsalty/slowave/compare/slowave-v0.16.2...slowave-v0.16.3) (2026-07-17)
+
+
+### Bug Fixes
+
+* push Homebrew formula bump using an admin PAT ([a9b9047](https://github.com/mrsalty/slowave/commit/a9b90472de57574e484f38477cfd021ee40819c4))
+* rebase onto main tip before pushing Homebrew formula bump ([a4014d9](https://github.com/mrsalty/slowave/commit/a4014d9be19fb859be0a4bf85314302b21a018ac))
+
 ## [0.16.2](https://github.com/mrsalty/slowave/compare/slowave-v0.16.1...slowave-v0.16.2) (2026-07-17)
 
 
