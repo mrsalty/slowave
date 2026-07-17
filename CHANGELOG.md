@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.16.2](https://github.com/mrsalty/slowave/compare/slowave-v0.16.1...slowave-v0.16.2) (2026-07-17)
+
+
+### Bug Fixes
+
+* drop redundant push trigger from tests.yml ([867a08f](https://github.com/mrsalty/slowave/commit/867a08fc879608a4abc3a7dd05c768c5066a5c7f))
+
 ## [0.16.1](https://github.com/mrsalty/slowave/compare/slowave-v0.16.0...slowave-v0.16.1) (2026-07-17)
 
 
