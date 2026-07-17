@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.16.1](https://github.com/mrsalty/slowave/compare/slowave-v0.16.0...slowave-v0.16.1) (2026-07-17)
+
+
+### Bug Fixes
+
+* acceptance test postponed after linter ([20f4c9c](https://github.com/mrsalty/slowave/commit/20f4c9c30ed4b36c0a2e3c2b71ed15367b7c7b40))
+* acceptance test postponed after linter ([e220bf9](https://github.com/mrsalty/slowave/commit/e220bf982c06fd7acd4fc96d8dab34888f4c978a))
+* forget memories + graph health ([001aed9](https://github.com/mrsalty/slowave/commit/001aed977574b9cec4f19ed442b916741174c4c5))
+* forget memories + graph health ([9199796](https://github.com/mrsalty/slowave/commit/91997966a59f18444c6db83d6dae5a9c157c2d30))
+* wire episodic_store through Consolidator constructor ([60935ee](https://github.com/mrsalty/slowave/commit/60935eeb90e5156416d27ae7af779754bd705460))
+
 ## [0.16.0](https://github.com/mrsalty/slowave/compare/slowave-v0.15.6...slowave-v0.16.0) (2026-07-17)
 
 
