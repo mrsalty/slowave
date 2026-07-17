@@ -49,6 +49,10 @@ class IngestService:
         """Convert a session's raw events into multi-scale episodes.
 
         Returns a list of the new episode IDs (empty if no embeddable events).
+
+        Changing this method's episode-formation output for existing data?
+        Bump ``SlowaveConfig.current_logic_version`` (slowave/core/config.py)
+        so customer DBs auto-rebuild via RebuildService.
         """
         events = self.raw_log.list_session(session_id)
         # Exclude context_query events (activate calls) from episode formation.

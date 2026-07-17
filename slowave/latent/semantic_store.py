@@ -73,6 +73,7 @@ class SemanticStore:
         variance: float,
         ts: int | None = None,
         scale: str = "fine",
+        logic_version: str = "0",
     ) -> int:
         """Insert or update a prototype.
 
@@ -80,6 +81,10 @@ class SemanticStore:
         the new prototype belongs to ('fine' = CA3-like, 'coarse' =
         CA1-like). Existing rows have their scale preserved across
         updates (we never change a prototype's scale after creation).
+
+        ``logic_version`` is stamped only at creation — like ``scale``,
+        an existing prototype's version reflects when it was first formed,
+        not when it was last updated by a later-version replay pass.
         """
         if ts is None:
             ts = int(time.time())
@@ -90,8 +95,9 @@ class SemanticStore:
         if prototype_id is None:
             cur = conn.execute(
                 """
-                INSERT INTO semantic_prototypes (centroid, dim, support_count, variance, last_updated_ts, scale)
-                VALUES (?, ?, ?, ?, ?, ?)
+                INSERT INTO semantic_prototypes
+                    (centroid, dim, support_count, variance, last_updated_ts, scale, logic_version)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
                 """,
                 (
                     pack_f32(c),
@@ -100,6 +106,7 @@ class SemanticStore:
                     float(variance),
                     int(ts),
                     str(scale),
+                    str(logic_version),
                 ),
             )
             prototype_id = int(cur.lastrowid or 0)
@@ -139,6 +146,7 @@ class SemanticStore:
             support_count=int(row["support_count"]),
             variance=float(row["variance"]),
             last_updated_ts=int(row["last_updated_ts"]),
+            logic_version=str(row["logic_version"]),
         )
 
     def get_many(self, prototype_ids: Iterable[int]) -> list[SemanticPrototype]:
@@ -163,6 +171,7 @@ class SemanticStore:
                     support_count=int(r["support_count"]),
                     variance=float(r["variance"]),
                     last_updated_ts=int(r["last_updated_ts"]),
+                    logic_version=str(r["logic_version"]),
                 )
             )
         return out

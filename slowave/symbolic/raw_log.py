@@ -26,6 +26,7 @@ class RawEvent:
     metadata: dict[str, Any]
     embedding: np.ndarray | None
     dim: int | None
+    logic_version: str = "0"
 
 
 class RawLog:
@@ -43,6 +44,7 @@ class RawLog:
         ts: int | None = None,
         metadata: dict[str, Any] | None = None,
         embedding: np.ndarray | None = None,
+        logic_version: str = "0",
     ) -> int:
         if ts is None:
             ts = int(time.time())
@@ -52,8 +54,9 @@ class RawLog:
             emb = to_f32(embedding).reshape(-1)
             dim = int(emb.size)
             cur = conn.execute(
-                "INSERT INTO raw_events (session_id, ts, type, content, metadata_json, embedding, dim) "
-                "VALUES (?, ?, ?, ?, ?, ?, ?)",
+                "INSERT INTO raw_events "
+                "(session_id, ts, type, content, metadata_json, embedding, dim, logic_version) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     str(session_id),
                     int(ts),
@@ -62,13 +65,22 @@ class RawLog:
                     dumps_json(meta),
                     pack_f32(emb),
                     dim,
+                    str(logic_version),
                 ),
             )
         else:
             cur = conn.execute(
-                "INSERT INTO raw_events (session_id, ts, type, content, metadata_json, embedding, dim) "
-                "VALUES (?, ?, ?, ?, ?, NULL, NULL)",
-                (str(session_id), int(ts), str(type), str(content), dumps_json(meta)),
+                "INSERT INTO raw_events "
+                "(session_id, ts, type, content, metadata_json, embedding, dim, logic_version) "
+                "VALUES (?, ?, ?, ?, ?, NULL, NULL, ?)",
+                (
+                    str(session_id),
+                    int(ts),
+                    str(type),
+                    str(content),
+                    dumps_json(meta),
+                    str(logic_version),
+                ),
             )
         event_id = int(cur.lastrowid or 0)
         conn.execute(
@@ -133,6 +145,7 @@ class RawLog:
             metadata=loads_json(row["metadata_json"]),
             embedding=emb,
             dim=dim,
+            logic_version=str(row["logic_version"]),
         )
 
     # session lifecycle helpers
